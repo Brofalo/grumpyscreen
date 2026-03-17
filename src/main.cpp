@@ -27,7 +27,7 @@ using namespace hv;
 
 int main(void) {
     Config *conf = Config::get_instance();
-    auto config_path = fs::canonical("/proc/self/exe").parent_path() / "grumpyscreen.cfg";
+    auto config_path = fs::path("/etc/klipper/config") / "grumpyscreen.cfg";
     if (fs::exists(config_path)) {
       if (!conf->load(config_path.string())) {
           LOG_ERROR("Failed to load {}", config_path.string());
