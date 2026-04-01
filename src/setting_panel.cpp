@@ -61,17 +61,17 @@ SettingPanel::SettingPanel(KWebSocketClient &c, std::mutex &l, lv_obj_t *parent)
               }
             },
             true)
-  , switch_to_stock_btn(cont, &emergency, "Switch to\nStock", &SettingPanel::_handle_callback, this,
-    "**WARNING** **WARNING** **WARNING**\n\nAre you sure you want to switch to stock?\n\nThis will switch the printer back to stock elegoo firmware!",
+  , switch_to_stock_btn(cont, &emergency, "Switch to OC\nPatched", &SettingPanel::_handle_callback, this,
+    "**WARNING** **WARNING** **WARNING**\n\nAre you sure you want to switch to OpenCentauri patched firmware?",
             [](){
               LOG_INFO("switch to stock pressed");
               Config *conf = Config::get_instance();
               auto switch_to_stock_cmd = conf->get<std::string>("/commands/switch_to_stock_cmd");
               auto ret = sp::call(switch_to_stock_cmd);
               if (ret == 0) {
-                create_simple_dialog(lv_scr_act(), "Switch to Stock Initiated", "Your printer will restart shortly!", false);
+                create_simple_dialog(lv_scr_act(), "Switch to OC Patched Initiated", "Your printer will restart shortly!", false);
               } else {
-                create_simple_dialog(lv_scr_act(), "Switch to Stock Failed", "Failed to initiate switch to stock!", true);
+                create_simple_dialog(lv_scr_act(), "Switch to OC Patched Failed", "Failed to initiate switch to OC Patched!", true);
               }
             },
             true)
