@@ -62,7 +62,7 @@ SettingPanel::SettingPanel(KWebSocketClient &c, std::mutex &l, lv_obj_t *parent)
             },
             true)
   , switch_to_stock_btn(cont, &emergency, "Switch to OC\nPatched", &SettingPanel::_handle_callback, this,
-    "**WARNING** **WARNING** **WARNING**\n\nAre you sure you want to switch to OpenCentauri patched firmware?",
+    "**WARNING** **WARNING** **WARNING**\n\nAre you sure you want to switch to OpenCentauri patched firmware?\n\nThis will take some time, **DO NOT TURN OFF YOUR PRINTER**, just wait for it to reboot.",
             [](){
               LOG_INFO("switch to stock pressed");
               Config *conf = Config::get_instance();
