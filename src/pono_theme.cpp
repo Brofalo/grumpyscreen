@@ -12,7 +12,6 @@
 // add sibling files (e.g. pono_theme_high_contrast.cpp) selected at init time.
 
 #include "pono_theme.h"
-#include <cstring>
 
 namespace pono {
 
@@ -120,56 +119,6 @@ void theme_init(lv_disp_t *disp) {
     lv_theme_set_parent(&pono_theme_obj, parent);
     lv_theme_set_apply_cb(&pono_theme_obj, apply_cb);
     lv_disp_set_theme(disp, &pono_theme_obj);
-}
-
-// ---- Optional name-keyed lookup (Phase G theme variants) ----
-
-namespace {
-
-struct color_entry { const char *name; const lv_color_t *value; };
-const color_entry color_table[] = {
-    {"surface-base",     &color_surface_base},
-    {"surface-raised",   &color_surface_raised},
-    {"surface-elevated", &color_surface_elevated},
-    {"accent-primary",   &color_accent_primary},
-    {"accent-secondary", &color_accent_secondary},
-    {"state-error",      &color_state_error},
-    {"state-warning",    &color_state_warning},
-    {"state-intel",      &color_state_intel},
-    {"text-primary",     &color_text_primary},
-    {"text-secondary",   &color_text_secondary},
-    {"text-tertiary",    &color_text_tertiary},
-};
-
-struct font_entry { const char *name; const lv_font_t *value; };
-const font_entry font_table[] = {
-    {"display",    font_display},
-    {"h1",         font_h1},
-    {"h2",         font_h2},
-    {"body",       font_body},
-    {"caption",    font_caption},
-    {"micro",      font_micro},
-    {"num-large",  font_num_large},
-    {"num-medium", font_num_medium},
-    {"num-small",  font_num_small},
-};
-
-} // namespace
-
-const lv_color_t *color_by_name(const char *token) {
-    if (!token) return nullptr;
-    for (const auto &e : color_table) {
-        if (std::strcmp(e.name, token) == 0) return e.value;
-    }
-    return nullptr;
-}
-
-const lv_font_t *font_by_name(const char *token) {
-    if (!token) return nullptr;
-    for (const auto &e : font_table) {
-        if (std::strcmp(e.name, token) == 0) return e.value;
-    }
-    return nullptr;
 }
 
 } // namespace pono

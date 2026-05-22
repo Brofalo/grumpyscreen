@@ -90,11 +90,4 @@ constexpr uint32_t motion_pulse      = 2000;  // idle pulse cycle
 // untouched widget classes still get sensible defaults.
 void theme_init(lv_disp_t *disp);
 
-// ---- Optional runtime token lookup (Phase G theme variants) ----
-//
-// Returns nullptr on unknown name. Names match the spec doc tokens minus
-// the "--" prefix (e.g. "accent-primary" for `--accent-primary`).
-const lv_color_t *color_by_name(const char *token);
-const lv_font_t  *font_by_name(const char *token);
-
 } // namespace pono
