@@ -1,5 +1,6 @@
 #include "mini_print_status.h"
 #include "logger.h"
+#include "pono_theme.h"  // Phase A.4: text_tertiary token for 10% bg mute overlay
 
 MiniPrintStatus::MiniPrintStatus(lv_obj_t *parent,
 				 lv_event_cb_t cb,
@@ -13,8 +14,8 @@ MiniPrintStatus::MiniPrintStatus(lv_obj_t *parent,
 {
   lv_obj_add_flag(cont, LV_OBJ_FLAG_HIDDEN);
   lv_color_t cur_bg = lv_obj_get_style_bg_color(cont, 0);
-  lv_color_t mixed = lv_color_mix(lv_palette_main(LV_PALETTE_GREY),
-				  cur_bg, LV_OPA_10);
+  lv_color_t mixed = lv_color_mix(pono::color_text_tertiary,
+				  cur_bg, LV_OPA_10);  // 10% mute overlay (was LV_PALETTE_GREY)
   
   lv_obj_set_style_bg_color(cont, mixed, 0);  
   lv_obj_set_style_bg_opa(cont, LV_OPA_COVER, 0);

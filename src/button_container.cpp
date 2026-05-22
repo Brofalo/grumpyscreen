@@ -1,6 +1,7 @@
 #include "button_container.h"
 #include "config.h"
 #include "logger.h"
+#include "pono_theme.h"  // Phase A.4: text_tertiary token for disabled-state label color
 
 LV_FONT_DECLARE(lv_font_montserrat_22);
 ButtonContainer::ButtonContainer(lv_obj_t *parent,
@@ -57,7 +58,7 @@ ButtonContainer::ButtonContainer(lv_obj_t *parent,
   lv_label_set_text(label, text);
   lv_obj_set_width(label, LV_PCT(100));
   lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_STATE_DISABLED);
+  lv_obj_set_style_text_color(label, pono::color_text_tertiary, LV_STATE_DISABLED);  // disabled label (was lv_palette_darken(GREY,1))
 
   lv_obj_align_to(label, btn, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);
 }

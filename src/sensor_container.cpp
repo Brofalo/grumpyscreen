@@ -1,6 +1,7 @@
 #include "sensor_container.h"
 #include "logger.h"
 #include "utils.h"
+#include "pono_theme.h"  // Phase A.4: text_tertiary token for target-label border
 #include <string>
 
 SensorContainer::SensorContainer(KWebSocketClient &c,
@@ -73,7 +74,7 @@ SensorContainer::SensorContainer(KWebSocketClient &c,
     if (can_edit) {      
       lv_obj_set_style_border_width(target_label, 2, LV_PART_MAIN);
       lv_obj_set_style_radius(target_label, 6, LV_PART_MAIN);
-      lv_obj_set_style_border_color(target_label, lv_palette_darken(LV_PALETTE_GREY, 1), LV_PART_MAIN);
+      lv_obj_set_style_border_color(target_label, pono::color_text_tertiary, LV_PART_MAIN);  // subtle target-card border (was lv_palette_darken(GREY,1))
 
       LOG_DEBUG("sensor cb registered name {}, cont {}, this {}, np {}",
 		    id, fmt::ptr(sensor_cont), fmt::ptr(this), fmt::ptr(&np));
