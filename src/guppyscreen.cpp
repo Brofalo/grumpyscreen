@@ -6,6 +6,7 @@
 #include "logger.h"
 #include "state.h"
 #include "theme.h"
+#include "pono_theme.h"  // Phase A.4: text_tertiary token for disabled imgbtn recolor
 #ifdef GUPPY_CALIBRATE
 #include <fstream>
 #endif
@@ -83,7 +84,7 @@ GuppyScreen *GuppyScreen::init(std::function<void(lv_color_t, lv_color_t)> hal_i
 
   lv_style_init(&style_imgbtn_disabled);
   lv_style_set_img_recolor_opa(&style_imgbtn_disabled, LV_OPA_100);
-  lv_style_set_img_recolor(&style_imgbtn_disabled, lv_palette_darken(LV_PALETTE_GREY, 1));
+  lv_style_set_img_recolor(&style_imgbtn_disabled, pono::color_text_tertiary);  // disabled imgbtn recolor (was lv_palette_darken(GREY,1))
 
   /*Initia1ize the new theme from the current theme*/
 
