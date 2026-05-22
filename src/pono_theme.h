@@ -90,4 +90,18 @@ constexpr uint32_t motion_pulse      = 2000;  // idle pulse cycle
 // untouched widget classes still get sensible defaults.
 void theme_init(lv_disp_t *disp);
 
+// ---- LV_PALETTE_* to Pono token mapping (Phase A.4 pass 6) ----
+//
+// Bridges user-configured int palette indices (LV_PALETTE_RED through
+// LV_PALETTE_GREY, plus LV_PALETTE_NONE = 0xff sentinel) to the Pono
+// Westworld Dark state + accent token cluster. Used by main_panel temp
+// sensor color config where the user-supplied int is cast to lv_palette_t.
+//
+// Out-of-range input returns color_text_tertiary as a safe default; this
+// covers LV_PALETTE_NONE + any corrupted config value.
+//
+// Mapping rationale per row documented in
+// docs/plans/2026-05-22-pono-print-a4-panel-refactor-plan.md Decision 1.
+lv_color_t color_for_palette(lv_palette_t p);
+
 } // namespace pono

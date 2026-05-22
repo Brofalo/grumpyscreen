@@ -283,7 +283,10 @@ void MainPanel::create_sensors(json &temp_sensors) {
 	      color_code = pono::color_accent_primary;  // was LV_PALETTE_BLUE
       }
     } else {
-      color_code = lv_palette_main((lv_palette_t)sensor.value()["color"].template get<int>());
+      // Phase A.4 pass 6: bridge user-configured int palette index to Pono
+      // token. NONE sentinel + out-of-range falls back to text_tertiary
+      // safe default via the default: clause in color_for_palette.
+      color_code = pono::color_for_palette((lv_palette_t)sensor.value()["color"].template get<int>());
     }
 
     std::string display_name = sensor.value()["display_name"].template get<std::string>();

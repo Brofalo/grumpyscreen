@@ -121,4 +121,48 @@ void theme_init(lv_disp_t *disp) {
     lv_disp_set_theme(disp, &pono_theme_obj);
 }
 
+// ---- LV_PALETTE_* to Pono token mapping (Phase A.4 pass 6) ----
+//
+// User-configured temp-sensor color stores an int that casts to lv_palette_t.
+// Bridge that int to a Pono Westworld Dark token so user configs render with
+// Pono coherence instead of LVGL stock palette colors.
+//
+// LVGL c6b8068 lv_palette_t enum (lvgl/src/misc/lv_color.h L258-280):
+//   0  RED        7  LIGHT_BLUE  14 AMBER       0xff NONE (sentinel)
+//   1  PINK       8  CYAN        15 ORANGE
+//   2  PURPLE     9  TEAL        16 DEEP_ORANGE
+//   3  DEEP_PURPLE 10 GREEN      17 BROWN
+//   4  INDIGO     11 LIGHT_GREEN 18 BLUE_GREY
+//   5  BLUE       12 LIME        19 GREY
+//   6            13 YELLOW
+//
+// Default case covers LV_PALETTE_NONE + any out-of-range int from corrupted
+// config + any future LVGL palette additions: lands on text_tertiary (safe
+// greyscale).
+lv_color_t color_for_palette(lv_palette_t p) {
+    switch (p) {
+    case LV_PALETTE_RED:          return color_state_error;
+    case LV_PALETTE_PINK:         return color_state_error;
+    case LV_PALETTE_PURPLE:       return color_state_intel;
+    case LV_PALETTE_DEEP_PURPLE:  return color_state_intel;
+    case LV_PALETTE_INDIGO:       return color_state_intel;
+    case LV_PALETTE_BLUE:         return color_accent_primary;
+    case LV_PALETTE_LIGHT_BLUE:   return color_accent_primary;
+    case LV_PALETTE_CYAN:         return color_accent_primary;
+    case LV_PALETTE_TEAL:         return color_accent_primary;
+    case LV_PALETTE_GREEN:        return color_accent_secondary;
+    case LV_PALETTE_LIGHT_GREEN:  return color_accent_secondary;
+    case LV_PALETTE_LIME:         return color_accent_secondary;
+    case LV_PALETTE_YELLOW:       return color_state_warning;
+    case LV_PALETTE_AMBER:        return color_state_warning;
+    case LV_PALETTE_ORANGE:       return color_state_warning;
+    case LV_PALETTE_DEEP_ORANGE:  return color_state_warning;
+    case LV_PALETTE_BROWN:        return color_text_tertiary;
+    case LV_PALETTE_BLUE_GREY:    return color_text_tertiary;
+    case LV_PALETTE_GREY:         return color_text_tertiary;
+    case LV_PALETTE_NONE:         return color_text_tertiary;
+    default:                      return color_text_tertiary;
+    }
+}
+
 } // namespace pono
