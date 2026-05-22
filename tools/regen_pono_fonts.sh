@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# regen_pono_fonts.sh — Regenerate Pono Print font .c files from TTF source.
+# regen_pono_fonts.sh - Regenerate Pono Print font .c files from TTF source.
 #
 # Phase A.2 per docs/design/pono-print-phase-a-technical-brief.md.
 #

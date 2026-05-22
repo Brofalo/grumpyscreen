@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// main_sim.cpp — Desktop SDL2 simulator entry point for Pono Print UI
+// main_sim.cpp - Desktop SDL2 simulator entry point for Pono Print UI
 //
 // Phase A.5 per docs/design/pono-print-phase-a-technical-brief.md.
 //

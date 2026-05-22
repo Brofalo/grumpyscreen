@@ -18,7 +18,7 @@ static void hal_init(lv_color_t p, lv_color_t s);
 #include "guppyscreen.h"
 #include "hv/hlog.h"
 #include "config.h"
-#include "pono_theme.h"   // Pono Print Phase A — Westworld Dark token theme
+#include "pono_theme.h"   // Pono Print Phase A - Westworld Dark token theme
 
 #include <algorithm>
 

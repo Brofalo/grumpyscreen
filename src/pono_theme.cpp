@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// pono_theme.cpp — Pono Print design token definitions + LVGL theme provider
+// pono_theme.cpp - Pono Print design token definitions + LVGL theme provider
 //
 // Phase A.1 + A.3 of the Pono Print touch UI per
 // docs/design/pono-print-phase-a-technical-brief.md.

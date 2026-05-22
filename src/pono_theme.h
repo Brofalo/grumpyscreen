@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// pono_theme.h — Pono Print design token registry
+// pono_theme.h - Pono Print design token registry
 //
 // Phase A.1 of the Pono Print touch UI per docs/design/pono-print-phase-a-technical-brief.md
 // and docs/design/pono-print-ui-design.md §1. All 30 tokens from the spec

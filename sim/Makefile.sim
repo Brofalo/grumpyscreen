@@ -1,4 +1,4 @@
-# Makefile.sim — Desktop SDL2 simulator for Pono Print UI
+# Makefile.sim - Desktop SDL2 simulator for Pono Print UI
 # Phase A.5 per docs/design/pono-print-phase-a-technical-brief.md.
 #
 # Builds grumpyscreen-sim, a Linux/macOS/Windows desktop binary that runs

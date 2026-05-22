@@ -4,7 +4,7 @@ Phase A.5 per `docs/design/pono-print-phase-a-technical-brief.md`. Lets you iter
 
 ## What it does
 
-Opens a 480×272 SDL2 window that runs the same LVGL UI the printer's LCD runs. Mouse clicks substitute for touch. Same `pono::theme_init()` registers the same theme. Screen functions are the same C++ — copy them between simulator and binary verbatim.
+Opens a 480×272 SDL2 window that runs the same LVGL UI the printer's LCD runs. Mouse clicks substitute for touch. Same `pono::theme_init()` registers the same theme. Screen functions are the same C++ - copy them between simulator and binary verbatim.
 
 ## Quick start
 
