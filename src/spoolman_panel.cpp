@@ -1,6 +1,7 @@
 #include "spoolman_panel.h"
 #include "utils.h"
 #include "logger.h"
+#include "pono_theme.h"  // Phase A.4: accent + tertiary + opacity tokens
 
 LV_IMG_DECLARE(back);
 LV_IMG_DECLARE(refresh_img);
@@ -387,9 +388,11 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
       uint32_t col = dsc->id - row * lv_table_get_col_cnt(spool_table);
 
       if(row == 0) {
+        // Phase A.4 pass 7: header row cyan accent tint (was LV_PALETTE_BLUE +
+        // LV_OPA_20). LV_OPA_20 = 51 = opa_border_strong exact match.
         dsc->label_dsc->align = LV_TEXT_ALIGN_CENTER;
-        dsc->rect_dsc->bg_color = lv_color_mix(lv_palette_main(LV_PALETTE_BLUE),
-                       dsc->rect_dsc->bg_color, LV_OPA_20);
+        dsc->rect_dsc->bg_color = lv_color_mix(pono::color_accent_primary,
+                       dsc->rect_dsc->bg_color, pono::opa_border_strong);
         dsc->rect_dsc->bg_opa = LV_OPA_COVER;
       }
 
@@ -400,6 +403,9 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
 	      if (spool != spools.end()) {
 	        auto &c = spool->second["/filament/color_hex"_json_pointer];
           if (!c.is_null()) {
+            // Documented data-driven exception: spool color comes from
+            // Spoolman DB as a user-defined hex string. Cannot tokenize
+            // user input. Runtime parse stays on lv_color_hex(stoul()).
             dsc->rect_dsc->bg_color = lv_color_hex(std::stoul(c.template get<std::string>(),
                           nullptr, 16));
           }
@@ -407,8 +413,12 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
       }
 
       if((row != 0 && row % 2) == 0) {
-	      dsc->rect_dsc->bg_color = lv_color_mix(lv_palette_main(LV_PALETTE_GREY),
-					       dsc->rect_dsc->bg_color, LV_OPA_10);
+	      // Phase A.4 pass 7: zebra-stripe alternate rows with grey tint (was
+	      // LV_PALETTE_GREY + LV_OPA_10). opa_border_medium (= 31) is the
+	      // closest pono opa token to LV_OPA_10 (= 25); the 6-unit drift is
+	      // imperceptible on a dark surface.
+	      dsc->rect_dsc->bg_color = lv_color_mix(pono::color_text_tertiary,
+					       dsc->rect_dsc->bg_color, pono::opa_border_medium);
 	      dsc->rect_dsc->bg_opa = LV_OPA_COVER;
       }
     }
