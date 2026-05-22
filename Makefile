@@ -54,6 +54,12 @@ endif
 
 CSRCS 			+= $(wildcard $(LVGL_DIR)/assets/$(ASSET_DIR)/*.c)
 
+# Pono Print Phase A: Inter + JetBrains Mono fonts at the 9 sizes required
+# by docs/design/pono-print-ui-design.md §1.2. Regenerated via
+# tools/regen_pono_fonts.sh (requires Node.js + lv_font_conv). Generated
+# .c files are committed to the fork; the .sh is for refresh.
+CSRCS 			+= $(wildcard $(LVGL_DIR)/assets/pono/fonts/*.c)
+
 ifdef GUPPYSCREEN_VERSION
 SHORT_GUPPYSCREEN_VERSION := $(shell printf "%s" "$(GUPPYSCREEN_VERSION)" | cut -c1-7)
 DEFINES			+= -D GUPPYSCREEN_VERSION=\"$(SHORT_GUPPYSCREEN_VERSION)\"

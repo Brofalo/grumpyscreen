@@ -1,0 +1,55 @@
+# Makefile.sim — Desktop SDL2 simulator for Pono Print UI
+# Phase A.5 per docs/design/pono-print-phase-a-technical-brief.md.
+#
+# Builds grumpyscreen-sim, a Linux/macOS/Windows desktop binary that runs
+# the Pono Print UI in an SDL2 window. Use for screen iteration without
+# flashing the printer.
+#
+# Prerequisites:
+#   apt:    sudo apt install libsdl2-dev g++ make
+#   brew:   brew install sdl2
+#   choco:  choco install make mingw + SDL2 manual install
+#
+# Build:
+#   make -f Makefile.sim
+#
+# Clean:
+#   make -f Makefile.sim clean
+#
+# Headless capture (CI screenshot regression):
+#   xvfb-run -s "-screen 0 480x272x24" ./grumpyscreen-sim --capture out.png --exit
+
+CXX       := g++
+CC        := gcc
+CXXFLAGS  := -std=c++17 -O2 -g -Wall -Wno-unused-parameter
+CFLAGS    := -std=c11 -O2 -g -Wall -Wno-unused-parameter
+DEFINES   := -DLV_CONF_INCLUDE_SIMPLE -DLV_USE_SDL=1
+
+# Include paths assume the scaffold drops into a real grumpyscreen fork
+# checkout, so ../lvgl etc resolve to the upstream submodules.
+INCLUDES  := -I. -I../src -I../lvgl -I../lv_drivers -I../assets/pono/fonts
+
+# Source files
+SRC_CPP   := main_sim.cpp \
+             ../src/pono_theme.cpp
+
+SRC_C     := $(wildcard ../lvgl/src/**/*.c) \
+             $(wildcard ../lvgl/src/*.c) \
+             $(wildcard ../lv_drivers/sdl/*.c) \
+             $(wildcard ../assets/pono/fonts/*.c)
+
+LDFLAGS   := -lSDL2 -lpthread -lm
+
+BIN       := grumpyscreen-sim
+
+.PHONY: all clean
+
+all: $(BIN)
+
+$(BIN): $(SRC_CPP) $(SRC_C)
+	$(CXX) $(CXXFLAGS) $(DEFINES) $(INCLUDES) \
+		$(SRC_CPP) $(SRC_C) \
+		-o $@ $(LDFLAGS)
+
+clean:
+	rm -f $(BIN) *.o
