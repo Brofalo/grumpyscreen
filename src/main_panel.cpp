@@ -64,7 +64,7 @@ MainPanel::MainPanel(KWebSocketClient &websocket,
     lv_style_set_img_recolor_opa(&style, LV_OPA_30);
     lv_style_set_img_recolor(&style, lv_color_black());
     lv_style_set_border_width(&style, 0);
-    lv_style_set_bg_color(&style, pono::color_surface_base);  // was lv_palette_darken(GREY,4)
+    lv_style_set_bg_color(&style, pono::color_surface_base);
 
     ws.register_notify_update(this);
 
@@ -165,7 +165,7 @@ void MainPanel::create_panel() {
   lv_obj_add_event_cb(lv_tabview_get_content(tabview), scroll_begin_event, LV_EVENT_SCROLL_BEGIN, NULL);
   
   lv_obj_t * tab_btns = lv_tabview_get_tab_btns(tabview);
-  lv_obj_set_style_bg_color(tab_btns, pono::color_accent_primary, LV_STATE_CHECKED | LV_PART_ITEMS);  // active tab highlight (was GREY)
+  lv_obj_set_style_bg_color(tab_btns, pono::color_accent_primary, LV_STATE_CHECKED | LV_PART_ITEMS);  // active tab highlight
   lv_obj_set_style_outline_width(tab_btns, 0, LV_PART_ITEMS | LV_STATE_FOCUS_KEY | LV_STATE_FOCUS_KEY);
   lv_obj_set_style_border_side(tab_btns, 0, LV_PART_ITEMS | LV_STATE_CHECKED);
   lv_obj_set_style_text_font(tab_btns, &materialdesign_font_40, LV_STATE_DEFAULT);
@@ -268,24 +268,20 @@ void MainPanel::create_sensors(json &temp_sensors) {
     std::string key = sensor.key();
     bool controllable = sensor.value()["controllable"].template get<bool>();
 
-    // Phase A.4 pass 5: tokenize temp-sensor accent colors to Pono Westworld
-    // Dark state colors. The L282 dynamic palette index path stays on
-    // lv_palette_main() for now; PR #2 introduces pono::color_for_palette()
-    // to bridge user-configured int palette indices to Pono tokens.
-    lv_color_t color_code = pono::color_state_warning;  // default (was LV_PALETTE_ORANGE)
+    // Temp-sensor accent color path. String-keyed presets map to fixed Pono
+    // tokens; numeric int config falls through to color_for_palette() with
+    // NONE sentinel + out-of-range safe default in the getter.
+    lv_color_t color_code = pono::color_state_warning;  // default
     if (!sensor.value()["color"].is_number()) {
       std::string color = sensor.value()["color"].template get<std::string>();
       if (color == "red") {
-	      color_code = pono::color_state_error;  // was LV_PALETTE_RED
+	      color_code = pono::color_state_error;
       } else if (color == "purple") {
-	      color_code = pono::color_state_intel;  // was LV_PALETTE_PURPLE
+	      color_code = pono::color_state_intel;
       } else if (color == "blue") {
-	      color_code = pono::color_accent_primary;  // was LV_PALETTE_BLUE
+	      color_code = pono::color_accent_primary;
       }
     } else {
-      // Phase A.4 pass 6: bridge user-configured int palette index to Pono
-      // token. NONE sentinel + out-of-range falls back to text_tertiary
-      // safe default via the default: clause in color_for_palette.
       color_code = pono::color_for_palette((lv_palette_t)sensor.value()["color"].template get<int>());
     }
 

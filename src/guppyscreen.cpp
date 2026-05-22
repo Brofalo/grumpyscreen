@@ -84,7 +84,7 @@ GuppyScreen *GuppyScreen::init(std::function<void(lv_color_t, lv_color_t)> hal_i
 
   lv_style_init(&style_imgbtn_disabled);
   lv_style_set_img_recolor_opa(&style_imgbtn_disabled, LV_OPA_100);
-  lv_style_set_img_recolor(&style_imgbtn_disabled, pono::color_text_tertiary);  // disabled imgbtn recolor (was lv_palette_darken(GREY,1))
+  lv_style_set_img_recolor(&style_imgbtn_disabled, pono::color_text_tertiary);  // disabled imgbtn recolor
 
   /*Initia1ize the new theme from the current theme*/
 

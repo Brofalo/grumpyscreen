@@ -10,6 +10,32 @@
 // To extend with Phase G theme variants (Mainsail Blue / High-contrast /
 // Pono Cyan-on-Black), keep this file as the Westworld Dark canonical and
 // add sibling files (e.g. pono_theme_high_contrast.cpp) selected at init time.
+//
+// ---- Documented exceptions to the token coverage rule ----
+//
+// Phase A.4 closed-out 2026-05-22 with the rule "zero raw color / font /
+// opacity / black-white literals in src/*_panel.cpp outside this file and
+// theme.cpp". The exceptions below are intentional and not regressions:
+//
+//   spoolman_panel.cpp L403:
+//     lv_color_hex(std::stoul(c.template get<std::string>(), nullptr, 16))
+//     User-defined spool color stored as hex string in the Spoolman DB.
+//     Runtime parse of user input; cannot tokenize an infinite hex space.
+//
+//   main_panel.cpp L64-65:
+//     lv_style_set_img_recolor_opa(&style, LV_OPA_30);
+//     lv_style_set_img_recolor(&style, lv_color_black());
+//     Icon recolor overlay for tab button images. Orthogonal to the Pono
+//     text/surface theme; the 30% opacity + black recolor are icon-styling
+//     primitives. Phase G may introduce pono::opa_icon_recolor +
+//     pono::color_icon_recolor tokens if icon variants are needed.
+//
+//   main_panel.cpp L171:
+//     lv_obj_set_style_text_font(tab_btns, &materialdesign_font_40, ...);
+//     Material Design icon font for tab button glyphs (HOME / CONSOLE /
+//     SETTING / INFO). Separate font family from the Pono Inter +
+//     JetBrains Mono text cluster. Phase G may introduce pono::font_icon
+//     if icon-font abstraction is needed.
 
 #include "pono_theme.h"
 
