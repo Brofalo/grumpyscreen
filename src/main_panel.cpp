@@ -268,15 +268,19 @@ void MainPanel::create_sensors(json &temp_sensors) {
     std::string key = sensor.key();
     bool controllable = sensor.value()["controllable"].template get<bool>();
 
-    lv_color_t color_code = lv_palette_main(LV_PALETTE_ORANGE);
+    // Phase A.4 pass 5: tokenize temp-sensor accent colors to Pono Westworld
+    // Dark state colors. The L282 dynamic palette index path stays on
+    // lv_palette_main() for now; PR #2 introduces pono::color_for_palette()
+    // to bridge user-configured int palette indices to Pono tokens.
+    lv_color_t color_code = pono::color_state_warning;  // default (was LV_PALETTE_ORANGE)
     if (!sensor.value()["color"].is_number()) {
       std::string color = sensor.value()["color"].template get<std::string>();
       if (color == "red") {
-	      color_code = lv_palette_main(LV_PALETTE_RED);
+	      color_code = pono::color_state_error;  // was LV_PALETTE_RED
       } else if (color == "purple") {
-	      color_code = lv_palette_main(LV_PALETTE_PURPLE);
+	      color_code = pono::color_state_intel;  // was LV_PALETTE_PURPLE
       } else if (color == "blue") {
-	      color_code = lv_palette_main(LV_PALETTE_BLUE);
+	      color_code = pono::color_accent_primary;  // was LV_PALETTE_BLUE
       }
     } else {
       color_code = lv_palette_main((lv_palette_t)sensor.value()["color"].template get<int>());
