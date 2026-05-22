@@ -3,6 +3,7 @@
 #include "state.h"
 #include "config.h"
 #include "logger.h"
+#include "pono_theme.h"  // Phase A.4: surface_raised token
 
 #include <algorithm>
 #include <cstdio>
@@ -17,7 +18,7 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   lv_obj_align(cont, LV_ALIGN_TOP_MID, 0, 15);  
   
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(cont, lv_palette_darken(LV_PALETTE_GREY, 1), 0);
+  lv_obj_set_style_bg_color(cont, pono::color_surface_raised, 0);  // was lv_palette_darken(GREY,1)
   
   lv_obj_set_size(label, LV_PCT(100), LV_SIZE_CONTENT);
 

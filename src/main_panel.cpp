@@ -2,6 +2,7 @@
 #include "state.h"
 #include "lvgl/lvgl.h"
 #include "logger.h"
+#include "pono_theme.h"  // Phase A.4: surface + accent tokens for tab UI
 
 #include <string>
 
@@ -63,7 +64,7 @@ MainPanel::MainPanel(KWebSocketClient &websocket,
     lv_style_set_img_recolor_opa(&style, LV_OPA_30);
     lv_style_set_img_recolor(&style, lv_color_black());
     lv_style_set_border_width(&style, 0);
-    lv_style_set_bg_color(&style, lv_palette_darken(LV_PALETTE_GREY, 4));
+    lv_style_set_bg_color(&style, pono::color_surface_base);  // was lv_palette_darken(GREY,4)
 
     ws.register_notify_update(this);
 
@@ -164,7 +165,7 @@ void MainPanel::create_panel() {
   lv_obj_add_event_cb(lv_tabview_get_content(tabview), scroll_begin_event, LV_EVENT_SCROLL_BEGIN, NULL);
   
   lv_obj_t * tab_btns = lv_tabview_get_tab_btns(tabview);
-  lv_obj_set_style_bg_color(tab_btns, lv_palette_main(LV_PALETTE_GREY), LV_STATE_CHECKED | LV_PART_ITEMS);
+  lv_obj_set_style_bg_color(tab_btns, pono::color_accent_primary, LV_STATE_CHECKED | LV_PART_ITEMS);  // active tab highlight (was GREY)
   lv_obj_set_style_outline_width(tab_btns, 0, LV_PART_ITEMS | LV_STATE_FOCUS_KEY | LV_STATE_FOCUS_KEY);
   lv_obj_set_style_border_side(tab_btns, 0, LV_PART_ITEMS | LV_STATE_CHECKED);
   lv_obj_set_style_text_font(tab_btns, &materialdesign_font_40, LV_STATE_DEFAULT);

@@ -2,6 +2,7 @@
 #include "state.h"
 #include "config.h"
 #include "logger.h"
+#include "pono_theme.h"  // Phase A.4: state_error token for hot extruder accent
 
 #include <limits>
 
@@ -23,7 +24,7 @@ ExtruderPanel::ExtruderPanel(KWebSocketClient &websocket_client,
   , panel_cont(lv_obj_create(lv_scr_act()))
   , spoolman_panel(sm)
   , extruder_temp(ws, panel_cont, &extruder, 150,
-	  "Extruder", lv_palette_main(LV_PALETTE_RED), false, true, numpad, "extruder", NULL, NULL)
+	  "Extruder", pono::color_state_error, false, true, numpad, "extruder", NULL, NULL)  // was lv_palette_main(RED)
   , temp_selector(panel_cont, "Extruder Temperature (C)",
 		  {"190", "200", "220", "230", "240", "260", "280", "300", ""}, 3, &ExtruderPanel::_handle_callback, this)
   , length_selector(panel_cont, "Extrude Length (mm)",
