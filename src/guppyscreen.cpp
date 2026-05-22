@@ -229,17 +229,13 @@ void GuppyScreen::save_calibration_coeff(lv_tc_coeff_t coeff) {
 }
 #endif
 
-void GuppyScreen::refresh_theme() {
-  lv_theme_t *th = lv_theme_default_get();
-  ThemeConfig *theme_conf = ThemeConfig::get_instance();
-  auto primary_color = lv_color_hex(std::stoul(theme_conf->get<std::string>("/primary_color"), nullptr, 16));
-  auto secondary_color = lv_color_hex(std::stoul(theme_conf->get<std::string>("/secondary_color"), nullptr, 16));
-
-  lv_disp_t *disp = lv_disp_get_default();
-  lv_theme_t * new_theme =  lv_theme_default_init(disp, primary_color, secondary_color, true, th->font_normal);
-  lv_disp_set_theme(disp, new_theme);
-  lv_style_set_img_recolor(&style_imgbtn_pressed, primary_color);
-}
+// Phase A.4 pass 4: refresh_theme() removed. It was dead-code: grepped zero
+// callers across src/. The function re-initialized lv_theme_default_init
+// from the legacy JSON primary/secondary, which pono::theme_init in main.cpp
+// overrides at startup. If a future runtime theme switcher is needed for
+// Phase G theme variants (Mainsail Blue / High-contrast / Pono Cyan-on-Black
+// per docs/design/pono-print-ui-design.md sec 4.6), it lives in
+// pono_theme.cpp as a sibling to theme_init, not here.
 
 /*Set in lv_conf.h as `LV_TICK_CUSTOM_SYS_TIME_EXPR`*/
 uint32_t custom_tick_get(void) {
