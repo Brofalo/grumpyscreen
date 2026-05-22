@@ -2,6 +2,7 @@
 #include "state.h"
 #include "utils.h"
 #include "logger.h"
+#include "pono_theme.h"  // Phase A.4 pass 4: Westworld Dark semantic tokens
 
 // uncomment for helper boxes
 // #define DEBUG_LINES
@@ -35,7 +36,7 @@ PromptPanel::PromptPanel(KWebSocketClient &websocket_client, std::mutex &lock, l
   lv_obj_set_style_pad_all(prompt_cont, 5, 0);
   lv_obj_set_style_radius(prompt_cont, 5, LV_PART_MAIN);
   lv_obj_set_style_border_width(prompt_cont, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_color(prompt_cont, lv_palette_main(LV_PALETTE_GREY), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_color(prompt_cont, pono::color_text_tertiary, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_max_height(prompt_cont, lv_pct(100), 0);
   lv_obj_set_style_max_width(prompt_cont, lv_pct(100), 0);
   lv_obj_set_style_min_height(prompt_cont, lv_pct(100), 0);
@@ -89,11 +90,11 @@ PromptPanel::PromptPanel(KWebSocketClient &websocket_client, std::mutex &lock, l
 #ifdef DEBUG_LINES
   // for debugging
   lv_obj_set_style_border_width(header, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_color(header, lv_palette_main(LV_PALETTE_RED), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_color(header, pono::color_state_error, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_border_width(flex, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_color(flex, lv_palette_main(LV_PALETTE_YELLOW), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_color(flex, pono::color_state_warning, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_border_width(footer_cont, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_color(footer_cont, lv_palette_main(LV_PALETTE_BLUE), LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_color(footer_cont, pono::color_accent_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
 #endif
 
   ws.register_notify_update(this);
@@ -103,25 +104,29 @@ PromptPanel::PromptPanel(KWebSocketClient &websocket_client, std::mutex &lock, l
   lv_label_set_text(header, "HEADER");
 
   // button styles
+  // Phase A.4 pass 4: button-type dispatch (see line ~318) maps to Pono
+  // semantic tokens. "secondary" = surface_elevated, "primary"/"info" =
+  // accent_primary, "error" = state_error, "warning" = state_warning, default
+  // fallback = text_tertiary (deepest neutral, visually distinct from secondary).
   lv_style_init(&style_btn_grey);
-  lv_style_set_bg_color(&style_btn_grey, lv_palette_main(LV_PALETTE_GREY));
+  lv_style_set_bg_color(&style_btn_grey, pono::color_surface_elevated);
   lv_style_set_bg_opa(&style_btn_grey, LV_OPA_COVER);
   lv_style_set_pad_all(&style_btn_grey, 0);
 
   lv_style_init(&style_btn_blue);
-  lv_style_set_bg_color(&style_btn_blue, lv_palette_main(LV_PALETTE_BLUE));
+  lv_style_set_bg_color(&style_btn_blue, pono::color_accent_primary);
   lv_style_set_bg_opa(&style_btn_blue, LV_OPA_COVER);
 
   lv_style_init(&style_btn_red);
-  lv_style_set_bg_color(&style_btn_red, lv_palette_main(LV_PALETTE_RED));
+  lv_style_set_bg_color(&style_btn_red, pono::color_state_error);
   lv_style_set_bg_opa(&style_btn_red, LV_OPA_COVER);
 
   lv_style_init(&style_btn_orange);
-  lv_style_set_bg_color(&style_btn_orange, lv_palette_main(LV_PALETTE_ORANGE));
+  lv_style_set_bg_color(&style_btn_orange, pono::color_state_warning);
   lv_style_set_bg_opa(&style_btn_orange, LV_OPA_COVER);
 
   lv_style_init(&style_btn_dark_grey);
-  lv_style_set_bg_color(&style_btn_dark_grey, lv_palette_darken(LV_PALETTE_GREY, 1));
+  lv_style_set_bg_color(&style_btn_dark_grey, pono::color_text_tertiary);
   lv_style_set_bg_opa(&style_btn_dark_grey, LV_OPA_COVER);
 
   background(); // hide ourselves
@@ -240,8 +245,8 @@ void PromptPanel::handle_macro_response(json &j) {
         lv_obj_center(textfield);
 #ifdef DEBUG_LINES
         lv_obj_set_style_border_width(textfield, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(textfield, lv_palette_main(LV_PALETTE_GREEN), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(textfield, lv_palette_lighten(LV_PALETTE_GREEN, 2), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_color(textfield, pono::color_accent_secondary, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(textfield, pono::color_surface_raised, LV_PART_MAIN | LV_STATE_DEFAULT);
 #endif
       // due to using find, order IS important!
       } else if (command.find("prompt_button_group_start") == 0) {
@@ -261,8 +266,8 @@ void PromptPanel::handle_macro_response(json &j) {
 
 #ifdef DEBUG_LINES
         lv_obj_set_style_border_width(button_group_cont, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_border_color(button_group_cont, lv_palette_main(LV_PALETTE_PINK), LV_PART_MAIN | LV_STATE_DEFAULT);
-        lv_obj_set_style_bg_color(button_group_cont, lv_palette_lighten(LV_PALETTE_PINK, 2), LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_border_color(button_group_cont, pono::color_state_intel, LV_PART_MAIN | LV_STATE_DEFAULT);
+        lv_obj_set_style_bg_color(button_group_cont, pono::color_surface_raised, LV_PART_MAIN | LV_STATE_DEFAULT);
 #endif
         // lv_obj_set_style_min_height(button_group_cont, lv_pct(5), 0);
       } else if (command.find("prompt_button_group_end") == 0) {
