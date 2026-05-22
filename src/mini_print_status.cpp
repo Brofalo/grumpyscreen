@@ -15,7 +15,7 @@ MiniPrintStatus::MiniPrintStatus(lv_obj_t *parent,
   lv_obj_add_flag(cont, LV_OBJ_FLAG_HIDDEN);
   lv_color_t cur_bg = lv_obj_get_style_bg_color(cont, 0);
   lv_color_t mixed = lv_color_mix(pono::color_text_tertiary,
-				  cur_bg, LV_OPA_10);  // 10% mute overlay (was LV_PALETTE_GREY)
+				  cur_bg, LV_OPA_10);  // 10% mute overlay
   
   lv_obj_set_style_bg_color(cont, mixed, 0);  
   lv_obj_set_style_bg_opa(cont, LV_OPA_COVER, 0);

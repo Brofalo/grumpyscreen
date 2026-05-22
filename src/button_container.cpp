@@ -58,7 +58,7 @@ ButtonContainer::ButtonContainer(lv_obj_t *parent,
   lv_label_set_text(label, text);
   lv_obj_set_width(label, LV_PCT(100));
   lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(label, pono::color_text_tertiary, LV_STATE_DISABLED);  // disabled label (was lv_palette_darken(GREY,1))
+  lv_obj_set_style_text_color(label, pono::color_text_tertiary, LV_STATE_DISABLED);  // disabled label
 
   lv_obj_align_to(label, btn, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);
 }

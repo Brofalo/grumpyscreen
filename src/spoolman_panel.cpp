@@ -388,8 +388,7 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
       uint32_t col = dsc->id - row * lv_table_get_col_cnt(spool_table);
 
       if(row == 0) {
-        // Phase A.4 pass 7: header row cyan accent tint (was LV_PALETTE_BLUE +
-        // LV_OPA_20). LV_OPA_20 = 51 = opa_border_strong exact match.
+        // Header row cyan accent tint at opa_border_strong (= 51 = 20%).
         dsc->label_dsc->align = LV_TEXT_ALIGN_CENTER;
         dsc->rect_dsc->bg_color = lv_color_mix(pono::color_accent_primary,
                        dsc->rect_dsc->bg_color, pono::opa_border_strong);
@@ -413,10 +412,8 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
       }
 
       if((row != 0 && row % 2) == 0) {
-	      // Phase A.4 pass 7: zebra-stripe alternate rows with grey tint (was
-	      // LV_PALETTE_GREY + LV_OPA_10). opa_border_medium (= 31) is the
-	      // closest pono opa token to LV_OPA_10 (= 25); the 6-unit drift is
-	      // imperceptible on a dark surface.
+	      // Zebra-stripe alternate rows with grey tint at opa_border_medium
+	      // (= 31 = 12%; closest pono opa token to LVGL LV_OPA_10 = 25).
 	      dsc->rect_dsc->bg_color = lv_color_mix(pono::color_text_tertiary,
 					       dsc->rect_dsc->bg_color, pono::opa_border_medium);
 	      dsc->rect_dsc->bg_opa = LV_OPA_COVER;
