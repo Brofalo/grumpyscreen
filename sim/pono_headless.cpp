@@ -1,0 +1,135 @@
+// SPDX-License-Identifier: GPL-3.0-only
+// pono_headless.cpp - headless LVGL renderer for Pono Print UI iteration
+//
+// Renders a Pono screen to an off-screen framebuffer and dumps a 24-bit BMP -
+// NO SDL, NO display hardware, NO X server. Links against only LVGL + the
+// pono_theme/pono_home builders, so it compiles anywhere g++ + the in-repo
+// LVGL submodule live (here: MinGW on Windows). This is the "on glass" loop:
+// build a screen, render it, look at the pixels, before ever flashing.
+//
+// Usage:
+//   pono-headless.exe <out.bmp> [advance_ms] [screen]
+//     out.bmp     output path (default out.bmp)
+//     advance_ms  ms of animation to advance before capture (default 700)
+//     screen      which screen to build (default "home")
+
+#include "lvgl.h"
+#include "pono_theme.h"
+#include "pono_home.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <string>
+
+#define PW 480
+#define PH 272
+
+static lv_color_t g_fb[PW * PH]; // accumulated screen framebuffer
+
+// LVGL here is built LV_TICK_CUSTOM=1 with SYS_TIME_EXPR = custom_tick_get().
+// The real app defines that symbol; the headless harness supplies it as a
+// counter we advance by hand to drive animations to a chosen frame.
+static uint32_t g_tick_ms = 0;
+extern "C" uint32_t custom_tick_get(void) { return g_tick_ms; }
+
+// lv_extra.c initialises the extra/libs enabled in lv_conf (FS_STDIO, PNG).
+// Those .c are excluded from the sim build (POSIX/3rd-party), so satisfy the
+// linker with no-op stubs - the cockpit needs no filesystem nor PNG decode.
+extern "C" void lv_fs_stdio_init(void) {}
+extern "C" void lv_png_init(void) {}
+
+static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *area, lv_color_t *color_p) {
+  for (int y = area->y1; y <= area->y2; y++) {
+    for (int x = area->x1; x <= area->x2; x++) {
+      if (x >= 0 && x < PW && y >= 0 && y < PH) g_fb[y * PW + x] = *color_p;
+      color_p++;
+    }
+  }
+  lv_disp_flush_ready(drv);
+}
+
+static void put_le32(unsigned char *p, unsigned int v) {
+  p[0] = v & 0xff; p[1] = (v >> 8) & 0xff; p[2] = (v >> 16) & 0xff; p[3] = (v >> 24) & 0xff;
+}
+
+static int write_bmp(const char *path) {
+  const int rowsize = (PW * 3 + 3) & ~3;
+  const int datasize = rowsize * PH;
+  const int filesize = 54 + datasize;
+  unsigned char hdr[54];
+  memset(hdr, 0, sizeof hdr);
+  hdr[0] = 'B'; hdr[1] = 'M';
+  put_le32(hdr + 2, filesize);
+  put_le32(hdr + 10, 54);
+  put_le32(hdr + 14, 40);
+  put_le32(hdr + 18, PW);
+  put_le32(hdr + 22, PH);
+  hdr[26] = 1; hdr[28] = 24;
+  put_le32(hdr + 34, datasize);
+  FILE *f = fopen(path, "wb");
+  if (!f) return -1;
+  fwrite(hdr, 1, 54, f);
+  unsigned char *row = (unsigned char *)calloc(rowsize, 1);
+  for (int y = PH - 1; y >= 0; y--) { // BMP rows are bottom-up
+    for (int x = 0; x < PW; x++) {
+      lv_color32_t c;
+      c.full = lv_color_to32(g_fb[y * PW + x]);
+      row[x * 3 + 0] = c.ch.blue;
+      row[x * 3 + 1] = c.ch.green;
+      row[x * 3 + 2] = c.ch.red;
+    }
+    fwrite(row, 1, rowsize, f);
+  }
+  free(row);
+  fclose(f);
+  return 0;
+}
+
+int main(int argc, char **argv) {
+  const char *out = argc > 1 ? argv[1] : "out.bmp";
+  int advance_ms = argc > 2 ? atoi(argv[2]) : 700;
+  std::string screen = argc > 3 ? argv[3] : "home";
+
+  lv_init();
+
+  static lv_disp_draw_buf_t dbuf;
+  static lv_color_t buf1[PW * PH];
+  lv_disp_draw_buf_init(&dbuf, buf1, NULL, PW * PH);
+
+  static lv_disp_drv_t ddrv;
+  lv_disp_drv_init(&ddrv);
+  ddrv.hor_res = PW;
+  ddrv.ver_res = PH;
+  ddrv.flush_cb = flush_cb;
+  ddrv.draw_buf = &dbuf;
+  lv_disp_t *disp = lv_disp_drv_register(&ddrv);
+
+  pono::theme_init(disp);
+
+  if (screen == "home") {
+    pono::build_home(lv_scr_act(), pono::demo_home_model());
+  } else {
+    pono::build_home(lv_scr_act(), pono::demo_home_model());
+  }
+
+  // advance time so animations settle (ocean drift, glow pulse)
+  for (int t = 0; t < advance_ms; t += 16) {
+    g_tick_ms += 16;
+    lv_timer_handler();
+  }
+
+  // hide the perf-monitor overlay (sys layer) so it does not blemish captures
+  lv_obj_t *sys = lv_disp_get_layer_sys(disp);
+  for (uint32_t i = 0; i < lv_obj_get_child_cnt(sys); i++) {
+    lv_obj_add_flag(lv_obj_get_child(sys, i), LV_OBJ_FLAG_HIDDEN);
+  }
+  lv_refr_now(disp);
+
+  if (write_bmp(out) != 0) {
+    fprintf(stderr, "failed to write %s\n", out);
+    return 1;
+  }
+  fprintf(stderr, "wrote %s (%s, %dms)\n", out, screen.c_str(), advance_ms);
+  return 0;
+}
