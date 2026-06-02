@@ -320,9 +320,17 @@ void PromptPanel::handle_macro_response(json &j) {
           // lv_obj_set_style_max_width(label, lv_pct(45), 0);
           lv_obj_center(label);
 
+          // Pick label text for contrast against the button fill. The theme
+          // paints all button text near-black (correct for the bright cyan /
+          // amber / red fills), but the secondary + default fills are dark
+          // surfaces -- near-black text on them is the "blends together"
+          // unreadable case. Force light text there. Set locally on the label
+          // (highest precedence, no inheritance ambiguity).
+          lv_color_t btn_txt = pono::color_surface_base;  // dark text on bright fill
           if (!prompt_button_type.compare("secondary")) {
             LOG_DEBUG("type secondary");
             lv_obj_add_style(btn, &style_btn_grey, 0);
+            btn_txt = pono::color_text_primary;           // light on dark surface
           } else if (!prompt_button_type.compare("warning")) {
             LOG_DEBUG("type warning");
             lv_obj_add_style(btn, &style_btn_orange, 0);
@@ -335,10 +343,12 @@ void PromptPanel::handle_macro_response(json &j) {
           } else if (!prompt_button_type.compare("primary")) {
             LOG_DEBUG("type primary");
             lv_obj_add_style(btn, &style_btn_blue, 0);
-          } else { // info and primary as well
+          } else { // unspecified type -> deepest neutral fill
             LOG_DEBUG("type default");
             lv_obj_add_style(btn, &style_btn_dark_grey, 0);
+            btn_txt = pono::color_text_primary;           // light on slate
           }
+          lv_obj_set_style_text_color(label, btn_txt, 0);
           lv_obj_add_event_cb(btn, _handle_callback, LV_EVENT_PRESSED, this);
         }
       } else if (command.find("prompt_show") == 0) {

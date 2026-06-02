@@ -104,4 +104,21 @@ void theme_init(lv_disp_t *disp);
 // docs/plans/2026-05-22-pono-print-a4-panel-refactor-plan.md Decision 1.
 lv_color_t color_for_palette(lv_palette_t p);
 
+// ---- Hawaii ocean tide backdrop (boot delighter) ----
+//
+// ocean_tide_init() turns `parent` into a full-parent ocean: a vertical
+// deep-navy-to-tropical-teal gradient with three slow, low-opacity "swell"
+// bars drifting at different speeds (a parallax tide). Cheap by construction
+// -- only the thin swell bands repaint, the motion is slow, and nothing is
+// drawn per-pixel. Foreground content stays readable because the swells sit
+// at low opacity; the caller should move its text to the foreground after
+// calling this (the swells are added as children of `parent`).
+//
+// Intended for the boot/init screen, which is visible only while waiting for
+// Klipper. Call ocean_tide_stop() once the wait ends so the animation costs
+// no CPU behind the live dashboard. ocean_tide_stop() is idempotent and safe
+// whether or not the tide is running.
+void ocean_tide_init(lv_obj_t *parent);
+void ocean_tide_stop(lv_obj_t *parent);
+
 } // namespace pono

@@ -14,17 +14,30 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   , main_panel(mp)
   , lv_lock(l)
 {
-  lv_obj_set_size(cont, LV_PCT(55), LV_SIZE_CONTENT);
-  lv_obj_align(cont, LV_ALIGN_TOP_MID, 0, 15);  
-  
+  // Full-screen Hawaii ocean boot backdrop. It is visible only while waiting
+  // for Klipper to come up; connected() calls ocean_tide_stop() so the tide
+  // animation costs nothing once the live dashboard takes over.
+  lv_obj_set_size(cont, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_pad_all(cont, 0, 0);
+  lv_obj_set_style_border_width(cont, 0, 0);
+  lv_obj_set_style_radius(cont, 0, 0);
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_bg_color(cont, pono::color_surface_raised, 0);
-  
-  lv_obj_set_size(label, LV_PCT(100), LV_SIZE_CONTENT);
+  pono::ocean_tide_init(cont);
 
-  lv_label_set_text(label, LV_SYMBOL_WARNING " Waiting for Klipper to start...");
+  // Readable message pill, centered over the ocean and kept in the
+  // foreground so the drifting swells pass behind the text.
+  lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
+  lv_obj_set_style_max_width(label, lv_pct(82), 0);
+  lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_color(label, pono::color_text_primary, 0);
+  lv_obj_set_style_bg_color(label, pono::color_surface_raised, 0);
+  lv_obj_set_style_bg_opa(label, LV_OPA_80, 0);
+  lv_obj_set_style_pad_all(label, pono::space_md, 0);
+  lv_obj_set_style_radius(label, pono::radius_md, 0);
+  lv_label_set_text(label, LV_SYMBOL_WARNING " Waiting for Klipper to start...");
   lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_move_foreground(label);
 }
 
 InitPanel::~InitPanel() {
@@ -94,6 +107,7 @@ void InitPanel::connected(KWebSocketClient &ws) {
         std::lock_guard<std::mutex> lock(this->lv_lock);
         lv_obj_add_flag(this->cont, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_background(this->cont);
+        pono::ocean_tide_stop(this->cont);  // dashboard is up; stop the boot tide
       });
     }
   });

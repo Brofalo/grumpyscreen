@@ -191,4 +191,91 @@ lv_color_t color_for_palette(lv_palette_t p) {
     }
 }
 
+// ---- Hawaii ocean tide backdrop (boot delighter) ----
+//
+// Per the token-coverage rule (Phase A.4), raw color literals are permitted
+// inside this file. The ocean-specific teal/foam shades below are local to
+// this effect and are intentionally NOT promoted into the 30-token spec.
+
+namespace {
+
+// Drift animation exec callbacks: translate a swell bar. Slow loop +
+// ping-pong (set via playback_time) reads as a tide rolling in/out, with no
+// per-pixel work -- LVGL only repaints each bar's bounding band.
+void swell_x_cb(void *bar, int32_t v) {
+    lv_obj_set_style_translate_x(static_cast<lv_obj_t *>(bar), v, 0);
+}
+void swell_y_cb(void *bar, int32_t v) {
+    lv_obj_set_style_translate_y(static_cast<lv_obj_t *>(bar), v, 0);
+}
+
+// One translucent swell: a wide, short, fully-rounded bar (a lozenge) that
+// overhangs the screen edges so its ends never show, drifting horizontally
+// with a gentle vertical bob out of phase.
+void make_swell(lv_obj_t *parent, lv_color_t color, lv_opa_t opa,
+                lv_coord_t y, lv_coord_t h, uint32_t period, int32_t x_range) {
+    lv_obj_t *bar = lv_obj_create(parent);
+    lv_obj_remove_style_all(bar);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(bar, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(bar, lv_pct(140), h);            // overhang both edges
+    lv_obj_align(bar, LV_ALIGN_TOP_MID, 0, y);
+    lv_obj_set_style_bg_color(bar, color, 0);
+    lv_obj_set_style_bg_opa(bar, opa, 0);
+    lv_obj_set_style_radius(bar, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(bar, 0, 0);
+
+    lv_anim_t ax;
+    lv_anim_init(&ax);
+    lv_anim_set_var(&ax, bar);
+    lv_anim_set_exec_cb(&ax, swell_x_cb);
+    lv_anim_set_values(&ax, -x_range, x_range);
+    lv_anim_set_time(&ax, period);
+    lv_anim_set_playback_time(&ax, period);
+    lv_anim_set_repeat_count(&ax, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&ax, lv_anim_path_ease_in_out);
+    lv_anim_start(&ax);
+
+    lv_anim_t ay;
+    lv_anim_init(&ay);
+    lv_anim_set_var(&ay, bar);
+    lv_anim_set_exec_cb(&ay, swell_y_cb);
+    lv_anim_set_values(&ay, -4, 4);
+    lv_anim_set_time(&ay, period / 2);
+    lv_anim_set_playback_time(&ay, period / 2);
+    lv_anim_set_repeat_count(&ay, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&ay, lv_anim_path_ease_in_out);
+    lv_anim_start(&ay);
+}
+
+} // namespace
+
+void ocean_tide_init(lv_obj_t *parent) {
+    if (parent == NULL) return;
+    // Ocean depth gradient: deep-navy surface at the crest, tropical teal at
+    // the trough.
+    lv_obj_set_style_bg_color(parent, color_surface_base, 0);                     // #0a0e17
+    lv_obj_set_style_bg_grad_color(parent, LV_COLOR_MAKE(0x06, 0x3a, 0x42), 0);   // deep teal
+    lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+
+    // Three swells at increasing depth, decreasing opacity, different speeds:
+    // teal shelf, cyan crest, foam-green wash. Low opacity keeps any text on
+    // top readable.
+    make_swell(parent, LV_COLOR_MAKE(0x0a, 0x6e, 0x7a), LV_OPA_40, 150, 30,  9000, 40);
+    make_swell(parent, color_accent_primary,            LV_OPA_20, 182, 22,  6500, 60);
+    make_swell(parent, color_accent_secondary,          LV_OPA_20, 208, 16, 11000, 30);
+}
+
+void ocean_tide_stop(lv_obj_t *parent) {
+    if (parent == NULL) return;
+    // Halt every child's animations. lv_anim_del is a no-op for children with
+    // no animation (e.g. a foreground label), so this is safe + idempotent.
+    uint32_t n = lv_obj_get_child_cnt(parent);
+    for (uint32_t i = 0; i < n; i++) {
+        lv_obj_t *child = lv_obj_get_child(parent, i);
+        if (child != NULL) lv_anim_del(child, NULL);
+    }
+}
+
 } // namespace pono
