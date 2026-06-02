@@ -89,7 +89,7 @@ ExtruderPanel::~ExtruderPanel() {
 }
 
 void ExtruderPanel::foreground() {
-  lv_obj_move_foreground(panel_cont);
+  pono::panel_open(panel_cont);
 }
 
 void ExtruderPanel::enable_spoolman() {

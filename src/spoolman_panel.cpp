@@ -133,7 +133,7 @@ void SpoolmanPanel::init() {
 
 void SpoolmanPanel::foreground() {
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_move_foreground(cont);
+  pono::panel_open(cont);
 }
 
 void SpoolmanPanel::populate_spools(std::vector<json> &sorted_spools) {

@@ -121,4 +121,14 @@ lv_color_t color_for_palette(lv_palette_t p);
 void ocean_tide_init(lv_obj_t *parent);
 void ocean_tide_stop(lv_obj_t *parent);
 
+// ---- Panel open animation ----
+//
+// panel_open() moves a panel to the foreground and fades it in from
+// transparent (a short ease-out), so overlay panels "open" smoothly instead
+// of snapping in. Self-contained and safe to call repeatedly: a re-open
+// restarts the fade cleanly. There is intentionally no animated hide here --
+// the foreground/background z-order close stays instant (the riskiest part to
+// get right blind); 60 fps + the open fade already carry the feel.
+void panel_open(lv_obj_t *obj);
+
 } // namespace pono

@@ -138,10 +138,12 @@ void MainPanel::consume(json &j) {
 }
 
 static void scroll_begin_event(lv_event_t * e) {
-  /*Disable the scroll animations. Triggered when a tab button is clicked */
+  /*Silky tab transitions: animate the tab-switch slide. It was forced to 0
+   *(instant) when the panel ran at 33 fps; at the 60 fps refresh the slide
+   *is smooth. Triggered when a tab button is clicked. */
   if (lv_event_get_code(e) == LV_EVENT_SCROLL_BEGIN) {
     lv_anim_t * a = (lv_anim_t*)lv_event_get_param(e);
-    if(a)  a->time = 0;
+    if(a)  a->time = 260;
   }
 }
 

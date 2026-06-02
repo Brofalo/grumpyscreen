@@ -278,4 +278,27 @@ void ocean_tide_stop(lv_obj_t *parent) {
     }
 }
 
+// ---- Panel open animation ----
+
+namespace {
+void panel_opa_cb(void *obj, int32_t v) {
+    lv_obj_set_style_opa(static_cast<lv_obj_t *>(obj), (lv_opa_t)v, 0);
+}
+} // namespace
+
+void panel_open(lv_obj_t *obj) {
+    if (obj == NULL) return;
+    lv_obj_move_foreground(obj);
+    lv_anim_del(obj, panel_opa_cb);             // restart cleanly if re-opened
+    lv_obj_set_style_opa(obj, LV_OPA_TRANSP, 0);
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, obj);
+    lv_anim_set_exec_cb(&a, panel_opa_cb);
+    lv_anim_set_values(&a, LV_OPA_TRANSP, LV_OPA_COVER);
+    lv_anim_set_time(&a, motion_base);          // 200 ms ease-out fade-in
+    lv_anim_set_path_cb(&a, lv_anim_path_ease_out);
+    lv_anim_start(&a);
+}
+
 } // namespace pono
