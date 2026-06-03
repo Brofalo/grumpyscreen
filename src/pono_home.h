@@ -43,7 +43,9 @@ struct HomeHandles {
   lv_obj_t *material = nullptr;    // material/profile line
   lv_obj_t *eta = nullptr;         // "1:12 left"
   lv_obj_t *nozzle = nullptr;      // nozzle current-temp number
+  lv_obj_t *nozzle_set = nullptr;  // nozzle target "/250"
   lv_obj_t *bed = nullptr;         // bed current-temp number
+  lv_obj_t *bed_set = nullptr;     // bed target "/60"
   lv_obj_t *state_pill = nullptr;  // PRINTING pill (hide when idle)
   lv_obj_t *state_dot = nullptr;   // pulsing beat inside the pill (anim gated to printing)
   // tappable launchers (app attaches event cbs)

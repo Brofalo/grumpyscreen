@@ -211,7 +211,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   char nzt[8]; snprintf(nzt, sizeof nzt, "%d", m.nozzle);
   lv_obj_t *nz_num = lbl(parent, nzt, font_num_medium, nz_col, 370, 68);
   char nzs[10]; snprintf(nzs, sizeof nzs, "/%d", m.nozzle_set);
-  lbl(parent, nzs, font_num_small, color_text_secondary, 410, 75);
+  lv_obj_t *nz_set = lbl(parent, nzs, font_num_small, color_text_secondary, 410, 75);
   lbl(parent, "tap", font_micro, color_accent_primary, 446, 54);
 
   lv_obj_t *bdc = card(parent, 360, 102, 110, 48, color_surface_elevated, 10);
@@ -222,7 +222,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   char bdt[8]; snprintf(bdt, sizeof bdt, "%d", m.bed);
   lv_obj_t *bd_num = lbl(parent, bdt, font_num_medium, bd_col, 370, 122);
   char bds[10]; snprintf(bds, sizeof bds, "/%d", m.bed_set);
-  lbl(parent, bds, font_num_small, color_text_secondary, 402, 129);
+  lv_obj_t *bd_set = lbl(parent, bds, font_num_small, color_text_secondary, 402, 129);
   lbl(parent, "tap", font_micro, color_accent_primary, 446, 108);
 
   // ---- tune tiers: TUNE (standard) + OMEGA (enhanced) ----
@@ -271,6 +271,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
     out->arc = arc; out->pct = pl; out->layer = lyl;
     out->job = jn; out->material = mat_l; out->eta = eta_l;
     out->nozzle = nz_num; out->bed = bd_num;
+    out->nozzle_set = nz_set; out->bed_set = bd_set;
     out->tile_nozzle = nzc; out->tile_bed = bdc;
     out->tile_tune = tn; out->tile_omega = om; out->btn_pausestop = ps;
   }

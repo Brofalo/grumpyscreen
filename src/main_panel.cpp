@@ -172,12 +172,18 @@ void MainPanel::consume(json &j) {
       lv_label_set_text(home_h.nozzle, fmt::format("{}", v).c_str());
       lv_obj_set_style_text_color(home_h.nozzle, v >= 240 ? pono::color_state_error : (v >= 50 ? pono::color_state_warning : pono::color_text_primary), 0);
     }
+    auto ets = j["/params/0/extruder/target"_json_pointer];
+    if (!ets.is_null() && home_h.nozzle_set)
+      lv_label_set_text(home_h.nozzle_set, fmt::format("/{}", (int)ets.template get<double>()).c_str());
     auto bt = j["/params/0/heater_bed/temperature"_json_pointer];
     if (!bt.is_null() && home_h.bed) {
       int v = (int)bt.template get<double>();
       lv_label_set_text(home_h.bed, fmt::format("{}", v).c_str());
       lv_obj_set_style_text_color(home_h.bed, v >= 100 ? pono::color_state_error : (v >= 40 ? pono::color_state_warning : pono::color_text_primary), 0);
     }
+    auto bts = j["/params/0/heater_bed/target"_json_pointer];
+    if (!bts.is_null() && home_h.bed_set)
+      lv_label_set_text(home_h.bed_set, fmt::format("/{}", (int)bts.template get<double>()).c_str());
     if (!pstat_state.is_null()) {
       bool printing = pstat_state.template get<std::string>() == "printing";
       if (home_h.state_pill) {
