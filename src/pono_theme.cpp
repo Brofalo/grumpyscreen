@@ -39,6 +39,8 @@
 
 #include "pono_theme.h"
 
+#include <math.h>
+
 namespace pono {
 
 // ---- Color token definitions (hex from spec §1.1) ----
@@ -191,85 +193,101 @@ lv_color_t color_for_palette(lv_palette_t p) {
     }
 }
 
-// ---- Hawaii ocean tide backdrop (boot delighter) ----
+// ---- Hawaii ocean caustic backdrop (boot delighter) ----
 //
-// Per the token-coverage rule (Phase A.4), raw color literals are permitted
-// inside this file. The ocean-specific teal/foam shades below are local to
-// this effect and are intentionally NOT promoted into the 30-token spec.
+// A prerendered, gently scrolling ocean. The texture - a depth gradient with
+// soft underwater "caustic" light - is drawn ONCE into an off-screen canvas at
+// boot, then scrolled horizontally at the panel refresh. Scrolling a baked
+// canvas is a flat blit (no per-pixel work per frame), so it stays smooth at
+// 60fps on the 2-core software renderer, and it replaces the old vector swell
+// bars that read as crude stripes. Raw color literals are permitted in this
+// file (Phase A.4 token-coverage exception).
 
 namespace {
 
-// Drift animation exec callbacks: translate a swell bar. Slow loop +
-// ping-pong (set via playback_time) reads as a tide rolling in/out, with no
-// per-pixel work -- LVGL only repaints each bar's bounding band.
-void swell_x_cb(void *bar, int32_t v) {
-    lv_obj_set_style_translate_x(static_cast<lv_obj_t *>(bar), v, 0);
+// Twice the screen width so a one-screen left-scroll loops seamlessly: the
+// caustic pattern is periodic over OCEAN_SCROLL px, so column 480 == column 0.
+// One app-lifetime buffer (~1 MB), reused across reconnects.
+constexpr lv_coord_t OCEAN_W = 960;
+constexpr lv_coord_t OCEAN_H = 272;
+constexpr lv_coord_t OCEAN_SCROLL = 480;   // == screen width == one texture period
+lv_color_t s_ocean_buf[OCEAN_W * OCEAN_H];
+lv_obj_t  *s_ocean_canvas = nullptr;
+
+void ocean_scroll_cb(void *obj, int32_t v) {
+    lv_obj_set_style_translate_x(static_cast<lv_obj_t *>(obj), v, 0);
 }
-void swell_y_cb(void *bar, int32_t v) {
-    lv_obj_set_style_translate_y(static_cast<lv_obj_t *>(bar), v, 0);
-}
 
-// One translucent swell: a wide, short, fully-rounded bar (a lozenge) that
-// overhangs the screen edges so its ends never show, drifting horizontally
-// with a gentle vertical bob out of phase.
-void make_swell(lv_obj_t *parent, lv_color_t color, lv_opa_t opa,
-                lv_coord_t y, lv_coord_t h, uint32_t period, int32_t x_range) {
-    lv_obj_t *bar = lv_obj_create(parent);
-    lv_obj_remove_style_all(bar);
-    lv_obj_clear_flag(bar, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_clear_flag(bar, LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(bar, lv_pct(140), h);            // overhang both edges
-    lv_obj_align(bar, LV_ALIGN_TOP_MID, 0, y);
-    lv_obj_set_style_bg_color(bar, color, 0);
-    lv_obj_set_style_bg_opa(bar, opa, 0);
-    lv_obj_set_style_radius(bar, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_style_border_width(bar, 0, 0);
-
-    lv_anim_t ax;
-    lv_anim_init(&ax);
-    lv_anim_set_var(&ax, bar);
-    lv_anim_set_exec_cb(&ax, swell_x_cb);
-    lv_anim_set_values(&ax, -x_range, x_range);
-    lv_anim_set_time(&ax, period);
-    lv_anim_set_playback_time(&ax, period);
-    lv_anim_set_repeat_count(&ax, LV_ANIM_REPEAT_INFINITE);
-    lv_anim_set_path_cb(&ax, lv_anim_path_ease_in_out);
-    lv_anim_start(&ax);
-
-    lv_anim_t ay;
-    lv_anim_init(&ay);
-    lv_anim_set_var(&ay, bar);
-    lv_anim_set_exec_cb(&ay, swell_y_cb);
-    lv_anim_set_values(&ay, -4, 4);
-    lv_anim_set_time(&ay, period / 2);
-    lv_anim_set_playback_time(&ay, period / 2);
-    lv_anim_set_repeat_count(&ay, LV_ANIM_REPEAT_INFINITE);
-    lv_anim_set_path_cb(&ay, lv_anim_path_ease_in_out);
-    lv_anim_start(&ay);
+// Bake the ocean texture into s_ocean_buf once. Vertical depth gradient (navy
+// crest -> deep-teal trough) plus two low-amplitude, phase-modulated sine
+// "caustics" whose crests brighten toward cyan. Periodic over OCEAN_SCROLL in
+// x (integer cycle counts) so the scroll loop is seamless.
+void ocean_draw_texture() {
+    const float TAU = 6.2831853f;
+    const float W = (float)OCEAN_SCROLL;
+    const float H = (float)OCEAN_H;
+    for (lv_coord_t y = 0; y < OCEAN_H; y++) {
+        float ty = (float)y / (H - 1.0f);
+        float gr = 0x0a + (0x06 - 0x0a) * ty;   // gradient endpoints (navy -> teal)
+        float gg = 0x0e + (0x3a - 0x0e) * ty;
+        float gb = 0x17 + (0x42 - 0x17) * ty;
+        float yph1 = sinf(TAU * 2.0f * (float)y / H);
+        float yph2 = sinf(TAU * 1.0f * (float)y / H + 1.0f);
+        for (lv_coord_t x = 0; x < OCEAN_W; x++) {
+            float fx = (float)x;
+            float c1 = sinf(TAU * 3.0f * fx / W + 1.5f * yph1);
+            float c2 = sinf(TAU * 5.0f * fx / W + 2.0f * yph2);
+            float caustic = (c1 + c2) * 0.5f;            // [-1, 1]
+            float crest = caustic > 0.0f ? caustic : 0.0f;
+            crest *= crest;                              // sharpen the glints
+            float r = gr + crest * 16.0f;
+            float g = gg + crest * 34.0f;
+            float b = gb + crest * 46.0f;
+            if (r > 255.0f) r = 255.0f;
+            if (g > 255.0f) g = 255.0f;
+            if (b > 255.0f) b = 255.0f;
+            s_ocean_buf[y * OCEAN_W + x] =
+                lv_color_make((uint8_t)r, (uint8_t)g, (uint8_t)b);
+        }
+    }
 }
 
 } // namespace
 
 void ocean_tide_init(lv_obj_t *parent) {
     if (parent == NULL) return;
-    // Ocean depth gradient: deep-navy surface at the crest, tropical teal at
-    // the trough.
+    // Base gradient stays as the fill behind the canvas (and covers the single
+    // frame before the canvas first paints): deep-navy crest, tropical teal
+    // trough.
     lv_obj_set_style_bg_color(parent, color_surface_base, 0);                     // #0a0e17
     lv_obj_set_style_bg_grad_color(parent, LV_COLOR_MAKE(0x06, 0x3a, 0x42), 0);   // deep teal
     lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-    // Layered parallax tide: a deep shelf, mid teal + cyan swells, a fast thin
-    // foam glint for sparkle, a green wash and a slow undertow. More layers at
-    // out-of-phase speeds read as a living ocean that flexes the 60fps refresh,
-    // while every layer is just a cheap translate of a rounded bar (no per-pixel
-    // work). Low opacities keep text on top readable.
-    // Three slow swells only. Six full-width swells animating at 60 fps
-    // overdrew the panel on the Centauri and the tide tore/glitched; three
-    // slow low-opacity bands read as a calm ocean and stay smooth.
-    make_swell(parent, LV_COLOR_MAKE(0x0a, 0x6e, 0x7a), LV_OPA_40, 150, 32, 11000, 34); // teal swell
-    make_swell(parent, color_accent_primary,            LV_OPA_20, 186, 22,  8500, 48); // cyan crest
-    make_swell(parent, color_accent_secondary,          LV_OPA_20, 220, 18, 14000, 28); // green wash
+    // Bake + mount the prerendered ocean canvas once; reuse it on reconnect.
+    if (s_ocean_canvas == nullptr) {
+        ocean_draw_texture();
+        s_ocean_canvas = lv_canvas_create(parent);
+        lv_canvas_set_buffer(s_ocean_canvas, s_ocean_buf, OCEAN_W, OCEAN_H,
+                             LV_IMG_CF_TRUE_COLOR);
+        lv_obj_clear_flag(s_ocean_canvas, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(s_ocean_canvas, LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_set_pos(s_ocean_canvas, 0, 0);
+    }
+    lv_obj_move_background(s_ocean_canvas);   // stay behind the joke / bar / dedication
+
+    // Slow continuous left-scroll, looping seamlessly at one texture period.
+    // Linear path so the loop reset is invisible (no ease stutter at the seam).
+    lv_anim_del(s_ocean_canvas, ocean_scroll_cb);
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, s_ocean_canvas);
+    lv_anim_set_exec_cb(&a, ocean_scroll_cb);
+    lv_anim_set_values(&a, 0, -OCEAN_SCROLL);
+    lv_anim_set_time(&a, 16000);                  // ~30 px/s drift
+    lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+    lv_anim_set_path_cb(&a, lv_anim_path_linear);
+    lv_anim_start(&a);
 }
 
 void ocean_tide_stop(lv_obj_t *parent) {
