@@ -149,6 +149,20 @@ int main(int argc, char **argv) {
     lv_obj_set_style_bg_color(sg, pono::color_accent_primary, 0);
     lv_obj_set_style_bg_opa(sg, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(sg, 3, 0);
+
+    // Dedication pill, pinned to the bottom (mirrors init_panel).
+    lv_obj_t *ded = lv_label_create(scr);
+    lv_obj_set_width(ded, LV_SIZE_CONTENT);
+    lv_obj_set_height(ded, LV_SIZE_CONTENT);
+    lv_obj_set_style_text_align(ded, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(ded, pono::color_accent_primary, 0);
+    lv_obj_set_style_text_font(ded, pono::font_caption, 0);
+    lv_obj_set_style_bg_color(ded, pono::color_surface_raised, 0);
+    lv_obj_set_style_bg_opa(ded, LV_OPA_80, 0);
+    lv_obj_set_style_pad_all(ded, 8, 0);
+    lv_obj_set_style_radius(ded, 8, 0);
+    lv_label_set_text(ded, "Dedicated to Ellio and Io\nmy little cousins");
+    lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -10);
   } else {
     pono::build_home(lv_scr_act(), pono::demo_home_model());
   }

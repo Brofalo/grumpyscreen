@@ -104,9 +104,27 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   lv_anim_set_path_cb(&la, lv_anim_path_ease_in_out);
   lv_anim_start(&la);
 
+  // Dedication: a small warm line on its own pill, pinned to the bottom so it
+  // reads over the tide and stays for the whole boot wait. For Ellio and Io,
+  // Jack's little cousins.
+  lv_obj_t *dedication = lv_label_create(cont);
+  lv_obj_set_width(dedication, LV_SIZE_CONTENT);
+  lv_obj_set_height(dedication, LV_SIZE_CONTENT);
+  lv_obj_set_style_text_align(dedication, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_color(dedication, pono::color_accent_primary, 0);
+  lv_obj_set_style_text_font(dedication, pono::font_caption, 0);
+  lv_obj_set_style_bg_color(dedication, pono::color_surface_raised, 0);
+  lv_obj_set_style_bg_opa(dedication, LV_OPA_80, 0);
+  lv_obj_set_style_pad_all(dedication, pono::space_sm, 0);
+  lv_obj_set_style_radius(dedication, pono::radius_md, 0);
+  lv_label_set_text(dedication, "Dedicated to Ellio and Io\nmy little cousins");
+  lv_obj_align(dedication, LV_ALIGN_BOTTOM_MID, 0, -10);
+
   lv_obj_move_foreground(joke_label);
   lv_obj_move_foreground(label);
+  lv_obj_move_foreground(dedication);
   pono::panel_open(joke_label);  // silky fade-in
+  pono::panel_open(dedication);
 }
 
 InitPanel::~InitPanel() {
