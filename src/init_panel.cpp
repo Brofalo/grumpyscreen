@@ -117,7 +117,7 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   lv_obj_set_style_bg_opa(dedication, LV_OPA_80, 0);
   lv_obj_set_style_pad_all(dedication, pono::space_sm, 0);
   lv_obj_set_style_radius(dedication, pono::radius_md, 0);
-  lv_label_set_text(dedication, "Dedicated to Ellio and Io\nmy little cousins");
+  lv_label_set_text(dedication, "Dedicated to Elio and Io\nmy little cousins");
   lv_obj_align(dedication, LV_ALIGN_BOTTOM_MID, 0, -10);
 
   lv_obj_move_foreground(joke_label);

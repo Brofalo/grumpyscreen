@@ -161,7 +161,7 @@ int main(int argc, char **argv) {
     lv_obj_set_style_bg_opa(ded, LV_OPA_80, 0);
     lv_obj_set_style_pad_all(ded, 8, 0);
     lv_obj_set_style_radius(ded, 8, 0);
-    lv_label_set_text(ded, "Dedicated to Ellio and Io\nmy little cousins");
+    lv_label_set_text(ded, "Dedicated to Elio and Io\nmy little cousins");
     lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -10);
   } else {
     pono::build_home(lv_scr_act(), pono::demo_home_model());
