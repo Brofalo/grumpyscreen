@@ -324,4 +324,117 @@ void build_tune(lv_obj_t *parent) {
   lv_obj_set_style_shadow_opa(sl, LV_OPA_50, LV_PART_KNOB);
 }
 
+// ---- Expert Tune screen ----------------------------------------------------
+// One full-width settings row; returns the card so the caller drops the editor.
+static lv_obj_t *setting_row(lv_obj_t *list, const char *name) {
+  lv_obj_t *r = lv_obj_create(list);
+  lv_obj_remove_style_all(r);
+  lv_obj_set_size(r, lv_pct(100), 36);
+  vgrad(r, color_surface_elevated, color_surface_raised);
+  lv_obj_set_style_radius(r, 8, 0);
+  hairline(r, color_text_tertiary, opa_border_subtle);
+  lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *n = lbl(r, name, font_caption, color_text_primary, 0, 0);
+  lv_obj_align(n, LV_ALIGN_LEFT_MID, 12, 0);
+  return r;
+}
+
+// Tappable value field on the right of a row (tap -> editor/keypad in the app).
+static void value_pill(lv_obj_t *row, const char *val) {
+  lv_obj_t *p = lv_obj_create(row);
+  lv_obj_remove_style_all(p);
+  lv_obj_set_size(p, 80, 26);
+  lv_obj_align(p, LV_ALIGN_RIGHT_MID, -8, 0);
+  lv_obj_set_style_bg_color(p, color_surface_base, 0);
+  lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(p, 6, 0);
+  hairline(p, color_accent_primary, opa_border_medium);
+  lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *v = lbl(p, val, font_caption, color_accent_primary, 0, 0);
+  lv_obj_center(v);
+}
+
+void build_settings(lv_obj_t *parent) {
+  const lv_font_t *ms = &lv_font_montserrat_14;
+
+  lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_pad_all(parent, 0, 0);
+  lv_obj_set_style_bg_color(parent, lv_color_hex(0x0c1422), 0);
+  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x05090f), 0);
+  lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+
+  lv_obj_t *rail = card(parent, 0, 0, 52, 272, color_surface_raised, 0);
+  vgrad(rail, color_surface_elevated, color_surface_raised);
+  lv_obj_t *back = card(parent, 8, 12, 36, 36, color_surface_elevated, 10);
+  hairline(back, color_text_tertiary, opa_border_medium);
+  lv_obj_t *bi = lbl(parent, LV_SYMBOL_LEFT, ms, color_accent_primary, 0, 0);
+  lv_obj_align_to(bi, back, LV_ALIGN_CENTER, 0, 0);
+
+  lbl(parent, "Expert Tune", font_h1, color_text_primary, 64, 6);
+
+  // category chips (active = Quality)
+  const char *cats[5] = {"Quality", "Speed", "Walls", "Infill", "Filament"};
+  for (int i = 0; i < 5; i++) {
+    int x = 64 + i * 79;
+    bool active = (i == 0);
+    lv_obj_t *c = card(parent, x, 44, 74, 26, active ? color_accent_primary : color_surface_elevated, 13);
+    if (!active) { vgrad(c, color_surface_elevated, color_surface_raised); hairline(c, color_text_tertiary, opa_border_subtle); }
+    lv_obj_t *cl = lbl(parent, cats[i], font_micro, active ? color_surface_base : color_text_secondary, 0, 0);
+    lv_obj_align_to(cl, c, LV_ALIGN_CENTER, 0, 0);
+  }
+
+  // scrollable parameter list (the full-tuneability surface)
+  lv_obj_t *list = lv_obj_create(parent);
+  lv_obj_remove_style_all(list);
+  lv_obj_set_pos(list, 64, 78);
+  lv_obj_set_size(list, 400, 188);
+  lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(list, 7, 0);
+  lv_obj_set_scroll_dir(list, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
+  lv_obj_set_style_bg_color(list, color_accent_primary, LV_PART_SCROLLBAR);
+  lv_obj_set_style_bg_opa(list, LV_OPA_40, LV_PART_SCROLLBAR);
+  lv_obj_set_style_width(list, 3, LV_PART_SCROLLBAR);
+  lv_obj_set_style_radius(list, 2, LV_PART_SCROLLBAR);
+
+  value_pill(setting_row(list, "Layer height"), "0.16 mm");
+  value_pill(setting_row(list, "Wall loops"), "3");
+
+  // infill: inline slider + live value
+  {
+    lv_obj_t *r = setting_row(list, "Infill density");
+    lv_obj_t *iv = lbl(r, "15%", font_num_small, color_accent_primary, 0, 0);
+    lv_obj_align(iv, LV_ALIGN_RIGHT_MID, -10, 0);
+    lv_obj_t *sl = lv_slider_create(r);
+    lv_obj_align(sl, LV_ALIGN_RIGHT_MID, -56, 0);
+    lv_obj_set_size(sl, 96, 8);
+    lv_slider_set_range(sl, 0, 100);
+    lv_slider_set_value(sl, 15, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(sl, color_surface_base, LV_PART_MAIN);
+    lv_obj_set_style_radius(sl, 4, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(sl, 4, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
+  }
+
+  value_pill(setting_row(list, "Top/bottom layers"), "4");
+
+  // ironing: a real toggle
+  {
+    lv_obj_t *r = setting_row(list, "Ironing");
+    lv_obj_t *sw = lv_switch_create(r);
+    lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -10, 0);
+    lv_obj_set_size(sw, 46, 24);
+    lv_obj_add_state(sw, LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(sw, color_surface_base, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(sw, color_accent_primary, LV_PART_INDICATOR | LV_STATE_CHECKED);
+    lv_obj_set_style_bg_color(sw, color_text_primary, LV_PART_KNOB);
+  }
+
+  value_pill(setting_row(list, "Seam position"), "Aligned");
+  value_pill(setting_row(list, "Flow ratio"), "0.97");
+  value_pill(setting_row(list, "Pressure advance"), "0.040");
+}
+
 } // namespace pono

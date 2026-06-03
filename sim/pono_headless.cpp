@@ -165,6 +165,8 @@ int main(int argc, char **argv) {
     lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -10);
   } else if (screen == "tune") {
     pono::build_tune(lv_scr_act());
+  } else if (screen == "settings" || screen == "expert") {
+    pono::build_settings(lv_scr_act());
   } else {
     pono::build_home(lv_scr_act(), pono::demo_home_model());
   }

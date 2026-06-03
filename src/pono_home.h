@@ -43,4 +43,10 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m);
 // + theme; the real app wires taps + the slider to Moonraker.
 void build_tune(lv_obj_t *parent);
 
+// Build the Expert Tune screen into `parent`: category chips + a scrollable
+// list of tunable parameters with real editors (slider / switch / value
+// field). The full-tuneability surface; the real app populates it from the
+// shared settings schema and writes changes back.
+void build_settings(lv_obj_t *parent);
+
 } // namespace pono
