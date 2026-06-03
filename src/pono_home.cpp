@@ -248,4 +248,80 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m) {
   return arc;
 }
 
+// ---- Tune screen -----------------------------------------------------------
+// Flexibility lives one tap in: the two tiers up top, granular calibrations in
+// the middle, and a live speed slider at the base (the smooth 60fps moment -
+// dragging repaints only the slider, so it stays buttery on this SoC).
+void build_tune(lv_obj_t *parent) {
+  const lv_font_t *ms = &lv_font_montserrat_14;
+
+  lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_pad_all(parent, 0, 0);
+  lv_obj_set_style_bg_color(parent, lv_color_hex(0x0c1422), 0);
+  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x05090f), 0);
+  lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+
+  // left rail with a back chip
+  lv_obj_t *rail = card(parent, 0, 0, 52, 272, color_surface_raised, 0);
+  vgrad(rail, color_surface_elevated, color_surface_raised);
+  lv_obj_t *back = card(parent, 8, 12, 36, 36, color_surface_elevated, 10);
+  hairline(back, color_text_tertiary, opa_border_medium);
+  lv_obj_t *bi = lbl(parent, LV_SYMBOL_LEFT, ms, color_accent_primary, 0, 0);
+  lv_obj_align_to(bi, back, LV_ALIGN_CENTER, 0, 0);
+
+  lbl(parent, "Tune", font_h1, color_text_primary, 64, 6);
+
+  // ---- two tiers ----
+  lv_obj_t *st = card(parent, 64, 44, 192, 46, color_surface_elevated, 12);
+  vgrad(st, color_surface_elevated, color_surface_raised);
+  hairline(st, color_text_tertiary, opa_border_medium);
+  lbl(parent, "Standard", font_body, color_text_primary, 78, 52);
+  lbl(parent, "full auto-calibrate", font_micro, color_text_secondary, 78, 71);
+
+  lv_obj_t *om = card(parent, 266, 44, 192, 46, color_surface_base, 12);
+  vgrad(om, color_surface_elevated, color_surface_base);
+  lv_obj_set_style_border_color(om, color_accent_primary, 0);
+  lv_obj_set_style_border_width(om, 2, 0);
+  lv_obj_set_style_border_opa(om, LV_OPA_COVER, 0);
+  soft_shadow(om, color_accent_primary, 10, LV_OPA_40);
+  lbl(parent, "OMEGA  1000%", font_body, color_accent_primary, 280, 52);
+  lbl(parent, "enhanced suite", font_micro, color_text_secondary, 280, 71);
+
+  // ---- individual calibrations (the granular knobs) ----
+  lbl(parent, "INDIVIDUAL", font_micro, color_text_secondary, 64, 98);
+  const char *cals[5] = {"Bed Mesh", "Pressure Adv", "Flow", "Input Shaper", "Z-Offset"};
+  for (int i = 0; i < 5; i++) {
+    int col = i % 3, row = i / 3;
+    int x = 64 + col * 134;
+    int y = 114 + row * 46;
+    lv_obj_t *t = card(parent, x, y, 126, 40, color_surface_elevated, 10);
+    vgrad(t, color_surface_elevated, color_surface_raised);
+    hairline(t, color_text_tertiary, opa_border_subtle);
+    lv_obj_t *nl = lbl(parent, cals[i], font_caption, color_text_primary, 0, 0);
+    lv_obj_align_to(nl, t, LV_ALIGN_LEFT_MID, 10, 0);
+    lv_obj_t *ch = lbl(parent, LV_SYMBOL_RIGHT, ms, color_text_tertiary, 0, 0);
+    lv_obj_align_to(ch, t, LV_ALIGN_RIGHT_MID, -8, 0);
+  }
+
+  // ---- live speed slider (the "smooth where it matters" moment) ----
+  lbl(parent, "SPEED", font_micro, color_text_secondary, 64, 212);
+  lv_obj_t *spv = lbl(parent, "100%", font_num_small, color_accent_primary, 0, 0);
+  lv_obj_set_pos(spv, 424, 210);
+  lv_obj_t *sl = lv_slider_create(parent);
+  lv_obj_set_pos(sl, 64, 232);
+  lv_obj_set_size(sl, 394, 10);
+  lv_slider_set_range(sl, 50, 200);
+  lv_slider_set_value(sl, 100, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(sl, color_surface_elevated, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(sl, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_radius(sl, 5, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(sl, 5, LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
+  lv_obj_set_style_shadow_color(sl, color_accent_primary, LV_PART_KNOB);
+  lv_obj_set_style_shadow_width(sl, 10, LV_PART_KNOB);
+  lv_obj_set_style_shadow_opa(sl, LV_OPA_50, LV_PART_KNOB);
+}
+
 } // namespace pono

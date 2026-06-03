@@ -37,4 +37,10 @@ HomeModel demo_home_model();
 // arc object so callers that animate progress live can keep a handle.
 lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m);
 
+// Build the Tune screen into `parent`: the two calibrate tiers (Standard +
+// the enhanced OMEGA), a grid of individual calibrations (bed mesh, pressure
+// advance, flow, input shaper, z-offset), and a live speed slider. Pure LVGL
+// + theme; the real app wires taps + the slider to Moonraker.
+void build_tune(lv_obj_t *parent);
+
 } // namespace pono

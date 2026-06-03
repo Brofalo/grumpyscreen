@@ -84,7 +84,7 @@ extern uint32_t custom_tick_get(void);
  *====================*/
 
 /*Default display refresh period. LVG will redraw changed areas with this period time*/
-#define LV_DISP_DEF_REFR_PERIOD 30      /*[ms] ~33 fps. This 2-core ARMv7 sw-renders 32bpp with no GPU; a 60fps target (16ms) just drops frames during animation and reads as jank. Steady 33fps is smoother.*/
+#define LV_DISP_DEF_REFR_PERIOD 16      /*[ms] 60fps cap. LVGL only repaints dirty regions, so small interactions (slider drag, arc fill, press feedback) get smooth 60fps cheaply; only FULL-SCREEN animation is costly on this GPU-less SoC. Rule: 60fps on, keep motion localized, keep any full-screen transition brief. That (not the refresh rate) was the old jank. "Smooth where it matters."*/
 
 /*Input device read period in milliseconds*/
 #define LV_INDEV_DEF_READ_PERIOD 10     /*[ms] 100 Hz touch sampling (was 30)*/
