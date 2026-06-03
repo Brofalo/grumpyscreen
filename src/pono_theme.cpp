@@ -301,6 +301,13 @@ void ocean_tide_stop(lv_obj_t *parent) {
     }
 }
 
+void ocean_tide_teardown() {
+    // The canvas is a child of the boot panel's container; deleting that
+    // container already freed it. Just drop our cached pointer so a later
+    // ocean_tide_init() re-bakes from scratch instead of touching freed memory.
+    s_ocean_canvas = nullptr;
+}
+
 // ---- Panel open animation ----
 
 namespace {

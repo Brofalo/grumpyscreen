@@ -94,16 +94,7 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   lv_obj_set_style_bg_color(bar_seg, pono::color_accent_primary, 0);
   lv_obj_set_style_bg_opa(bar_seg, LV_OPA_COVER, 0);
   lv_obj_set_style_radius(bar_seg, 3, 0);
-  lv_anim_t la;
-  lv_anim_init(&la);
-  lv_anim_set_var(&la, bar_seg);
-  lv_anim_set_exec_cb(&la, [](void *o, int32_t v) { lv_obj_set_x((lv_obj_t *)o, v); });
-  lv_anim_set_values(&la, 0, 220 - 64);
-  lv_anim_set_time(&la, 850);
-  lv_anim_set_playback_time(&la, 850);
-  lv_anim_set_repeat_count(&la, LV_ANIM_REPEAT_INFINITE);
-  lv_anim_set_path_cb(&la, lv_anim_path_ease_in_out);
-  lv_anim_start(&la);
+  arm_bar_sweep();  // start the sweep (also re-armed on reconnect)
 
   // Dedication: a small warm line on its own pill, pinned to the bottom so it
   // reads over the tide and stays for the whole boot wait. For Ellio and Io,
@@ -133,6 +124,24 @@ InitPanel::~InitPanel() {
     lv_obj_del(cont);
     cont = NULL;
   }
+  pono::ocean_tide_teardown();  // cont's delete freed the canvas; drop the cached pointer
+}
+
+// (Re)start the loading-bar sweep on bar_seg. Called from the constructor and
+// again on reconnect (connected() deletes the anim, disconnected() re-arms it).
+void InitPanel::arm_bar_sweep() {
+  if (bar_seg == NULL) return;
+  lv_anim_del(bar_seg, NULL);  // idempotent: clear any existing sweep first
+  lv_anim_t la;
+  lv_anim_init(&la);
+  lv_anim_set_var(&la, bar_seg);
+  lv_anim_set_exec_cb(&la, [](void *o, int32_t v) { lv_obj_set_x((lv_obj_t *)o, v); });
+  lv_anim_set_values(&la, 0, 220 - 64);
+  lv_anim_set_time(&la, 850);
+  lv_anim_set_playback_time(&la, 850);
+  lv_anim_set_repeat_count(&la, LV_ANIM_REPEAT_INFINITE);
+  lv_anim_set_path_cb(&la, lv_anim_path_ease_in_out);
+  lv_anim_start(&la);
 }
 
 void InitPanel::connected(KWebSocketClient &ws) {
@@ -209,6 +218,8 @@ void InitPanel::disconnected(KWebSocketClient &ws) {
   std::lock_guard<std::mutex> lock(lv_lock);
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(cont);
+  pono::ocean_tide_init(cont);  // re-arm the ocean scroll (idempotent: skips the re-bake, restarts the scroll)
+  arm_bar_sweep();              // re-arm the loading-bar sweep (connect() stopped both)
 }
 
 void InitPanel::set_message(const char *message) {

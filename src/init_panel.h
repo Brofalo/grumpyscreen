@@ -18,6 +18,7 @@ class InitPanel {
   void set_message(const char *message);
 
  private:
+  void arm_bar_sweep();  // (re)start the loading-bar sweep anim on bar_seg (ctor + reconnect)
   lv_obj_t *cont;
   lv_obj_t *label;       // connection status line (set_message updates this)
   lv_obj_t *joke_label;  // persistent small Hawaii boot joke
