@@ -77,6 +77,33 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
     lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
   }
 
+  // Animated loading sweep bar under the status: a cyan segment glides back
+  // and forth in a slim track, a clear "still working" cue over the tide.
+  lv_obj_t *bar_track = lv_obj_create(cont);
+  lv_obj_remove_style_all(bar_track);
+  lv_obj_set_size(bar_track, 220, 6);
+  lv_obj_align_to(bar_track, label, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
+  lv_obj_set_style_bg_color(bar_track, pono::color_surface_raised, 0);
+  lv_obj_set_style_bg_opa(bar_track, LV_OPA_70, 0);
+  lv_obj_set_style_radius(bar_track, 3, 0);
+  lv_obj_clear_flag(bar_track, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *bar_seg = lv_obj_create(bar_track);
+  lv_obj_remove_style_all(bar_seg);
+  lv_obj_set_size(bar_seg, 64, 6);
+  lv_obj_set_style_bg_color(bar_seg, pono::color_accent_primary, 0);
+  lv_obj_set_style_bg_opa(bar_seg, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(bar_seg, 3, 0);
+  lv_anim_t la;
+  lv_anim_init(&la);
+  lv_anim_set_var(&la, bar_seg);
+  lv_anim_set_exec_cb(&la, [](void *o, int32_t v) { lv_obj_set_x((lv_obj_t *)o, v); });
+  lv_anim_set_values(&la, 0, 220 - 64);
+  lv_anim_set_time(&la, 850);
+  lv_anim_set_playback_time(&la, 850);
+  lv_anim_set_repeat_count(&la, LV_ANIM_REPEAT_INFINITE);
+  lv_anim_set_path_cb(&la, lv_anim_path_ease_in_out);
+  lv_anim_start(&la);
+
   lv_obj_move_foreground(joke_label);
   lv_obj_move_foreground(label);
   pono::panel_open(joke_label);  // silky fade-in

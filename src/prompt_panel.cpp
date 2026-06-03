@@ -37,11 +37,11 @@ PromptPanel::PromptPanel(KWebSocketClient &websocket_client, std::mutex &lock, l
   lv_obj_set_style_radius(prompt_cont, 5, LV_PART_MAIN);
   lv_obj_set_style_border_width(prompt_cont, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_border_color(prompt_cont, pono::color_text_tertiary, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_max_height(prompt_cont, lv_pct(100), 0);
-  lv_obj_set_style_max_width(prompt_cont, lv_pct(100), 0);
-  lv_obj_set_style_min_height(prompt_cont, lv_pct(100), 0);
-  lv_obj_set_style_min_width(prompt_cont, lv_pct(100), 0);
-  lv_obj_set_size(prompt_cont, lv_pct(60), lv_pct(50));
+  lv_obj_set_style_max_height(prompt_cont, lv_pct(92), 0);
+  lv_obj_set_style_max_width(prompt_cont, lv_pct(94), 0);
+  lv_obj_set_style_min_height(prompt_cont, lv_pct(38), 0);
+  lv_obj_set_style_min_width(prompt_cont, lv_pct(60), 0);
+  lv_obj_set_size(prompt_cont, lv_pct(90), lv_pct(62));
   lv_obj_set_grid_dsc_array(prompt_cont, grid_main_col_dsc_detail, grid_main_row_dsc_detail);
 
   lv_obj_set_style_pad_all(flex, 0, 0);
@@ -225,7 +225,7 @@ void PromptPanel::handle_macro_response(json &j) {
         lv_obj_clean(flex);
         // remove button commands
 
-        lv_obj_set_size(prompt_cont, lv_pct(60), lv_pct(50));
+        lv_obj_set_size(prompt_cont, lv_pct(90), lv_pct(62));
         lv_obj_set_height(flex, lv_pct(70));
 
         // set header here
@@ -362,7 +362,7 @@ void PromptPanel::handle_macro_response(json &j) {
         // remove buttons
         lv_obj_clean(footer_cont);
         lv_obj_clean(flex);
-        lv_obj_set_size(prompt_cont, lv_pct(60), lv_pct(50));
+        lv_obj_set_size(prompt_cont, lv_pct(90), lv_pct(62));
         lv_obj_set_height(flex, LV_SIZE_CONTENT);
       } else {
         LOG_DEBUG("action {} --- not supported", command);

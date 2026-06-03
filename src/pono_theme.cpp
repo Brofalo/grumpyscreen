@@ -264,12 +264,12 @@ void ocean_tide_init(lv_obj_t *parent) {
     // out-of-phase speeds read as a living ocean that flexes the 60fps refresh,
     // while every layer is just a cheap translate of a rounded bar (no per-pixel
     // work). Low opacities keep text on top readable.
-    make_swell(parent, LV_COLOR_MAKE(0x05, 0x2c, 0x34), LV_OPA_50, 118, 42, 13000, 28); // deep shelf
-    make_swell(parent, LV_COLOR_MAKE(0x0a, 0x6e, 0x7a), LV_OPA_40, 150, 30,  9000, 44); // teal swell
-    make_swell(parent, color_accent_primary,            LV_OPA_20, 178, 24,  6500, 64); // cyan crest
-    make_swell(parent, LV_COLOR_MAKE(0x9b, 0xf6, 0xff), LV_OPA_30, 196, 10,  4800, 82); // foam glint
-    make_swell(parent, color_accent_secondary,          LV_OPA_20, 212, 16, 11000, 34); // green wash
-    make_swell(parent, LV_COLOR_MAKE(0x0a, 0x6e, 0x7a), LV_OPA_30, 236, 26, 15000, 26); // slow undertow
+    // Three slow swells only. Six full-width swells animating at 60 fps
+    // overdrew the panel on the Centauri and the tide tore/glitched; three
+    // slow low-opacity bands read as a calm ocean and stay smooth.
+    make_swell(parent, LV_COLOR_MAKE(0x0a, 0x6e, 0x7a), LV_OPA_40, 150, 32, 11000, 34); // teal swell
+    make_swell(parent, color_accent_primary,            LV_OPA_20, 186, 22,  8500, 48); // cyan crest
+    make_swell(parent, color_accent_secondary,          LV_OPA_20, 220, 18, 14000, 28); // green wash
 }
 
 void ocean_tide_stop(lv_obj_t *parent) {

@@ -134,6 +134,21 @@ int main(int argc, char **argv) {
     lv_obj_set_style_text_font(st, pono::font_micro, 0);
     lv_label_set_text(st, "Waiting for Klipper to start...");
     lv_obj_align_to(st, joke, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+
+    lv_obj_t *bt = lv_obj_create(scr);
+    lv_obj_remove_style_all(bt);
+    lv_obj_set_size(bt, 220, 6);
+    lv_obj_align_to(bt, st, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
+    lv_obj_set_style_bg_color(bt, pono::color_surface_raised, 0);
+    lv_obj_set_style_bg_opa(bt, LV_OPA_70, 0);
+    lv_obj_set_style_radius(bt, 3, 0);
+    lv_obj_t *sg = lv_obj_create(bt);
+    lv_obj_remove_style_all(sg);
+    lv_obj_set_size(sg, 64, 6);
+    lv_obj_set_x(sg, 96);
+    lv_obj_set_style_bg_color(sg, pono::color_accent_primary, 0);
+    lv_obj_set_style_bg_opa(sg, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(sg, 3, 0);
   } else {
     pono::build_home(lv_scr_act(), pono::demo_home_model());
   }
