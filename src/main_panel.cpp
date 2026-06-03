@@ -77,6 +77,10 @@ MainPanel::~MainPanel() {
     lv_obj_del(tabview);
     tabview = NULL;
   }
+  if (home_scr != nullptr) {       // Pono: lv_obj_del recurses children + deletes their anims
+    lv_obj_del(home_scr);
+    home_scr = nullptr;
+  }
 
   sensors.clear();
 }
@@ -140,15 +144,22 @@ void MainPanel::consume(json &j) {
   if (home_h.arc) {
     auto prog = j["/params/0/virtual_sdcard/progress"_json_pointer];
     if (!prog.is_null()) {
-      int pct = (int)(prog.template get<double>() * 100.0 + 0.5);
+      home_progress_ = prog.template get<double>();   // cache across deltas (ETA needs it)
+      int pct = (int)(home_progress_ * 100.0 + 0.5);
       lv_arc_set_value(home_h.arc, pct);
-      if (home_h.pct) lv_label_set_text(home_h.pct, fmt::format("{}%", pct).c_str());
+      if (home_h.pct) {
+        lv_label_set_text(home_h.pct, fmt::format("{}%", pct).c_str());
+        lv_obj_align_to(home_h.pct, home_h.arc, LV_ALIGN_CENTER, 0, -7);  // re-center: text width changes
+      }
     }
+    auto pd = j["/params/0/print_stats/print_duration"_json_pointer];
+    if (!pd.is_null()) home_duration_ = pd.template get<double>();   // cache across deltas (ETA needs it)
     auto cl = j["/params/0/print_stats/info/current_layer"_json_pointer];
     if (!cl.is_null() && home_h.layer) {
       auto tl = j["/params/0/print_stats/info/total_layer"_json_pointer];
       lv_label_set_text(home_h.layer, fmt::format("layer {} / {}",
         cl.template get<int>(), tl.is_null() ? 0 : tl.template get<int>()).c_str());
+      lv_obj_align_to(home_h.layer, home_h.arc, LV_ALIGN_CENTER, 0, 18);  // re-center
     }
     auto fn = j["/params/0/print_stats/filename"_json_pointer];
     if (!fn.is_null() && home_h.job) {
@@ -167,10 +178,29 @@ void MainPanel::consume(json &j) {
       lv_label_set_text(home_h.bed, fmt::format("{}", v).c_str());
       lv_obj_set_style_text_color(home_h.bed, v >= 100 ? pono::color_state_error : (v >= 40 ? pono::color_state_warning : pono::color_text_primary), 0);
     }
-    if (!pstat_state.is_null() && home_h.state_pill) {
+    if (!pstat_state.is_null()) {
       bool printing = pstat_state.template get<std::string>() == "printing";
-      if (printing) lv_obj_clear_flag(home_h.state_pill, LV_OBJ_FLAG_HIDDEN);
-      else lv_obj_add_flag(home_h.state_pill, LV_OBJ_FLAG_HIDDEN);
+      if (home_h.state_pill) {
+        if (printing) lv_obj_clear_flag(home_h.state_pill, LV_OBJ_FLAG_HIDDEN);
+        else lv_obj_add_flag(home_h.state_pill, LV_OBJ_FLAG_HIDDEN);
+      }
+      if (printing != home_pulsing_) {                 // pulse only on the transition (no per-update restart)
+        pono::set_state_pulse(home_h.state_dot, printing);
+        home_pulsing_ = printing;
+      }
+      if (!printing && home_printing_ && home_h.eta)
+        lv_label_set_text(home_h.eta, "idle");          // settle ETA once on print -> idle
+      home_printing_ = printing;
+    }
+    // Live ETA: total = duration / progress; remaining = total - duration. Runs
+    // every update while printing (state arrives only on change, progress/duration
+    // are cached above), so the pill counts down smoothly.
+    if (home_h.eta && home_printing_ && home_progress_ > 0.01 && home_duration_ > 1.0) {
+      double remain = home_duration_ * (1.0 - home_progress_) / home_progress_;
+      if (remain < 0.0) remain = 0.0;
+      int mins = (int)(remain / 60.0 + 0.5);
+      if (mins >= 60) lv_label_set_text(home_h.eta, fmt::format("{}:{:02d} left", mins / 60, mins % 60).c_str());
+      else            lv_label_set_text(home_h.eta, fmt::format("{} min left", mins).c_str());
     }
   }
 }
@@ -230,7 +260,7 @@ void MainPanel::create_panel() {
   hm.nozzle = 0; hm.nozzle_set = 0; hm.bed = 0; hm.bed_set = 0;
   pono::build_home(home_scr, hm, &home_h);
   lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.qa[0], home_h.qa[1],
-                       home_h.qa[2], home_h.tile_nozzle, home_h.tile_bed,
+                       home_h.qa[2], home_h.qa[3], home_h.tile_nozzle, home_h.tile_bed,
                        home_h.tile_tune, home_h.tile_omega };
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_home_tap, LV_EVENT_CLICKED, this);
   lv_obj_add_flag(home_scr, LV_OBJ_FLAG_HIDDEN);  // revealed on connect
@@ -249,9 +279,11 @@ void MainPanel::_home_tap(lv_event_t *e) {
   auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
   lv_obj_t *t = lv_event_get_target(e);
   pono::HomeHandles &h = s->home_h;
-  if (t == h.btn_pausestop || t == h.qa[2]) s->print_panel.foreground();           // Pause/Stop, Files
+  if (t == h.btn_pausestop) s->print_status_panel.foreground();                    // Pause/Stop -> live print controls (pause/resume/cancel)
+  else if (t == h.qa[2]) s->print_panel.foreground();                              // Files
   else if (t == h.qa[0]) s->homing_panel.foreground();                             // Move
   else if (t == h.qa[1] || t == h.tile_nozzle || t == h.tile_bed) s->extruder_panel.foreground();  // Filament, temps
+  else if (t == h.qa[3]) s->fan_panel.foreground();                                // Fans
   else if (t == h.tile_tune)  s->ws.gcode_script("PONO_CAL_STANDARD");  // standard on-device calibrate
   else if (t == h.tile_omega) s->ws.gcode_script("PONO_CAL_OMEGA");     // enhanced 1000% suite (queues + prompts)
 }

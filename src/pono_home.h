@@ -45,19 +45,25 @@ struct HomeHandles {
   lv_obj_t *nozzle = nullptr;      // nozzle current-temp number
   lv_obj_t *bed = nullptr;         // bed current-temp number
   lv_obj_t *state_pill = nullptr;  // PRINTING pill (hide when idle)
+  lv_obj_t *state_dot = nullptr;   // pulsing beat inside the pill (anim gated to printing)
   // tappable launchers (app attaches event cbs)
   lv_obj_t *tile_tune = nullptr;
   lv_obj_t *tile_omega = nullptr;
   lv_obj_t *tile_nozzle = nullptr;
   lv_obj_t *tile_bed = nullptr;
   lv_obj_t *btn_pausestop = nullptr;
-  lv_obj_t *qa[4] = {nullptr, nullptr, nullptr, nullptr}; // Move/Filament/Files/Camera
+  lv_obj_t *qa[4] = {nullptr, nullptr, nullptr, nullptr}; // Move/Filament/Files/Fans
 };
 
 // Build the full 480x272 home cockpit into `parent` (a screen-sized object).
 // Returns the arc; if `out` is non-null, fills it with live handles + tap
 // targets so the app can update values and wire callbacks. Sim passes nullptr.
 lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out = nullptr);
+
+// Start/stop the small "alive" pulse on the PRINTING pill's dot. Call only on
+// the idle<->printing transition; a per-frame restart would stutter the beat.
+// Keeps the always-on idle dashboard at zero animation cost.
+void set_state_pulse(lv_obj_t *dot, bool on);
 
 // Build the Tune screen into `parent`: the two calibrate tiers (Standard +
 // the enhanced OMEGA), a grid of individual calibrations (bed mesh, pressure

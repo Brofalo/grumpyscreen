@@ -82,6 +82,20 @@ static void glow_pulse(lv_obj_t *o, lv_color_t color, int lo, int hi, uint32_t p
   lv_anim_start(&a);
 }
 
+// Public: start/stop the PRINTING-pill beat (declared in pono_home.h). Call only
+// on the idle<->printing transition - it deletes any running pulse first, so a
+// per-frame call would reset and stutter the animation. Keeps the always-on
+// idle dashboard at zero animation cost (no pulse runs while not printing).
+void set_state_pulse(lv_obj_t *dot, bool on) {
+  if (!dot) return;
+  lv_anim_del(dot, nullptr);
+  if (on) {
+    glow_pulse(dot, color_accent_secondary, 3, 12, 850);
+  } else {
+    lv_obj_set_style_shadow_width(dot, 3, 0);  // settle to a calm static dot
+  }
+}
+
 // ---- model ----------------------------------------------------------------
 
 HomeModel demo_home_model() {
@@ -137,9 +151,12 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
     soft_shadow(dot, color_accent_secondary, 8, LV_OPA_COVER);
     lv_obj_t *prl = lbl(pill, "PRINTING", font_micro, color_accent_secondary, 0, 0);
     lv_obj_align(prl, LV_ALIGN_LEFT_MID, 22, 0);
-    glow_pulse(dot, color_accent_secondary, 3, 12, 850);  // tiny: the "alive" beat
-    if (!m.printing) lv_obj_add_flag(pill, LV_OBJ_FLAG_HIDDEN);
-    if (out) out->state_pill = pill;
+    if (m.printing) {
+      glow_pulse(dot, color_accent_secondary, 3, 12, 850);  // tiny: the "alive" beat (printing only)
+    } else {
+      lv_obj_add_flag(pill, LV_OBJ_FLAG_HIDDEN);  // idle: hide pill AND start no anim -> zero idle cost
+    }
+    if (out) { out->state_pill = pill; out->state_dot = dot; }
   }
 
   // ---- job hero: progress ring with a soft cyan halo ----
@@ -190,7 +207,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   vgrad(nzc, color_surface_elevated, color_surface_raised);
   hairline(nzc, color_text_tertiary, opa_border_subtle);
   lbl(parent, "NOZZLE", font_micro, color_text_secondary, 370, 54);
-  lv_color_t nz_col = (m.nozzle >= 45) ? color_state_warning : color_text_primary;
+  lv_color_t nz_col = (m.nozzle >= 240) ? color_state_error : (m.nozzle >= 50 ? color_state_warning : color_text_primary);
   char nzt[8]; snprintf(nzt, sizeof nzt, "%d", m.nozzle);
   lv_obj_t *nz_num = lbl(parent, nzt, font_num_medium, nz_col, 370, 68);
   char nzs[10]; snprintf(nzs, sizeof nzs, "/%d", m.nozzle_set);
@@ -201,7 +218,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   vgrad(bdc, color_surface_elevated, color_surface_raised);
   hairline(bdc, color_text_tertiary, opa_border_subtle);
   lbl(parent, "BED", font_micro, color_text_secondary, 370, 108);
-  lv_color_t bd_col = (m.bed >= 40) ? color_state_warning : color_text_primary;
+  lv_color_t bd_col = (m.bed >= 100) ? color_state_error : (m.bed >= 40 ? color_state_warning : color_text_primary);
   char bdt[8]; snprintf(bdt, sizeof bdt, "%d", m.bed);
   lv_obj_t *bd_num = lbl(parent, bdt, font_num_medium, bd_col, 370, 122);
   char bds[10]; snprintf(bds, sizeof bds, "/%d", m.bed_set);
@@ -236,7 +253,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
     {LV_SYMBOL_GPS,       "Move"},
     {LV_SYMBOL_DOWNLOAD,  "Filament"},
     {LV_SYMBOL_DIRECTORY, "Files"},
-    {LV_SYMBOL_IMAGE,     "Camera"},
+    {LV_SYMBOL_REFRESH,   "Fans"},
   };
   for (int i = 0; i < 4; i++) {
     int x = 72 + i * 100;

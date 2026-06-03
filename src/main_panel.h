@@ -107,6 +107,10 @@ class MainPanel : public NotifyConsumer {
   lv_obj_t *main_cont;
   lv_obj_t *home_scr = nullptr;   // Pono native cockpit, full-screen over the tabview
   pono::HomeHandles home_h;       // live handles into the cockpit
+  bool home_printing_ = false;    // last-known printing state (ETA + pulse gating)
+  bool home_pulsing_ = false;     // is the state-dot pulse currently running
+  double home_progress_ = 0.0;    // last-seen virtual_sdcard progress (survives Moonraker deltas)
+  double home_duration_ = 0.0;    // last-seen print_stats.print_duration (survives Moonraker deltas)
   PrintStatusPanel print_status_panel;
   PrintPanel print_panel;
   Numpad numpad;
