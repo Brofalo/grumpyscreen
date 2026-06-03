@@ -7,10 +7,26 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <fstream>
+#include <string>
+
+namespace {
+// The boot joke is written to /run/pono-print-joke at boot by the
+// pono-print-boot-joke init script. Read the single line; empty if absent
+// (e.g. on a dev box or before the init script runs).
+std::string read_boot_joke() {
+  std::ifstream f("/run/pono-print-joke");
+  if (!f.is_open()) return std::string();
+  std::string line;
+  std::getline(f, line);
+  return line;
+}
+} // namespace
 
 InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   : cont(lv_obj_create(lv_scr_act()))
   , label(lv_label_create(cont))
+  , joke_label(lv_label_create(cont))
   , main_panel(mp)
   , lv_lock(l)
 {
@@ -24,20 +40,46 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
   pono::ocean_tide_init(cont);
 
-  // Readable message pill, centered over the ocean and kept in the
-  // foreground so the drifting swells pass behind the text.
-  lv_obj_set_size(label, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
-  lv_obj_set_style_max_width(label, lv_pct(82), 0);
+  // Hawaii boot joke: the delight. Deliberately small (a caption, not a
+  // banner) so it never shouts over the tide; the readable pill keeps it
+  // legible while the swells drift behind it. It persists for the whole wait
+  // because set_message() only touches the status line below.
+  std::string joke = read_boot_joke();
+  lv_obj_set_width(joke_label, lv_pct(78));   // explicit width = reliable wrap
+  lv_obj_set_height(joke_label, LV_SIZE_CONTENT);
+  lv_label_set_long_mode(joke_label, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_align(joke_label, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_color(joke_label, pono::color_text_primary, 0);
+  lv_obj_set_style_text_font(joke_label, pono::font_caption, 0);
+  lv_obj_set_style_bg_color(joke_label, pono::color_surface_raised, 0);
+  lv_obj_set_style_bg_opa(joke_label, LV_OPA_80, 0);
+  lv_obj_set_style_pad_all(joke_label, pono::space_sm, 0);
+  lv_obj_set_style_radius(joke_label, pono::radius_md, 0);
+  if (!joke.empty()) {
+    lv_label_set_text(joke_label, joke.c_str());
+  } else {
+    lv_obj_add_flag(joke_label, LV_OBJ_FLAG_HIDDEN);
+  }
+  lv_obj_align(joke_label, LV_ALIGN_CENTER, 0, -10);
+
+  // Connection status line: small + secondary, tucked under the joke. This is
+  // what set_message() updates as we wait for / reconnect to Klipper.
+  lv_obj_set_width(label, lv_pct(82));
+  lv_obj_set_height(label, LV_SIZE_CONTENT);
   lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(label, pono::color_text_primary, 0);
-  lv_obj_set_style_bg_color(label, pono::color_surface_raised, 0);
-  lv_obj_set_style_bg_opa(label, LV_OPA_80, 0);
-  lv_obj_set_style_pad_all(label, pono::space_md, 0);
-  lv_obj_set_style_radius(label, pono::radius_md, 0);
-  lv_label_set_text(label, LV_SYMBOL_WARNING " Waiting for Klipper to start...");
-  lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_set_style_text_color(label, pono::color_text_secondary, 0);
+  lv_obj_set_style_text_font(label, pono::font_micro, 0);
+  lv_label_set_text(label, "Waiting for Klipper to start...");
+  if (!joke.empty()) {
+    lv_obj_align_to(label, joke_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
+  } else {
+    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+  }
+
+  lv_obj_move_foreground(joke_label);
   lv_obj_move_foreground(label);
+  pono::panel_open(joke_label);  // silky fade-in
 }
 
 InitPanel::~InitPanel() {
@@ -115,7 +157,7 @@ void InitPanel::connected(KWebSocketClient &ws) {
 
 void InitPanel::disconnected(KWebSocketClient &ws) {
   LOG_DEBUG("init panel disconnected");
-  set_message(LV_SYMBOL_WARNING " Waiting for Klipper to start...");
+  set_message("Waiting for Klipper to start...");
   std::lock_guard<std::mutex> lock(lv_lock);
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(cont);

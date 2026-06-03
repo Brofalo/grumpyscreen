@@ -259,12 +259,17 @@ void ocean_tide_init(lv_obj_t *parent) {
     lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
     lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-    // Three swells at increasing depth, decreasing opacity, different speeds:
-    // teal shelf, cyan crest, foam-green wash. Low opacity keeps any text on
-    // top readable.
-    make_swell(parent, LV_COLOR_MAKE(0x0a, 0x6e, 0x7a), LV_OPA_40, 150, 30,  9000, 40);
-    make_swell(parent, color_accent_primary,            LV_OPA_20, 182, 22,  6500, 60);
-    make_swell(parent, color_accent_secondary,          LV_OPA_20, 208, 16, 11000, 30);
+    // Layered parallax tide: a deep shelf, mid teal + cyan swells, a fast thin
+    // foam glint for sparkle, a green wash and a slow undertow. More layers at
+    // out-of-phase speeds read as a living ocean that flexes the 60fps refresh,
+    // while every layer is just a cheap translate of a rounded bar (no per-pixel
+    // work). Low opacities keep text on top readable.
+    make_swell(parent, LV_COLOR_MAKE(0x05, 0x2c, 0x34), LV_OPA_50, 118, 42, 13000, 28); // deep shelf
+    make_swell(parent, LV_COLOR_MAKE(0x0a, 0x6e, 0x7a), LV_OPA_40, 150, 30,  9000, 44); // teal swell
+    make_swell(parent, color_accent_primary,            LV_OPA_20, 178, 24,  6500, 64); // cyan crest
+    make_swell(parent, LV_COLOR_MAKE(0x9b, 0xf6, 0xff), LV_OPA_30, 196, 10,  4800, 82); // foam glint
+    make_swell(parent, color_accent_secondary,          LV_OPA_20, 212, 16, 11000, 34); // green wash
+    make_swell(parent, LV_COLOR_MAKE(0x0a, 0x6e, 0x7a), LV_OPA_30, 236, 26, 15000, 26); // slow undertow
 }
 
 void ocean_tide_stop(lv_obj_t *parent) {

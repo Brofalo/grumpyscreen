@@ -19,7 +19,8 @@ class InitPanel {
 
  private:
   lv_obj_t *cont;
-  lv_obj_t *label;
+  lv_obj_t *label;       // connection status line (set_message updates this)
+  lv_obj_t *joke_label;  // persistent small Hawaii boot joke
   MainPanel &main_panel;
   std::mutex &lv_lock;
 };

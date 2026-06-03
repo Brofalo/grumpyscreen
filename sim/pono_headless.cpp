@@ -107,8 +107,33 @@ int main(int argc, char **argv) {
 
   pono::theme_init(disp);
 
-  if (screen == "home") {
-    pono::build_home(lv_scr_act(), pono::demo_home_model());
+  if (screen == "boot") {
+    // Mirror init_panel: ocean tide + small joke pill + tiny status line, so
+    // the boot joke size and the tide flex can be eyeballed before flashing.
+    lv_obj_t *scr = lv_scr_act();
+    lv_obj_set_style_pad_all(scr, 0, 0);
+    pono::ocean_tide_init(scr);
+
+    lv_obj_t *joke = lv_label_create(scr);
+    lv_obj_set_width(joke, lv_pct(78));
+    lv_obj_set_height(joke, LV_SIZE_CONTENT);
+    lv_label_set_long_mode(joke, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(joke, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_style_text_color(joke, pono::color_text_primary, 0);
+    lv_obj_set_style_text_font(joke, pono::font_caption, 0);
+    lv_obj_set_style_bg_color(joke, pono::color_surface_raised, 0);
+    lv_obj_set_style_bg_opa(joke, LV_OPA_80, 0);
+    lv_obj_set_style_pad_all(joke, 8, 0);
+    lv_obj_set_style_radius(joke, 8, 0);
+    lv_label_set_text(joke,
+        "First layer is like a good poke bowl: get the base right or the whole thing falls apart.");
+    lv_obj_align(joke, LV_ALIGN_CENTER, 0, -10);
+
+    lv_obj_t *st = lv_label_create(scr);
+    lv_obj_set_style_text_color(st, pono::color_text_secondary, 0);
+    lv_obj_set_style_text_font(st, pono::font_micro, 0);
+    lv_label_set_text(st, "Waiting for Klipper to start...");
+    lv_obj_align_to(st, joke, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
   } else {
     pono::build_home(lv_scr_act(), pono::demo_home_model());
   }
