@@ -143,7 +143,7 @@ static void scroll_begin_event(lv_event_t * e) {
    *is smooth. Triggered when a tab button is clicked. */
   if (lv_event_get_code(e) == LV_EVENT_SCROLL_BEGIN) {
     lv_anim_t * a = (lv_anim_t*)lv_event_get_param(e);
-    if(a)  a->time = 260;
+    if(a)  a->time = 130;  // Pono: snappier tab switch; 260ms full-screen scroll felt sluggish on this sw-rendered SoC
   }
 }
 

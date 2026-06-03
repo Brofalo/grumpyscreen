@@ -84,7 +84,7 @@ extern uint32_t custom_tick_get(void);
  *====================*/
 
 /*Default display refresh period. LVG will redraw changed areas with this period time*/
-#define LV_DISP_DEF_REFR_PERIOD 16      /*[ms] ~60 fps target (was 30 = 33 fps)*/
+#define LV_DISP_DEF_REFR_PERIOD 30      /*[ms] ~33 fps. This 2-core ARMv7 sw-renders 32bpp with no GPU; a 60fps target (16ms) just drops frames during animation and reads as jank. Steady 33fps is smoother.*/
 
 /*Input device read period in milliseconds*/
 #define LV_INDEV_DEF_READ_PERIOD 10     /*[ms] 100 Hz touch sampling (was 30)*/
