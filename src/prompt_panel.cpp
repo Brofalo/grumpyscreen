@@ -23,6 +23,7 @@ PromptPanel::PromptPanel(KWebSocketClient &websocket_client, std::mutex &lock, l
     , footer_cont(lv_obj_create(prompt_cont))
 //  , back_btn(promptpanel_cont, &back, "Back", &PromptPanel::_handle_callback, this)
 {
+  button_group_cont = NULL;  // Pono: was never initialized -> a plain prompt_button (no group) read garbage
   lv_obj_set_style_pad_all(prompt_cont, 0, 0);
 
   // lv_obj_clear_flag(promptpanel_cont, LV_OBJ_FLAG_SCROLLABLE);
@@ -191,7 +192,7 @@ void PromptPanel::check_height() {
           int newheight = (int) (((double)lv_obj_get_height(prompt_cont)) * 1.1);
           int newwidth = (int) (((double)lv_obj_get_width(prompt_cont)) * 1.1);
           LOG_DEBUG("Increase size of panel: {}, {}", newheight, newwidth);
-          lv_obj_set_size(prompt_cont, newheight, newwidth);
+          lv_obj_set_size(prompt_cont, newwidth, newheight);  // Pono: args are (w, h); was swapped
       }
       lv_obj_update_layout(prompt_cont);
       count++;
@@ -223,6 +224,7 @@ void PromptPanel::handle_macro_response(json &j) {
         // remove buttons
         lv_obj_clean(footer_cont);
         lv_obj_clean(flex);
+        button_group_cont = NULL;  // Pono: flex children just deleted; drop dangling group ptr (else no-group prompt_button = use-after-free)
         // remove button commands
 
         lv_obj_set_size(prompt_cont, lv_pct(90), lv_pct(62));

@@ -21,6 +21,7 @@ class InitPanel {
   lv_obj_t *cont;
   lv_obj_t *label;       // connection status line (set_message updates this)
   lv_obj_t *joke_label;  // persistent small Hawaii boot joke
+  lv_obj_t *bar_seg;     // loading-bar sweep; its infinite anim must be stopped on connect
   MainPanel &main_panel;
   std::mutex &lv_lock;
 };

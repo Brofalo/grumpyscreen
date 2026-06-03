@@ -27,6 +27,7 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   : cont(lv_obj_create(lv_scr_act()))
   , label(lv_label_create(cont))
   , joke_label(lv_label_create(cont))
+  , bar_seg(nullptr)
   , main_panel(mp)
   , lv_lock(l)
 {
@@ -87,7 +88,7 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   lv_obj_set_style_bg_opa(bar_track, LV_OPA_70, 0);
   lv_obj_set_style_radius(bar_track, 3, 0);
   lv_obj_clear_flag(bar_track, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_t *bar_seg = lv_obj_create(bar_track);
+  bar_seg = lv_obj_create(bar_track);
   lv_obj_remove_style_all(bar_seg);
   lv_obj_set_size(bar_seg, 64, 6);
   lv_obj_set_style_bg_color(bar_seg, pono::color_accent_primary, 0);
@@ -195,6 +196,7 @@ void InitPanel::connected(KWebSocketClient &ws) {
         lv_obj_add_flag(this->cont, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_background(this->cont);
         pono::ocean_tide_stop(this->cont);  // dashboard is up; stop the boot tide
+        if (this->bar_seg) lv_anim_del(this->bar_seg, NULL);  // Pono: stop the infinite loading-bar sweep (child of bar_track, not cont, so ocean_tide_stop misses it)
       });
     }
   });
