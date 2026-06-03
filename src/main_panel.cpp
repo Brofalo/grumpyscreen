@@ -159,13 +159,13 @@ void MainPanel::consume(json &j) {
     if (!et.is_null() && home_h.nozzle) {
       int v = (int)et.template get<double>();
       lv_label_set_text(home_h.nozzle, fmt::format("{}", v).c_str());
-      lv_obj_set_style_text_color(home_h.nozzle, v >= 45 ? pono::color_state_warning : pono::color_text_primary, 0);
+      lv_obj_set_style_text_color(home_h.nozzle, v >= 240 ? pono::color_state_error : (v >= 50 ? pono::color_state_warning : pono::color_text_primary), 0);
     }
     auto bt = j["/params/0/heater_bed/temperature"_json_pointer];
     if (!bt.is_null() && home_h.bed) {
       int v = (int)bt.template get<double>();
       lv_label_set_text(home_h.bed, fmt::format("{}", v).c_str());
-      lv_obj_set_style_text_color(home_h.bed, v >= 40 ? pono::color_state_warning : pono::color_text_primary, 0);
+      lv_obj_set_style_text_color(home_h.bed, v >= 100 ? pono::color_state_error : (v >= 40 ? pono::color_state_warning : pono::color_text_primary), 0);
     }
     if (!pstat_state.is_null() && home_h.state_pill) {
       bool printing = pstat_state.template get<std::string>() == "printing";
@@ -230,7 +230,8 @@ void MainPanel::create_panel() {
   hm.nozzle = 0; hm.nozzle_set = 0; hm.bed = 0; hm.bed_set = 0;
   pono::build_home(home_scr, hm, &home_h);
   lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.qa[0], home_h.qa[1],
-                       home_h.qa[2], home_h.tile_nozzle, home_h.tile_bed };
+                       home_h.qa[2], home_h.tile_nozzle, home_h.tile_bed,
+                       home_h.tile_tune, home_h.tile_omega };
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_home_tap, LV_EVENT_CLICKED, this);
   lv_obj_add_flag(home_scr, LV_OBJ_FLAG_HIDDEN);  // revealed on connect
 }
@@ -251,6 +252,8 @@ void MainPanel::_home_tap(lv_event_t *e) {
   if (t == h.btn_pausestop || t == h.qa[2]) s->print_panel.foreground();           // Pause/Stop, Files
   else if (t == h.qa[0]) s->homing_panel.foreground();                             // Move
   else if (t == h.qa[1] || t == h.tile_nozzle || t == h.tile_bed) s->extruder_panel.foreground();  // Filament, temps
+  else if (t == h.tile_tune)  s->ws.gcode_script("PONO_CAL_STANDARD");  // standard on-device calibrate
+  else if (t == h.tile_omega) s->ws.gcode_script("PONO_CAL_OMEGA");     // enhanced 1000% suite (queues + prompts)
 }
 
 void MainPanel::handle_homing_cb(lv_event_t *event) {
