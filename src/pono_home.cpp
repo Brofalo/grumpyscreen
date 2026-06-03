@@ -102,7 +102,7 @@ HomeModel demo_home_model() {
 
 // ---- the cockpit -----------------------------------------------------------
 
-lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m) {
+lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   const lv_font_t *ms = &lv_font_montserrat_14; // built-in: carries LV_SYMBOL_*
 
   lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
@@ -129,13 +129,17 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m) {
 
   // ---- top bar ----
   lbl(parent, "Pono Print", font_h2, color_text_primary, 66, 8);
-  if (m.printing) {
+  {
     lv_obj_t *pill = card(parent, 374, 10, 94, 22, color_surface_elevated, 11);
     hairline(pill, color_accent_secondary, opa_border_strong);
-    lv_obj_t *dot = card(parent, 384, 17, 8, 8, color_accent_secondary, 4);
+    lv_obj_t *dot = card(pill, 0, 0, 8, 8, color_accent_secondary, 4);
+    lv_obj_align(dot, LV_ALIGN_LEFT_MID, 8, 0);
     soft_shadow(dot, color_accent_secondary, 8, LV_OPA_COVER);
-    lbl(parent, "PRINTING", font_micro, color_accent_secondary, 400, 14);
+    lv_obj_t *prl = lbl(pill, "PRINTING", font_micro, color_accent_secondary, 0, 0);
+    lv_obj_align(prl, LV_ALIGN_LEFT_MID, 22, 0);
     glow_pulse(dot, color_accent_secondary, 3, 12, 850);  // tiny: the "alive" beat
+    if (!m.printing) lv_obj_add_flag(pill, LV_OBJ_FLAG_HIDDEN);
+    if (out) out->state_pill = pill;
   }
 
   // ---- job hero: progress ring with a soft cyan halo ----
@@ -169,10 +173,10 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m) {
   lv_obj_t *jn = lbl(parent, m.job_name, font_h2, color_text_primary, 172, 68);
   lv_label_set_long_mode(jn, LV_LABEL_LONG_DOT);
   lv_obj_set_width(jn, 190);
-  lbl(parent, m.material, font_caption, color_text_secondary, 172, 93);
+  lv_obj_t *mat_l = lbl(parent, m.material, font_caption, color_text_secondary, 172, 93);
   lv_obj_t *etap = card(parent, 172, 114, 150, 24, color_surface_elevated, 8);
   hairline(etap, color_accent_primary, opa_border_medium);
-  lbl(parent, m.eta, font_caption, color_accent_primary, 184, 118);
+  lv_obj_t *eta_l = lbl(parent, m.eta, font_caption, color_accent_primary, 184, 118);
 
   // ---- pause / stop (gradient fill + icon) ----
   lv_obj_t *ps = card(parent, 172, 150, 180, 36, color_state_error, 10);
@@ -188,7 +192,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m) {
   lbl(parent, "NOZZLE", font_micro, color_text_secondary, 370, 54);
   lv_color_t nz_col = (m.nozzle >= 45) ? color_state_warning : color_text_primary;
   char nzt[8]; snprintf(nzt, sizeof nzt, "%d", m.nozzle);
-  lbl(parent, nzt, font_num_medium, nz_col, 370, 68);
+  lv_obj_t *nz_num = lbl(parent, nzt, font_num_medium, nz_col, 370, 68);
   char nzs[10]; snprintf(nzs, sizeof nzs, "/%d", m.nozzle_set);
   lbl(parent, nzs, font_num_small, color_text_secondary, 410, 75);
   lbl(parent, "tap", font_micro, color_accent_primary, 446, 54);
@@ -199,7 +203,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m) {
   lbl(parent, "BED", font_micro, color_text_secondary, 370, 108);
   lv_color_t bd_col = (m.bed >= 40) ? color_state_warning : color_text_primary;
   char bdt[8]; snprintf(bdt, sizeof bdt, "%d", m.bed);
-  lbl(parent, bdt, font_num_medium, bd_col, 370, 122);
+  lv_obj_t *bd_num = lbl(parent, bdt, font_num_medium, bd_col, 370, 122);
   char bds[10]; snprintf(bds, sizeof bds, "/%d", m.bed_set);
   lbl(parent, bds, font_num_small, color_text_secondary, 402, 129);
   lbl(parent, "tap", font_micro, color_accent_primary, 446, 108);
@@ -237,6 +241,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m) {
   for (int i = 0; i < 4; i++) {
     int x = 72 + i * 100;
     lv_obj_t *qc = card(parent, x, 214, 84, 44, color_surface_elevated, 10);
+    if (out) out->qa[i] = qc;
     vgrad(qc, color_surface_elevated, color_surface_raised);
     hairline(qc, color_text_tertiary, opa_border_subtle);
     lv_obj_t *qi = lbl(parent, qa[i].icon, ms, color_text_primary, 0, 0);
@@ -245,6 +250,13 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m) {
     lv_obj_align_to(qn, qc, LV_ALIGN_BOTTOM_MID, 0, -6);
   }
 
+  if (out) {
+    out->arc = arc; out->pct = pl; out->layer = lyl;
+    out->job = jn; out->material = mat_l; out->eta = eta_l;
+    out->nozzle = nz_num; out->bed = bd_num;
+    out->tile_nozzle = nzc; out->tile_bed = bdc;
+    out->tile_tune = tn; out->tile_omega = om; out->btn_pausestop = ps;
+  }
   return arc;
 }
 

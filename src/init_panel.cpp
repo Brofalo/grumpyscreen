@@ -197,6 +197,7 @@ void InitPanel::connected(KWebSocketClient &ws) {
         lv_obj_move_background(this->cont);
         pono::ocean_tide_stop(this->cont);  // dashboard is up; stop the boot tide
         if (this->bar_seg) lv_anim_del(this->bar_seg, NULL);  // Pono: stop the infinite loading-bar sweep (child of bar_track, not cont, so ocean_tide_stop misses it)
+        this->main_panel.show_home();  // Pono: bring the native cockpit forward over the tabview
       });
     }
   });

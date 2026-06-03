@@ -135,6 +135,44 @@ void MainPanel::consume(json &j) {
   }
 
   led_btn.set_image(led_panel.get_main_button_image());
+
+  // --- Pono cockpit live update (each field guarded; retains last if absent) ---
+  if (home_h.arc) {
+    auto prog = j["/params/0/virtual_sdcard/progress"_json_pointer];
+    if (!prog.is_null()) {
+      int pct = (int)(prog.template get<double>() * 100.0 + 0.5);
+      lv_arc_set_value(home_h.arc, pct);
+      if (home_h.pct) lv_label_set_text(home_h.pct, fmt::format("{}%", pct).c_str());
+    }
+    auto cl = j["/params/0/print_stats/info/current_layer"_json_pointer];
+    if (!cl.is_null() && home_h.layer) {
+      auto tl = j["/params/0/print_stats/info/total_layer"_json_pointer];
+      lv_label_set_text(home_h.layer, fmt::format("layer {} / {}",
+        cl.template get<int>(), tl.is_null() ? 0 : tl.template get<int>()).c_str());
+    }
+    auto fn = j["/params/0/print_stats/filename"_json_pointer];
+    if (!fn.is_null() && home_h.job) {
+      std::string f = fn.template get<std::string>();
+      lv_label_set_text(home_h.job, f.empty() ? "Pono Print" : f.c_str());
+    }
+    auto et = j["/params/0/extruder/temperature"_json_pointer];
+    if (!et.is_null() && home_h.nozzle) {
+      int v = (int)et.template get<double>();
+      lv_label_set_text(home_h.nozzle, fmt::format("{}", v).c_str());
+      lv_obj_set_style_text_color(home_h.nozzle, v >= 45 ? pono::color_state_warning : pono::color_text_primary, 0);
+    }
+    auto bt = j["/params/0/heater_bed/temperature"_json_pointer];
+    if (!bt.is_null() && home_h.bed) {
+      int v = (int)bt.template get<double>();
+      lv_label_set_text(home_h.bed, fmt::format("{}", v).c_str());
+      lv_obj_set_style_text_color(home_h.bed, v >= 40 ? pono::color_state_warning : pono::color_text_primary, 0);
+    }
+    if (!pstat_state.is_null() && home_h.state_pill) {
+      bool printing = pstat_state.template get<std::string>() == "printing";
+      if (printing) lv_obj_clear_flag(home_h.state_pill, LV_OBJ_FLAG_HIDDEN);
+      else lv_obj_add_flag(home_h.state_pill, LV_OBJ_FLAG_HIDDEN);
+    }
+  }
 }
 
 static void scroll_begin_event(lv_event_t * e) {
@@ -178,6 +216,41 @@ void MainPanel::create_panel() {
   lv_obj_set_style_pad_all(sysinfo_tab, 0, 0);
 
   create_main(main_tab);
+
+  // Pono native cockpit: full-screen on the active screen, over the tabview,
+  // hidden until connect (show_home). The tabview stays behind as a safety net.
+  home_scr = lv_obj_create(lv_scr_act());
+  lv_obj_remove_style_all(home_scr);
+  lv_obj_set_size(home_scr, 480, 272);
+  lv_obj_set_pos(home_scr, 0, 0);
+  lv_obj_clear_flag(home_scr, LV_OBJ_FLAG_SCROLLABLE);
+  pono::HomeModel hm{};
+  hm.printing = false; hm.progress_pct = 0; hm.layer = 0; hm.layer_total = 0;
+  hm.job_name = "Pono Print"; hm.material = "ready"; hm.eta = "idle";
+  hm.nozzle = 0; hm.nozzle_set = 0; hm.bed = 0; hm.bed_set = 0;
+  pono::build_home(home_scr, hm, &home_h);
+  lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.qa[0], home_h.qa[1],
+                       home_h.qa[2], home_h.tile_nozzle, home_h.tile_bed };
+  for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_home_tap, LV_EVENT_CLICKED, this);
+  lv_obj_add_flag(home_scr, LV_OBJ_FLAG_HIDDEN);  // revealed on connect
+}
+
+void MainPanel::show_home() {
+  if (!home_scr) return;
+  lv_obj_clear_flag(home_scr, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_foreground(home_scr);
+}
+
+// Cockpit tile taps route to the existing (proven) control panels, which
+// overlay above the cockpit and close back to it.
+void MainPanel::_home_tap(lv_event_t *e) {
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
+  lv_obj_t *t = lv_event_get_target(e);
+  pono::HomeHandles &h = s->home_h;
+  if (t == h.btn_pausestop || t == h.qa[2]) s->print_panel.foreground();           // Pause/Stop, Files
+  else if (t == h.qa[0]) s->homing_panel.foreground();                             // Move
+  else if (t == h.qa[1] || t == h.tile_nozzle || t == h.tile_bed) s->extruder_panel.foreground();  // Filament, temps
 }
 
 void MainPanel::handle_homing_cb(lv_event_t *event) {

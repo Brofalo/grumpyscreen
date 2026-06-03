@@ -31,11 +31,33 @@ struct HomeModel {
 // The mockup's values, for sim render + first-boot placeholder.
 HomeModel demo_home_model();
 
+// Live handles into a built home. The app keeps these to update values in
+// place (no rebuild) and to attach tap callbacks. NULL-safe: every field may
+// be null, callers must guard. The sim ignores it (passes nullptr).
+struct HomeHandles {
+  // live-updated values
+  lv_obj_t *arc = nullptr;         // progress arc (lv_arc_set_value)
+  lv_obj_t *pct = nullptr;         // "47%"
+  lv_obj_t *layer = nullptr;       // "layer 84 / 180"
+  lv_obj_t *job = nullptr;         // job name
+  lv_obj_t *material = nullptr;    // material/profile line
+  lv_obj_t *eta = nullptr;         // "1:12 left"
+  lv_obj_t *nozzle = nullptr;      // nozzle current-temp number
+  lv_obj_t *bed = nullptr;         // bed current-temp number
+  lv_obj_t *state_pill = nullptr;  // PRINTING pill (hide when idle)
+  // tappable launchers (app attaches event cbs)
+  lv_obj_t *tile_tune = nullptr;
+  lv_obj_t *tile_omega = nullptr;
+  lv_obj_t *tile_nozzle = nullptr;
+  lv_obj_t *tile_bed = nullptr;
+  lv_obj_t *btn_pausestop = nullptr;
+  lv_obj_t *qa[4] = {nullptr, nullptr, nullptr, nullptr}; // Move/Filament/Files/Camera
+};
+
 // Build the full 480x272 home cockpit into `parent` (a screen-sized object).
-// Adds the living ocean background, left rail, top bar, job hero (progress
-// ring), glanceable temp strip, OMEGA tile and quick-action row. Returns the
-// arc object so callers that animate progress live can keep a handle.
-lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m);
+// Returns the arc; if `out` is non-null, fills it with live handles + tap
+// targets so the app can update values and wire callbacks. Sim passes nullptr.
+lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out = nullptr);
 
 // Build the Tune screen into `parent`: the two calibrate tiers (Standard +
 // the enhanced OMEGA), a grid of individual calibrations (bed mesh, pressure

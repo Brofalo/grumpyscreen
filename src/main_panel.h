@@ -17,6 +17,7 @@
 #include "sysinfo_panel.h"
 #include "print_status_panel.h"
 #include "spoolman_panel.h"
+#include "pono_home.h"
 #include "lvgl/lvgl.h"
 
 #include <mutex>
@@ -36,6 +37,8 @@ class MainPanel : public NotifyConsumer {
   void enable_spoolman();
   
   void create_panel();
+  void show_home();                      // Pono: bring the native cockpit to front (on connect)
+  static void _home_tap(lv_event_t *e);  // Pono: cockpit tile -> existing control panels
   void create_sensors(json &temp_sensors);
   void create_fans(json &temp_fans);
   void create_leds(json &leds);
@@ -102,6 +105,8 @@ class MainPanel : public NotifyConsumer {
   lv_obj_t *sysinfo_tab;
   SysInfoPanel sysinfo_panel;
   lv_obj_t *main_cont;
+  lv_obj_t *home_scr = nullptr;   // Pono native cockpit, full-screen over the tabview
+  pono::HomeHandles home_h;       // live handles into the cockpit
   PrintStatusPanel print_status_panel;
   PrintPanel print_panel;
   Numpad numpad;
