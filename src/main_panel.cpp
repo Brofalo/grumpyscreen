@@ -43,7 +43,7 @@ MainPanel::MainPanel(KWebSocketClient &websocket,
   , main_cont(lv_obj_create(main_tab))
   , print_status_panel(websocket, lock, main_cont)
   , print_panel(ws, lock, print_status_panel)
-  , numpad(Numpad(main_cont))
+  , numpad(Numpad(lv_layer_top()))  // top layer: keypad overlays every screen incl. Pono sub-screens
   , extruder_panel(ws, lock, numpad, sm)
   , prompt_panel(websocket, lock, main_cont)
   , spoolman_panel(sm)
