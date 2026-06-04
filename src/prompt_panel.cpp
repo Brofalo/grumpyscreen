@@ -322,34 +322,45 @@ void PromptPanel::handle_macro_response(json &j) {
           // lv_obj_set_style_max_width(label, lv_pct(45), 0);
           lv_obj_center(label);
 
-          // Pick label text for contrast against the button fill. The theme
-          // paints all button text near-black (correct for the bright cyan /
-          // amber / red fills), but the secondary + default fills are dark
-          // surfaces -- near-black text on them is the "blends together"
-          // unreadable case. Force light text there. Set locally on the label
-          // (highest precedence, no inheritance ambiguity).
-          lv_color_t btn_txt = pono::color_surface_base;  // dark text on bright fill
+          // Pick BOTH fill and text per type, as LOCAL styles. The theme's
+          // button apply_cb sets a LOCAL cyan bg on every lv_btn, and in LVGL a
+          // local style outranks an *added* one -- so the style_btn_* fills
+          // added below were silently ignored and every prompt button rendered
+          // cyan. For secondary/default that left light text on cyan: the
+          // unreadable "white on pale blue" case. Setting bg_color locally here
+          // overrides the theme and restores the intended per-type fills; text
+          // is paired dark-on-bright / light-on-dark for contrast either way.
+          lv_color_t btn_bg  = pono::color_accent_primary;  // cyan (info/primary)
+          lv_color_t btn_txt = pono::color_surface_base;    // dark text on bright fill
           if (!prompt_button_type.compare("secondary")) {
             LOG_DEBUG("type secondary");
             lv_obj_add_style(btn, &style_btn_grey, 0);
-            btn_txt = pono::color_text_primary;           // light on dark surface
+            btn_bg  = pono::color_surface_elevated;         // dark neutral surface
+            btn_txt = pono::color_text_primary;             // light on dark surface
           } else if (!prompt_button_type.compare("warning")) {
             LOG_DEBUG("type warning");
             lv_obj_add_style(btn, &style_btn_orange, 0);
+            btn_bg = pono::color_state_warning;             // amber, dark text
           } else if (!prompt_button_type.compare("error")) {
             LOG_DEBUG("type error");
             lv_obj_add_style(btn, &style_btn_red, 0);
+            btn_bg = pono::color_state_error;               // red, dark text
           } else if (!prompt_button_type.compare("info")) {
             LOG_DEBUG("type info");
             lv_obj_add_style(btn, &style_btn_blue, 0);
+            btn_bg = pono::color_accent_primary;            // cyan, dark text
           } else if (!prompt_button_type.compare("primary")) {
             LOG_DEBUG("type primary");
             lv_obj_add_style(btn, &style_btn_blue, 0);
-          } else { // unspecified type -> deepest neutral fill
+            btn_bg = pono::color_accent_primary;            // cyan, dark text
+          } else { // unspecified type -> neutral dark fill, light text
             LOG_DEBUG("type default");
             lv_obj_add_style(btn, &style_btn_dark_grey, 0);
-            btn_txt = pono::color_text_primary;           // light on slate
+            btn_bg  = pono::color_surface_elevated;         // dark neutral surface
+            btn_txt = pono::color_text_primary;             // light on dark
           }
+          lv_obj_set_style_bg_color(btn, btn_bg, 0);        // LOCAL: overrides theme cyan
+          lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
           lv_obj_set_style_text_color(label, btn_txt, 0);
           lv_obj_add_event_cb(btn, _handle_callback, LV_EVENT_PRESSED, this);
         }
