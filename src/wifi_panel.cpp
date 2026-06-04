@@ -269,7 +269,6 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
       lv_label_set_text(wifi_label, "");
     }
 
-    lv_table_set_row_cnt(wifi_table, 0);  // drop stale rows so a shorter scan leaves no tappable ghosts
     while (std::getline(f, line)) {
       if (line.rfind("bss", 0) == 0) {
 	      continue;
@@ -303,6 +302,10 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
         }
       }
     } // while
+    // Trim any stale rows to the exact count (print_panel pattern). Doing this
+    // at the END avoids the set_row_cnt(0)-then-regrow free/realloc churn every
+    // scan, which segfaulted after a few rescans.
+    if (index > 0) lv_table_set_row_cnt(wifi_table, index);
     lv_obj_scroll_to_y(wifi_table, 0, LV_ANIM_OFF);
     if (index == 0) {  // fallback: scan returned nothing
       lv_obj_add_flag(wifi_table, LV_OBJ_FLAG_HIDDEN);
@@ -327,7 +330,6 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
       
       std::lock_guard<std::mutex> lock(lv_lock);
 
-      lv_table_set_row_cnt(wifi_table, 0);  // rebuild cleanly so no stale rows linger
       uint32_t index = 0;
       for (const auto &wifi : pairs) {
         lv_table_set_cell_value(wifi_table, index, 0, wifi.first.c_str());
@@ -351,6 +353,7 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
         index++;
       }
 
+      if (index > 0) lv_table_set_row_cnt(wifi_table, index);  // trim stale rows; no per-scan free churn
       lv_obj_scroll_to_y(wifi_table, 0, LV_ANIM_OFF);
       lv_obj_clear_flag(wifi_table, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(spinner, LV_OBJ_FLAG_HIDDEN);
