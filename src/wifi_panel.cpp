@@ -116,12 +116,13 @@ WifiPanel::WifiPanel(std::mutex &l)
   lv_obj_set_style_bg_grad_color(cont, lv_color_hex(0x070b12), 0);
   lv_obj_set_style_bg_grad_dir(cont, LV_GRAD_DIR_VER, 0);
   lv_obj_set_style_bg_opa(cont, LV_OPA_COVER, 0);
-  // pad_top 0 keeps the floating header (back/title/refresh) in the y=0..56
-  // top band; the scrolling content (table + prompt) is pushed below it with a
-  // top margin instead. The old pad_top pushed BOTH down, piling the header on
-  // top of the first table rows.
+  // pad_top 0 on cont keeps the floating header (back/title/refresh) in the
+  // y=0..56 top band; the scrolling content is pushed below it by padding the
+  // top of top_cont (the table+prompt row) instead. The old pad_top on cont
+  // pushed BOTH header and content down, piling them on top of each other.
+  // (margin styles are not compiled into this LVGL, so pad is the lever.)
   lv_obj_set_style_pad_top(cont, 0, 0);
-  lv_obj_set_style_margin_top(top_cont, 56, 0);
+  lv_obj_set_style_pad_top(top_cont, 56, 0);
   lv_obj_t *wifi_title = lv_label_create(cont);
   lv_label_set_text(wifi_title, "Wi-Fi");
   lv_obj_set_style_text_font(wifi_title, pono::font_h2, 0);
