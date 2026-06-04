@@ -140,73 +140,71 @@ void MainPanel::consume(json &j) {
 
   led_btn.set_image(led_panel.get_main_button_image());
 
-  // --- Pono cockpit live update (each field guarded; retains last if absent) ---
+  // --- Pono cockpit: cache live values, rebuild on the idle<->printing flip
+  // (build_home is sim-verified for both states), update in place otherwise. ---
   if (home_h.arc) {
-    auto prog = j["/params/0/virtual_sdcard/progress"_json_pointer];
-    if (!prog.is_null()) {
-      home_progress_ = prog.template get<double>();   // cache across deltas (ETA needs it)
-      int pct = (int)(home_progress_ * 100.0 + 0.5);
-      lv_arc_set_value(home_h.arc, pct);
-      if (home_h.pct) {
-        lv_label_set_text(home_h.pct, fmt::format("{}%", pct).c_str());
-        lv_obj_align_to(home_h.pct, home_h.arc, LV_ALIGN_CENTER, 0, -7);  // re-center: text width changes
-      }
-    }
-    auto pd = j["/params/0/print_stats/print_duration"_json_pointer];
-    if (!pd.is_null()) home_duration_ = pd.template get<double>();   // cache across deltas (ETA needs it)
-    auto cl = j["/params/0/print_stats/info/current_layer"_json_pointer];
-    if (!cl.is_null() && home_h.layer) {
-      auto tl = j["/params/0/print_stats/info/total_layer"_json_pointer];
-      lv_label_set_text(home_h.layer, fmt::format("layer {} / {}",
-        cl.template get<int>(), tl.is_null() ? 0 : tl.template get<int>()).c_str());
-      lv_obj_align_to(home_h.layer, home_h.arc, LV_ALIGN_CENTER, 0, 18);  // re-center
-    }
-    auto fn = j["/params/0/print_stats/filename"_json_pointer];
-    if (!fn.is_null() && home_h.job) {
-      std::string f = fn.template get<std::string>();
-      lv_label_set_text(home_h.job, f.empty() ? "Pono Print" : f.c_str());
-    }
-    auto et = j["/params/0/extruder/temperature"_json_pointer];
-    if (!et.is_null() && home_h.nozzle) {
-      int v = (int)et.template get<double>();
-      lv_label_set_text(home_h.nozzle, fmt::format("{}", v).c_str());
-      lv_obj_set_style_text_color(home_h.nozzle, v >= 240 ? pono::color_state_error : (v >= 50 ? pono::color_state_warning : pono::color_text_primary), 0);
-    }
-    auto ets = j["/params/0/extruder/target"_json_pointer];
-    if (!ets.is_null() && home_h.nozzle_set)
-      lv_label_set_text(home_h.nozzle_set, fmt::format("/{}", (int)ets.template get<double>()).c_str());
-    auto bt = j["/params/0/heater_bed/temperature"_json_pointer];
-    if (!bt.is_null() && home_h.bed) {
-      int v = (int)bt.template get<double>();
-      lv_label_set_text(home_h.bed, fmt::format("{}", v).c_str());
-      lv_obj_set_style_text_color(home_h.bed, v >= 100 ? pono::color_state_error : (v >= 40 ? pono::color_state_warning : pono::color_text_primary), 0);
-    }
-    auto bts = j["/params/0/heater_bed/target"_json_pointer];
-    if (!bts.is_null() && home_h.bed_set)
-      lv_label_set_text(home_h.bed_set, fmt::format("/{}", (int)bts.template get<double>()).c_str());
-    if (!pstat_state.is_null()) {
-      bool printing = pstat_state.template get<std::string>() == "printing";
-      if (home_h.state_pill) {
-        if (printing) lv_obj_clear_flag(home_h.state_pill, LV_OBJ_FLAG_HIDDEN);
-        else lv_obj_add_flag(home_h.state_pill, LV_OBJ_FLAG_HIDDEN);
-      }
-      if (printing != home_pulsing_) {                 // pulse only on the transition (no per-update restart)
-        pono::set_state_pulse(home_h.state_dot, printing);
-        home_pulsing_ = printing;
-      }
-      if (!printing && home_printing_ && home_h.eta)
-        lv_label_set_text(home_h.eta, "idle");          // settle ETA once on print -> idle
+    auto V = [&](const char *p) { return j[json::json_pointer(p)]; };
+    { auto v = V("/params/0/virtual_sdcard/progress");        if (!v.is_null()) home_progress_    = v.template get<double>(); }
+    { auto v = V("/params/0/print_stats/print_duration");     if (!v.is_null()) home_duration_    = v.template get<double>(); }
+    { auto v = V("/params/0/extruder/temperature");           if (!v.is_null()) home_nozzle_      = (int)v.template get<double>(); }
+    { auto v = V("/params/0/extruder/target");                if (!v.is_null()) home_nozzle_set_  = (int)v.template get<double>(); }
+    { auto v = V("/params/0/heater_bed/temperature");         if (!v.is_null()) home_bed_         = (int)v.template get<double>(); }
+    { auto v = V("/params/0/heater_bed/target");              if (!v.is_null()) home_bed_set_     = (int)v.template get<double>(); }
+    { auto v = V("/params/0/print_stats/info/current_layer"); if (!v.is_null()) home_layer_       = v.template get<int>(); }
+    { auto v = V("/params/0/print_stats/info/total_layer");   if (!v.is_null()) home_layer_total_ = v.template get<int>(); }
+    { auto v = V("/params/0/print_stats/filename");           if (!v.is_null()) home_job_         = v.template get<std::string>(); }
+
+    bool printing = pstat_state.is_null() ? home_printing_
+                  : (pstat_state.template get<std::string>() == "printing");
+
+    if (printing != home_printing_) {
       home_printing_ = printing;
-    }
-    // Live ETA: total = duration / progress; remaining = total - duration. Runs
-    // every update while printing (state arrives only on change, progress/duration
-    // are cached above), so the pill counts down smoothly.
-    if (home_h.eta && home_printing_ && home_progress_ > 0.01 && home_duration_ > 1.0) {
-      double remain = home_duration_ * (1.0 - home_progress_) / home_progress_;
-      if (remain < 0.0) remain = 0.0;
-      int mins = (int)(remain / 60.0 + 0.5);
-      if (mins >= 60) lv_label_set_text(home_h.eta, fmt::format("{}:{:02d} left", mins / 60, mins % 60).c_str());
-      else            lv_label_set_text(home_h.eta, fmt::format("{} min left", mins).c_str());
+      rebuild_home();                 // swap to the matching layout (Ready <-> printing)
+    } else {
+      // temps update in both states: big number + heat color, target "/ N" or "off"
+      if (home_h.nozzle) {
+        lv_label_set_text(home_h.nozzle, fmt::format("{}", home_nozzle_).c_str());
+        lv_obj_set_style_text_color(home_h.nozzle,
+          home_nozzle_ >= 240 ? pono::color_state_error :
+          home_nozzle_ >= 45  ? pono::color_state_warning : pono::color_text_primary, 0);
+      }
+      if (home_h.nozzle_set) {
+        lv_label_set_text(home_h.nozzle_set,
+          home_nozzle_set_ > 0 ? fmt::format("/ {}", home_nozzle_set_).c_str() : "off");
+        lv_obj_align(home_h.nozzle_set, LV_ALIGN_RIGHT_MID, -14, 0);
+      }
+      if (home_h.bed) {
+        lv_label_set_text(home_h.bed, fmt::format("{}", home_bed_).c_str());
+        lv_obj_set_style_text_color(home_h.bed,
+          home_bed_ >= 100 ? pono::color_state_error :
+          home_bed_ >= 45  ? pono::color_state_warning : pono::color_text_primary, 0);
+      }
+      if (home_h.bed_set) {
+        lv_label_set_text(home_h.bed_set,
+          home_bed_set_ > 0 ? fmt::format("/ {}", home_bed_set_).c_str() : "off");
+        lv_obj_align(home_h.bed_set, LV_ALIGN_RIGHT_MID, -14, 0);
+      }
+      if (printing) {  // progress + layer + ETA only while a job runs
+        int pct = (int)(home_progress_ * 100.0 + 0.5);
+        lv_arc_set_value(home_h.arc, pct);
+        if (home_h.pct) {
+          lv_label_set_text(home_h.pct, fmt::format("{}%", pct).c_str());
+          lv_obj_align_to(home_h.pct, home_h.arc, LV_ALIGN_CENTER, 0, 0);
+        }
+        if (home_h.layer) {
+          lv_label_set_text(home_h.layer, fmt::format("layer {} / {}", home_layer_, home_layer_total_).c_str());
+          lv_obj_align_to(home_h.layer, home_h.arc, LV_ALIGN_OUT_BOTTOM_MID, 0, 8);
+        }
+        if (home_h.eta && home_progress_ > 0.01 && home_duration_ > 1.0) {
+          double remain = home_duration_ * (1.0 - home_progress_) / home_progress_;
+          if (remain < 0.0) remain = 0.0;
+          int mins = (int)(remain / 60.0 + 0.5);
+          home_eta_ = mins >= 60 ? fmt::format("{}:{:02d} left", mins / 60, mins % 60)
+                                 : fmt::format("{} min left", mins);
+          lv_label_set_text(home_h.eta, home_eta_.c_str());
+          if (home_h.layer) lv_obj_align_to(home_h.eta, home_h.layer, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+        }
+      }
     }
   }
 }
@@ -262,13 +260,10 @@ void MainPanel::create_panel() {
   lv_obj_clear_flag(home_scr, LV_OBJ_FLAG_SCROLLABLE);
   pono::HomeModel hm{};
   hm.printing = false; hm.progress_pct = 0; hm.layer = 0; hm.layer_total = 0;
-  hm.job_name = "Pono Print"; hm.material = "ready"; hm.eta = "idle";
+  hm.job_name = ""; hm.material = "PA-CF . 0.25 diamond"; hm.eta = "";
   hm.nozzle = 0; hm.nozzle_set = 0; hm.bed = 0; hm.bed_set = 0;
   pono::build_home(home_scr, hm, &home_h);
-  lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.qa[0], home_h.qa[1],
-                       home_h.qa[2], home_h.qa[3], home_h.tile_nozzle, home_h.tile_bed,
-                       home_h.tile_tune, home_h.tile_omega };
-  for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_home_tap, LV_EVENT_CLICKED, this);
+  attach_home_taps();
   lv_obj_add_flag(home_scr, LV_OBJ_FLAG_HIDDEN);  // revealed on connect
 }
 
@@ -292,6 +287,43 @@ void MainPanel::_home_tap(lv_event_t *e) {
   else if (t == h.qa[3]) s->fan_panel.foreground();                                // Fans
   else if (t == h.tile_tune)  s->ws.gcode_script("PONO_CAL_STANDARD");  // standard on-device calibrate
   else if (t == h.tile_omega) s->ws.gcode_script("PONO_CAL_OMEGA");     // enhanced 1000% suite (queues + prompts)
+}
+
+void MainPanel::attach_home_taps() {
+  lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.qa[0], home_h.qa[1],
+                       home_h.qa[2], home_h.qa[3], home_h.tile_nozzle, home_h.tile_bed,
+                       home_h.tile_tune, home_h.tile_omega };
+  for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_home_tap, LV_EVENT_CLICKED, this);
+}
+
+// Rebuild the cockpit in the layout matching the current state. build_home is
+// sim-verified for both idle and printing, so a rebuild guarantees the right
+// layout rather than swapping fonts/labels/colors in place. Called only on the
+// idle<->printing flip (rare), so the cost is irrelevant.
+void MainPanel::rebuild_home() {
+  if (!home_scr) return;
+  pono::HomeModel m{};
+  m.printing = home_printing_;
+  m.progress_pct = (int)(home_progress_ * 100.0 + 0.5);
+  m.layer = home_layer_; m.layer_total = home_layer_total_;
+  m.job_name = home_job_.c_str();
+  m.material = "PA-CF . 0.25 diamond";
+  m.nozzle = home_nozzle_; m.nozzle_set = home_nozzle_set_;
+  m.bed = home_bed_; m.bed_set = home_bed_set_;
+  if (m.printing && home_progress_ > 0.01 && home_duration_ > 1.0) {
+    double remain = home_duration_ * (1.0 - home_progress_) / home_progress_;
+    if (remain < 0.0) remain = 0.0;
+    int mins = (int)(remain / 60.0 + 0.5);
+    home_eta_ = mins >= 60 ? fmt::format("{}:{:02d} left", mins / 60, mins % 60)
+                           : fmt::format("{} min left", mins);
+  } else {
+    home_eta_.clear();
+  }
+  m.eta = home_eta_.c_str();
+  lv_obj_clean(home_scr);                  // drop old children + their anims
+  pono::build_home(home_scr, m, &home_h);  // repopulates home_h with fresh handles
+  attach_home_taps();
+  home_pulsing_ = m.printing;              // build_home (re)starts/settles the pulse to match
 }
 
 void MainPanel::handle_homing_cb(lv_event_t *event) {

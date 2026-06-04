@@ -2,11 +2,15 @@
 // pono_home.cpp - Pono Print home cockpit builder (see pono_home.h)
 //
 // Pure LVGL v8 + pono_theme tokens, designed natively for the printer's real
-// 480x272 (no 800px scaling baggage). Coordinates are absolute within `parent`.
+// 480x272 (no 800px scaling baggage). Laid out on ONE grid: 12px outer margin,
+// a top bar, a two-column main zone (hero + readouts/actions), and a bottom
+// nav bar. Every element shares the same margins and gutters - the old
+// hand-placed magic numbers were why it read as scattered.
+//
 // "Crazy good using every trick" - within a 2-core ARMv7 software renderer
-// (no GPU): depth via baked gradients (rendered once, zero idle cost), a
-// glowing hero arc, mono heat-aware instruments, and exactly one tiny idle
-// pulse. No perpetual full-area animation.
+// (no GPU): depth via baked gradients (rendered once, zero idle cost), one
+// hero arc, heat-aware instruments, and exactly one tiny idle pulse. No
+// perpetual full-area animation.
 
 #include "pono_home.h"
 #include "pono_theme.h"
@@ -90,10 +94,49 @@ void set_state_pulse(lv_obj_t *dot, bool on) {
   if (!dot) return;
   lv_anim_del(dot, nullptr);
   if (on) {
-    glow_pulse(dot, color_accent_secondary, 3, 12, 850);
+    glow_pulse(dot, color_accent_secondary, 3, 11, 850);
   } else {
     lv_obj_set_style_shadow_width(dot, 3, 0);  // settle to a calm static dot
   }
+}
+
+// Heat-aware temperature readout: "Nozzle        248 / 250" (or "off" when idle).
+// Fixed columns so a digit-count change on live update never shifts the layout.
+static void temp_card(lv_obj_t *p, int x, int y, int w, int h, const char *name,
+                      int val, int target,
+                      lv_obj_t **o_card, lv_obj_t **o_val, lv_obj_t **o_set) {
+  lv_obj_t *c = card(p, x, y, w, h, color_surface_elevated, 12);
+  vgrad(c, color_surface_elevated, color_surface_raised);
+  hairline(c, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *nm = lbl(c, name, font_caption, color_text_secondary, 0, 0);
+  lv_obj_align(nm, LV_ALIGN_LEFT_MID, 14, 0);
+  lv_color_t vc = (val >= 240) ? color_state_error
+                : (val >= 45)  ? color_state_warning
+                               : color_text_primary;
+  char vb[12]; snprintf(vb, sizeof vb, "%d", val);
+  lv_obj_t *v = lbl(c, vb, font_num_medium, vc, 0, 0);
+  lv_obj_align(v, LV_ALIGN_LEFT_MID, 118, 0);
+  char sb[16];
+  if (target > 0) snprintf(sb, sizeof sb, "/ %d", target);
+  else            snprintf(sb, sizeof sb, "off");
+  lv_obj_t *s = lbl(c, sb, font_caption, color_text_secondary, 0, 0);
+  lv_obj_align(s, LV_ALIGN_RIGHT_MID, -14, 0);
+  if (o_card) *o_card = c;
+  if (o_val)  *o_val = v;
+  if (o_set)  *o_set = s;
+}
+
+// Bottom-bar navigation tile: centered icon over a caption.
+static lv_obj_t *nav_tile(lv_obj_t *p, int x, int y, int w, int h,
+                          const char *icon, const char *name, const lv_font_t *ms) {
+  lv_obj_t *t = card(p, x, y, w, h, color_surface_elevated, 12);
+  vgrad(t, color_surface_elevated, color_surface_raised);
+  hairline(t, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *ic = lbl(t, icon, ms, color_accent_primary, 0, 0);
+  lv_obj_align(ic, LV_ALIGN_TOP_MID, 0, 9);
+  lv_obj_t *nl = lbl(t, name, font_micro, color_text_secondary, 0, 0);
+  lv_obj_align(nl, LV_ALIGN_BOTTOM_MID, 0, -7);
+  return t;
 }
 
 // ---- model ----------------------------------------------------------------
@@ -104,7 +147,7 @@ HomeModel demo_home_model() {
   m.progress_pct = 47;
   m.layer = 84;
   m.layer_total = 180;
-  m.job_name = "DA OMEGA CUBE";
+  m.job_name = "omega_cube.gcode";
   m.material = "PA-CF . 0.25 diamond";
   m.nozzle = 248;
   m.nozzle_set = 250;
@@ -114,166 +157,149 @@ HomeModel demo_home_model() {
   return m;
 }
 
+HomeModel demo_home_idle_model() {
+  HomeModel m{};
+  m.printing = false;
+  m.progress_pct = 0;
+  m.layer = 0;
+  m.layer_total = 0;
+  m.job_name = "";
+  m.material = "PA-CF . 0.25 diamond";
+  m.nozzle = 32;
+  m.nozzle_set = 0;
+  m.bed = 32;
+  m.bed_set = 0;
+  m.eta = "";
+  return m;
+}
+
 // ---- the cockpit -----------------------------------------------------------
 
 lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   const lv_font_t *ms = &lv_font_montserrat_14; // built-in: carries LV_SYMBOL_*
+  const bool pr = m.printing;
+
+  // ---- one grid for the whole screen ----
+  const int PAD = 12, GUT = 10, W = 480, H = 272;
+  const int CX0 = PAD, CX1 = W - PAD;             // content x: 12 .. 468 (456 wide)
+  const int TOP_Y = 10, TOP_H = 26;               // top bar
+  const int MAIN_Y = TOP_Y + TOP_H + 8;           // 44
+  const int BAR_H = 54, BAR_Y = H - PAD - BAR_H;  // 206
+  const int MAIN_H = BAR_Y - GUT - MAIN_Y;        // 152
 
   lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_pad_all(parent, 0, 0);
 
-  // Static ocean-depth gradient backdrop. No animation -> zero idle cost on the
-  // always-on dashboard (the boot screen gets the live tide; here a baked
-  // navy -> teal-black vertical wash carries the depth for free).
-  lv_obj_set_style_bg_color(parent, lv_color_hex(0x0c1422), 0);
-  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x05090f), 0);
+  // baked vertical depth wash (rendered once, zero idle cost)
+  lv_obj_set_style_bg_color(parent, lv_color_hex(0x0b1220), 0);
+  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x070b12), 0);
   lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-  // ---- left rail ----
-  lv_obj_t *rail = card(parent, 0, 0, 52, 272, color_surface_raised, 0);
-  vgrad(rail, color_surface_elevated, color_surface_raised);
-  lv_obj_t *chip = card(parent, 8, 12, 36, 36, color_accent_primary, 10, 55);
-  soft_shadow(chip, color_accent_primary, 14, LV_OPA_40);
-  lv_obj_t *home_ic = lbl(parent, LV_SYMBOL_HOME, ms, color_accent_primary, 0, 0);
-  lv_obj_align_to(home_ic, chip, LV_ALIGN_CENTER, 0, 0);
-  lbl(parent, LV_SYMBOL_LIST,     ms, color_text_secondary, 18, 80);
-  lbl(parent, LV_SYMBOL_TINT,     ms, color_text_secondary, 18, 128);
-  lbl(parent, LV_SYMBOL_SETTINGS, ms, color_text_secondary, 18, 228);
-
-  // ---- top bar ----
-  lbl(parent, "Pono Print", font_h2, color_text_primary, 66, 8);
+  // ===== TOP BAR: wordmark + one state chip + a hairline divider =====
+  lbl(parent, "Pono Print", font_h2, color_text_primary, CX0, TOP_Y + 2);
   {
-    lv_obj_t *pill = card(parent, 374, 10, 94, 22, color_surface_elevated, 11);
-    hairline(pill, color_accent_secondary, opa_border_strong);
-    lv_obj_t *dot = card(pill, 0, 0, 8, 8, color_accent_secondary, 4);
-    lv_obj_align(dot, LV_ALIGN_LEFT_MID, 8, 0);
-    soft_shadow(dot, color_accent_secondary, 8, LV_OPA_COVER);
-    lv_obj_t *prl = lbl(pill, "PRINTING", font_micro, color_accent_secondary, 0, 0);
-    lv_obj_align(prl, LV_ALIGN_LEFT_MID, 22, 0);
-    if (m.printing) {
-      glow_pulse(dot, color_accent_secondary, 3, 12, 850);  // tiny: the "alive" beat (printing only)
-    } else {
-      lv_obj_add_flag(pill, LV_OBJ_FLAG_HIDDEN);  // idle: hide pill AND start no anim -> zero idle cost
-    }
+    lv_color_t sc = pr ? color_accent_secondary : color_text_secondary;
+    lv_obj_t *pill = card(parent, CX1 - 104, TOP_Y, 104, TOP_H - 2, color_surface_elevated, 12);
+    hairline(pill, sc, opa_border_strong);
+    lv_obj_t *dot = card(pill, 0, 0, 8, 8, sc, 4);
+    lv_obj_align(dot, LV_ALIGN_LEFT_MID, 11, 0);
+    lv_obj_t *prl = lbl(pill, pr ? "PRINTING" : "READY", font_micro, sc, 0, 0);
+    lv_obj_align(prl, LV_ALIGN_LEFT_MID, 25, 0);
+    if (pr) glow_pulse(dot, color_accent_secondary, 3, 11, 850);
     if (out) { out->state_pill = pill; out->state_dot = dot; }
   }
+  card(parent, CX0, TOP_Y + TOP_H + 1, CX1 - CX0, 1, color_text_tertiary, 0, opa_border_subtle);
 
-  // ---- job hero: progress ring with a soft cyan halo ----
-  lv_obj_t *halo = card(parent, 60, 62, 100, 100, color_surface_base, 50, LV_OPA_TRANSP);
-  soft_shadow(halo, color_accent_primary, 24, LV_OPA_30);
+  // ===== MAIN: left hero (ring) + right column (temps + actions) =====
+  const int HERO_W = 176, HERO_X = CX0;
+  const int RCOL_X = CX0 + HERO_W + GUT, RCOL_W = CX1 - RCOL_X;  // 198, 270
+
+  // ---- hero card ----
+  lv_obj_t *hero = card(parent, HERO_X, MAIN_Y, HERO_W, MAIN_H, color_surface_raised, 16);
+  vgrad(hero, color_surface_elevated, color_surface_raised);
+  hairline(hero, color_text_tertiary, opa_border_subtle);
+
+  const int ringD = 104, ringX = HERO_X + (HERO_W - ringD) / 2, ringY = MAIN_Y + 14;
   lv_obj_t *arc = lv_arc_create(parent);
-  lv_obj_set_size(arc, 100, 100);
-  lv_obj_set_pos(arc, 60, 62);
+  lv_obj_set_size(arc, ringD, ringD);
+  lv_obj_set_pos(arc, ringX, ringY);
   lv_arc_set_rotation(arc, 270);
   lv_arc_set_bg_angles(arc, 0, 360);
   lv_arc_set_range(arc, 0, 100);
-  lv_arc_set_value(arc, m.progress_pct);
+  lv_arc_set_value(arc, pr ? m.progress_pct : 0);
   lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
   lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_style_arc_width(arc, 6, LV_PART_MAIN);
-  lv_obj_set_style_arc_width(arc, 11, LV_PART_INDICATOR);
-  lv_obj_set_style_arc_color(arc, color_surface_elevated, LV_PART_MAIN);
+  lv_obj_set_style_arc_width(arc, 8, LV_PART_MAIN);
+  lv_obj_set_style_arc_width(arc, 8, LV_PART_INDICATOR);
+  lv_obj_set_style_arc_color(arc, color_surface_base, LV_PART_MAIN);
   lv_obj_set_style_arc_color(arc, color_accent_primary, LV_PART_INDICATOR);
   lv_obj_set_style_arc_rounded(arc, true, LV_PART_INDICATOR);
 
-  char pct[8];
-  snprintf(pct, sizeof pct, "%d%%", m.progress_pct);
-  lv_obj_t *pl = lbl(parent, pct, font_num_large, color_text_primary, 0, 0);
-  lv_obj_align_to(pl, arc, LV_ALIGN_CENTER, 0, -7);
-  char ly[28];
-  snprintf(ly, sizeof ly, "layer %d / %d", m.layer, m.layer_total);
-  lv_obj_t *lyl = lbl(parent, ly, font_micro, color_text_secondary, 0, 0);
-  lv_obj_align_to(lyl, arc, LV_ALIGN_CENTER, 0, 18);
+  char pctbuf[8];
+  if (pr) snprintf(pctbuf, sizeof pctbuf, "%d%%", m.progress_pct);
+  lv_obj_t *pl = lbl(parent, pr ? pctbuf : "Ready",
+                     pr ? font_num_large : font_h2, color_text_primary, 0, 0);
+  lv_obj_align_to(pl, arc, LV_ALIGN_CENTER, 0, 0);
 
-  // ---- job meta (right of ring) ----
-  lv_obj_t *jn = lbl(parent, m.job_name, font_h2, color_text_primary, 172, 68);
-  lv_label_set_long_mode(jn, LV_LABEL_LONG_DOT);
-  lv_obj_set_width(jn, 190);
-  lv_obj_t *mat_l = lbl(parent, m.material, font_caption, color_text_secondary, 172, 93);
-  lv_obj_t *etap = card(parent, 172, 114, 150, 24, color_surface_elevated, 8);
-  hairline(etap, color_accent_primary, opa_border_medium);
-  lv_obj_t *eta_l = lbl(parent, m.eta, font_caption, color_accent_primary, 184, 118);
+  char lybuf[28];
+  if (pr) snprintf(lybuf, sizeof lybuf, "layer %d / %d", m.layer, m.layer_total);
+  lv_obj_t *lyl = lbl(parent, pr ? lybuf : m.material, font_micro, color_text_secondary, 0, 0);
+  lv_obj_align_to(lyl, arc, LV_ALIGN_OUT_BOTTOM_MID, 0, 8);
 
-  // ---- pause / stop (gradient fill + icon) ----
-  lv_obj_t *ps = card(parent, 172, 150, 180, 36, color_state_error, 10);
-  vgrad(ps, lv_color_hex(0xff5d77), lv_color_hex(0xe11d48));
-  soft_shadow(ps, color_state_error, 12, LV_OPA_40);
-  lv_obj_t *psl = lbl(parent, LV_SYMBOL_PAUSE "   PAUSE / STOP", ms, color_text_primary, 0, 0);
-  lv_obj_align_to(psl, ps, LV_ALIGN_CENTER, 0, 0);
+  lv_obj_t *eta_l = lbl(parent, pr ? m.eta : "", font_caption, color_accent_primary, 0, 0);
+  lv_obj_align_to(eta_l, lyl, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
 
-  // ---- temp instruments (mono numbers, amber when hot) ----
-  lv_obj_t *nzc = card(parent, 360, 48, 110, 48, color_surface_elevated, 10);
-  vgrad(nzc, color_surface_elevated, color_surface_raised);
-  hairline(nzc, color_text_tertiary, opa_border_subtle);
-  lbl(parent, "NOZZLE", font_micro, color_text_secondary, 370, 54);
-  lv_color_t nz_col = (m.nozzle >= 240) ? color_state_error : (m.nozzle >= 50 ? color_state_warning : color_text_primary);
-  char nzt[8]; snprintf(nzt, sizeof nzt, "%d", m.nozzle);
-  lv_obj_t *nz_num = lbl(parent, nzt, font_num_medium, nz_col, 370, 68);
-  char nzs[10]; snprintf(nzs, sizeof nzs, "/%d", m.nozzle_set);
-  lv_obj_t *nz_set = lbl(parent, nzs, font_num_small, color_text_secondary, 410, 75);
-  lbl(parent, "tap", font_micro, color_accent_primary, 446, 54);
+  // ---- right column: two temp readouts ----
+  const int tH = 42;
+  lv_obj_t *nzc = nullptr, *nz_num = nullptr, *nz_set = nullptr;
+  lv_obj_t *bdc = nullptr, *bd_num = nullptr, *bd_set = nullptr;
+  temp_card(parent, RCOL_X, MAIN_Y, RCOL_W, tH, "Nozzle",
+            m.nozzle, m.nozzle_set, &nzc, &nz_num, &nz_set);
+  temp_card(parent, RCOL_X, MAIN_Y + tH + 8, RCOL_W, tH, "Bed",
+            m.bed, m.bed_set, &bdc, &bd_num, &bd_set);
 
-  lv_obj_t *bdc = card(parent, 360, 102, 110, 48, color_surface_elevated, 10);
-  vgrad(bdc, color_surface_elevated, color_surface_raised);
-  hairline(bdc, color_text_tertiary, opa_border_subtle);
-  lbl(parent, "BED", font_micro, color_text_secondary, 370, 108);
-  lv_color_t bd_col = (m.bed >= 100) ? color_state_error : (m.bed >= 40 ? color_state_warning : color_text_primary);
-  char bdt[8]; snprintf(bdt, sizeof bdt, "%d", m.bed);
-  lv_obj_t *bd_num = lbl(parent, bdt, font_num_medium, bd_col, 370, 122);
-  char bds[10]; snprintf(bds, sizeof bds, "/%d", m.bed_set);
-  lv_obj_t *bd_set = lbl(parent, bds, font_num_small, color_text_secondary, 402, 129);
-  lbl(parent, "tap", font_micro, color_accent_primary, 446, 108);
+  // ---- action row: adaptive primary (Print/Pause) + Tune ----
+  const int ay = MAIN_Y + 2 * (tH + 8);          // 144
+  const int aH = MAIN_Y + MAIN_H - ay;           // 52
+  const int primW = 168;
+  lv_obj_t *prim = card(parent, RCOL_X, ay, primW, aH,
+                        pr ? color_state_error : color_accent_primary, 12);
+  if (pr) vgrad(prim, lv_color_hex(0xff5d77), lv_color_hex(0xe11d48));
+  else    vgrad(prim, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
+  soft_shadow(prim, pr ? color_state_error : color_accent_primary, 12, LV_OPA_40);
+  lv_obj_t *priml = lbl(prim, pr ? (LV_SYMBOL_PAUSE "  Pause") : (LV_SYMBOL_PLAY "  Print"),
+                        ms, pr ? color_text_primary : color_surface_base, 0, 0);
+  lv_obj_center(priml);
 
-  // ---- tune tiers: TUNE (standard) + OMEGA (enhanced) ----
-  // Two tap targets so OMEGA reads as the enhanced option, not the only one.
-  // TUNE = the everyday on-device calibrate; OMEGA = the 1000% suite (glows).
-  lv_obj_t *tn = card(parent, 360, 156, 53, 50, color_surface_elevated, 12);
+  lv_obj_t *tn = card(parent, RCOL_X + primW + GUT - 2, ay, RCOL_W - primW - GUT + 2, aH,
+                      color_surface_elevated, 12);
   vgrad(tn, color_surface_elevated, color_surface_raised);
   hairline(tn, color_text_tertiary, opa_border_medium);
-  lv_obj_t *tnt = lbl(parent, "TUNE", font_caption, color_text_primary, 0, 0);
-  lv_obj_align_to(tnt, tn, LV_ALIGN_TOP_MID, 0, 9);
-  lv_obj_t *tns = lbl(parent, "standard", font_micro, color_text_secondary, 0, 0);
-  lv_obj_align_to(tns, tn, LV_ALIGN_BOTTOM_MID, 0, -9);
+  lv_obj_t *tni = lbl(tn, LV_SYMBOL_SETTINGS, ms, color_accent_primary, 0, 0);
+  lv_obj_align(tni, LV_ALIGN_TOP_MID, 0, 8);
+  lv_obj_t *tnl = lbl(tn, "Tune", font_micro, color_text_secondary, 0, 0);
+  lv_obj_align(tnl, LV_ALIGN_BOTTOM_MID, 0, -7);
 
-  lv_obj_t *om = card(parent, 417, 156, 53, 50, color_surface_base, 12);
-  vgrad(om, color_surface_elevated, color_surface_base);
-  lv_obj_set_style_border_color(om, color_accent_primary, 0);
-  lv_obj_set_style_border_width(om, 2, 0);
-  lv_obj_set_style_border_opa(om, LV_OPA_COVER, 0);
-  soft_shadow(om, color_accent_primary, 10, LV_OPA_40);  // static glow marks the enhanced tier
-  lv_obj_t *omt = lbl(parent, "OMEGA", font_caption, color_accent_primary, 0, 0);
-  lv_obj_align_to(omt, om, LV_ALIGN_TOP_MID, 0, 9);
-  lv_obj_t *oms = lbl(parent, "1000%", font_micro, color_text_secondary, 0, 0);
-  lv_obj_align_to(oms, om, LV_ALIGN_BOTTOM_MID, 0, -9);
-
-  // ---- quick actions (spread across the base) ----
-  struct QA { const char *icon; const char *name; };
-  const QA qa[4] = {
-    {LV_SYMBOL_GPS,       "Move"},
-    {LV_SYMBOL_DOWNLOAD,  "Filament"},
-    {LV_SYMBOL_DIRECTORY, "Files"},
-    {LV_SYMBOL_REFRESH,   "Fans"},
-  };
-  for (int i = 0; i < 4; i++) {
-    int x = 72 + i * 100;
-    lv_obj_t *qc = card(parent, x, 214, 84, 44, color_surface_elevated, 10);
-    if (out) out->qa[i] = qc;
-    vgrad(qc, color_surface_elevated, color_surface_raised);
-    hairline(qc, color_text_tertiary, opa_border_subtle);
-    lv_obj_t *qi = lbl(parent, qa[i].icon, ms, color_text_primary, 0, 0);
-    lv_obj_align_to(qi, qc, LV_ALIGN_TOP_MID, 0, 6);
-    lv_obj_t *qn = lbl(parent, qa[i].name, font_micro, color_text_secondary, 0, 0);
-    lv_obj_align_to(qn, qc, LV_ALIGN_BOTTOM_MID, 0, -6);
+  // ===== BOTTOM NAV BAR: five equal tiles =====
+  const char *bi[5] = {LV_SYMBOL_GPS, LV_SYMBOL_DOWNLOAD, LV_SYMBOL_DIRECTORY,
+                       LV_SYMBOL_LOOP, LV_SYMBOL_LIST};
+  const char *bn[5] = {"Move", "Filament", "Files", "Fans", "More"};
+  const int tw = 84, tg = 8;
+  const int bx0 = CX0 + ((CX1 - CX0) - (5 * tw + 4 * tg)) / 2;  // centered (== 14)
+  for (int i = 0; i < 5; i++) {
+    int x = bx0 + i * (tw + tg);
+    lv_obj_t *t = nav_tile(parent, x, BAR_Y, tw, BAR_H, bi[i], bn[i], ms);
+    if (out && i < 4) out->qa[i] = t;
   }
 
   if (out) {
     out->arc = arc; out->pct = pl; out->layer = lyl;
-    out->job = jn; out->material = mat_l; out->eta = eta_l;
+    out->job = nullptr; out->material = nullptr; out->eta = eta_l;
     out->nozzle = nz_num; out->bed = bd_num;
     out->nozzle_set = nz_set; out->bed_set = bd_set;
     out->tile_nozzle = nzc; out->tile_bed = bdc;
-    out->tile_tune = tn; out->tile_omega = om; out->btn_pausestop = ps;
+    out->tile_tune = tn; out->tile_omega = nullptr; out->btn_pausestop = prim;
   }
   return arc;
 }

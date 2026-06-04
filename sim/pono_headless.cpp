@@ -167,6 +167,8 @@ int main(int argc, char **argv) {
     pono::build_tune(lv_scr_act());
   } else if (screen == "settings" || screen == "expert") {
     pono::build_settings(lv_scr_act());
+  } else if (screen == "idle") {
+    pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
   } else {
     pono::build_home(lv_scr_act(), pono::demo_home_model());
   }

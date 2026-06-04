@@ -31,6 +31,9 @@ struct HomeModel {
 // The mockup's values, for sim render + first-boot placeholder.
 HomeModel demo_home_model();
 
+// Idle-state values (no print running) - the state the printer sits in most.
+HomeModel demo_home_idle_model();
+
 // Live handles into a built home. The app keeps these to update values in
 // place (no rebuild) and to attach tap callbacks. NULL-safe: every field may
 // be null, callers must guard. The sim ignores it (passes nullptr).

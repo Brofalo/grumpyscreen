@@ -23,6 +23,7 @@
 #include <mutex>
 #include <map>
 #include <memory>
+#include <string>
 
 class MainPanel : public NotifyConsumer {
  public:
@@ -91,6 +92,8 @@ class MainPanel : public NotifyConsumer {
 
  private:
   void create_main(lv_obj_t *parent);
+  void rebuild_home();        // Pono: rebuild the cockpit in the current state's layout (idle<->printing flip)
+  void attach_home_taps();    // Pono: wire cockpit tap targets to _home_tap (reused after rebuild)
   static void _tabview_event_cb(lv_event_t *e);
   KWebSocketClient &ws;
   HomingPanel homing_panel;
@@ -111,6 +114,11 @@ class MainPanel : public NotifyConsumer {
   bool home_pulsing_ = false;     // is the state-dot pulse currently running
   double home_progress_ = 0.0;    // last-seen virtual_sdcard progress (survives Moonraker deltas)
   double home_duration_ = 0.0;    // last-seen print_stats.print_duration (survives Moonraker deltas)
+  int home_nozzle_ = 0, home_nozzle_set_ = 0;   // cached temps (survive deltas; feed the rebuild model)
+  int home_bed_ = 0, home_bed_set_ = 0;
+  int home_layer_ = 0, home_layer_total_ = 0;
+  std::string home_job_;          // current filename (stable storage for the rebuild model)
+  std::string home_eta_;          // computed ETA string (stable storage for the rebuild model)
   PrintStatusPanel print_status_panel;
   PrintPanel print_panel;
   Numpad numpad;
