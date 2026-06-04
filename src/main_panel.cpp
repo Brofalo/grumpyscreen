@@ -334,6 +334,7 @@ void MainPanel::create_pono_screens() {
   mesh_scr_   = make(); pono::build_mesh(mesh_scr_, &mesh_h_);
   system_scr_ = make(); pono::build_system(system_scr_, &system_h_);
   power_scr_  = make(); pono::build_power(power_scr_, &power_h_);
+  lights_scr_ = make(); pono::build_lights(lights_scr_, &lights_h_);
 
   lv_obj_t *taps[] = {
     move_h_.back, move_h_.xplus, move_h_.xminus, move_h_.yplus, move_h_.yminus,
@@ -349,8 +350,10 @@ void MainPanel::create_pono_screens() {
     files_h_.back,
     tune_h_.back, tune_h_.standard, tune_h_.omega,
     tune_h_.cals[0], tune_h_.cals[1], tune_h_.cals[2], tune_h_.cals[3], tune_h_.cals[4],
-    more_h_.back, more_h_.wifi, more_h_.expert, more_h_.mesh, more_h_.system, more_h_.power,
+    more_h_.back, more_h_.wifi, more_h_.expert, more_h_.mesh, more_h_.led, more_h_.system, more_h_.power,
     mesh_h_.back, system_h_.back,
+    lights_h_.back, lights_h_.case_off, lights_h_.case_50, lights_h_.case_full,
+    lights_h_.hot_off, lights_h_.hot_50, lights_h_.hot_full,
     power_h_.back, power_h_.restart_klipper, power_h_.restart_fw, power_h_.reboot, power_h_.shutdown,
     settings_h_.back, settings_h_.speed, settings_h_.flow, settings_h_.zoff, settings_h_.pa, settings_h_.fan,
     settings_h_.speed_p[0], settings_h_.speed_p[1], settings_h_.speed_p[2],
@@ -364,14 +367,14 @@ void MainPanel::create_pono_screens() {
 }
 
 void MainPanel::show_pono(lv_obj_t *scr) {
-  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_, mesh_scr_, system_scr_, power_scr_};
+  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_, mesh_scr_, system_scr_, power_scr_, lights_scr_};
   for (lv_obj_t *s : all) if (s) lv_obj_add_flag(s, LV_OBJ_FLAG_HIDDEN);
   if (home_scr) lv_obj_add_flag(home_scr, LV_OBJ_FLAG_HIDDEN);
   if (scr) { lv_obj_clear_flag(scr, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(scr); }
 }
 
 void MainPanel::back_to_home() {
-  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_, mesh_scr_, system_scr_, power_scr_};
+  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_, mesh_scr_, system_scr_, power_scr_, lights_scr_};
   for (lv_obj_t *s : all) if (s) lv_obj_add_flag(s, LV_OBJ_FLAG_HIDDEN);
   show_home();
 }
@@ -439,7 +442,8 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == mv.back || t == fl.back || t == tp.back || t == fn.back ||
       t == s->files_h_.back || t == tu.back ||
       t == s->more_h_.back || t == s->settings_h_.back ||
-      t == s->mesh_h_.back || t == s->system_h_.back || t == s->power_h_.back) { s->back_to_home(); return; }
+      t == s->mesh_h_.back || t == s->system_h_.back || t == s->power_h_.back ||
+      t == s->lights_h_.back) { s->back_to_home(); return; }
   // Move jog (relative)
   double st = s->move_step_;
   if (t == mv.xplus)  { s->ws.gcode_script(fmt::format("G91\nG1 X{} F6000\nG90", st)); return; }
@@ -506,11 +510,20 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == s->more_h_.mesh)    { s->show_pono(s->mesh_scr_); return; }         // Bed mesh heatmap
   if (t == s->more_h_.system)  { s->populate_system(); s->show_pono(s->system_scr_); return; }
   if (t == s->more_h_.power)   { s->show_pono(s->power_scr_); return; }
+  if (t == s->more_h_.led)     { s->show_pono(s->lights_scr_); return; }
   // Power actions
   if (t == s->power_h_.restart_klipper) { s->ws.gcode_script("RESTART"); return; }
   if (t == s->power_h_.restart_fw)      { s->ws.gcode_script("FIRMWARE_RESTART"); return; }
   if (t == s->power_h_.reboot)          { s->ws.send_jsonrpc("machine.reboot"); return; }
   if (t == s->power_h_.shutdown)        { s->ws.send_jsonrpc("machine.shutdown"); return; }
+  // Lights (SET_LED white channel)
+  pono::LightsHandles &li = s->lights_h_;
+  if (t == li.case_off)  { s->ws.gcode_script("SET_LED LED=case WHITE=0");    return; }
+  if (t == li.case_50)   { s->ws.gcode_script("SET_LED LED=case WHITE=0.5");  return; }
+  if (t == li.case_full) { s->ws.gcode_script("SET_LED LED=case WHITE=1.0");  return; }
+  if (t == li.hot_off)   { s->ws.gcode_script("SET_LED LED=hotend WHITE=0");   return; }
+  if (t == li.hot_50)    { s->ws.gcode_script("SET_LED LED=hotend WHITE=0.5"); return; }
+  if (t == li.hot_full)  { s->ws.gcode_script("SET_LED LED=hotend WHITE=1.0"); return; }
   // Expert Tune (live): value pills open the keypad, presets apply directly,
   // z-offset uses live babystep. Every control writes straight to Klipper and
   // updates its pill so the change is visible immediately.

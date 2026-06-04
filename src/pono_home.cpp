@@ -800,9 +800,10 @@ void build_more(lv_obj_t *parent, MoreHandles *h) {
   lv_obj_t *w  = row(LV_SYMBOL_WIFI, "Wi-Fi & Network", "Scan and connect");
   lv_obj_t *m  = row(LV_SYMBOL_IMAGE, "Bed Mesh", "Live probed surface heatmap");
   lv_obj_t *e  = row(LV_SYMBOL_SETTINGS, "Expert Tune", "Live print tuning");
+  lv_obj_t *li = row(LV_SYMBOL_CHARGE, "Lights", "Case + hotend LEDs");
   lv_obj_t *sy = row(LV_SYMBOL_LIST, "System", "Version, network, uptime");
   lv_obj_t *pw = row(LV_SYMBOL_POWER, "Power", "Restart, reboot, shutdown");
-  if (h) { h->wifi = w; h->mesh = m; h->expert = e; h->system = sy; h->power = pw; }
+  if (h) { h->wifi = w; h->mesh = m; h->expert = e; h->led = li; h->system = sy; h->power = pw; }
 }
 
 void build_system(lv_obj_t *parent, SystemHandles *h) {
@@ -849,6 +850,30 @@ void build_power(lv_obj_t *parent, PowerHandles *h) {
   vgrad(sd, lv_color_hex(0xff5a5a), lv_color_hex(0xd83232));
   lv_obj_center(lbl(sd, "Shutdown", font_body, color_surface_base, 0, 0));
   if (h) { h->restart_klipper = rk; h->restart_fw = rf; h->reboot = rb; h->shutdown = sd; }
+}
+
+void build_lights(lv_obj_t *parent, LightsHandles *h) {
+  lv_obj_t *back = screen_header(parent, "Lights");
+  if (h) h->back = back;
+  auto section = [&](int y, const char *name, lv_obj_t **off, lv_obj_t **mid, lv_obj_t **full) {
+    lv_obj_t *c = card(parent, 12, y, 456, 88, color_surface_raised, 14);
+    vgrad(c, color_surface_elevated, color_surface_raised);
+    hairline(c, color_text_tertiary, opa_border_subtle);
+    lv_obj_t *nm = lbl(c, name, font_body, color_text_primary, 0, 0);
+    lv_obj_align(nm, LV_ALIGN_TOP_LEFT, 16, 12);
+    const int bw = 134, bh = 38, gap = 8, x0 = 16, by = 40;
+    *off = tap_btn(c, x0, by, bw, bh, "Off", font_caption, color_text_secondary);
+    *mid = tap_btn(c, x0 + bw + gap, by, bw, bh, "50%", font_caption, color_text_primary);
+    lv_obj_t *fl = card(c, x0 + 2 * (bw + gap), by, bw, bh, color_accent_primary, 8);
+    vgrad(fl, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
+    lv_obj_center(lbl(fl, "Full", font_caption, color_surface_base, 0, 0));
+    *full = fl;
+  };
+  lv_obj_t *co, *cm, *cf, *ho, *hm, *hf;
+  section(56, "Case", &co, &cm, &cf);
+  section(150, "Hotend", &ho, &hm, &hf);
+  if (h) { h->case_off = co; h->case_50 = cm; h->case_full = cf;
+           h->hot_off = ho; h->hot_50 = hm; h->hot_full = hf; }
 }
 
 void build_fans(lv_obj_t *parent, FansHandles *h) {

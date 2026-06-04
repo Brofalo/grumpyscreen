@@ -185,6 +185,8 @@ int main(int argc, char **argv) {
     pono::build_system(lv_scr_act());
   } else if (screen == "power") {
     pono::build_power(lv_scr_act());
+  } else if (screen == "lights") {
+    pono::build_lights(lv_scr_act());
   } else if (screen == "idle") {
     pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
   } else {

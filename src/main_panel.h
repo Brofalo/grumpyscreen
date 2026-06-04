@@ -143,10 +143,11 @@ class MainPanel : public NotifyConsumer {
   pono::MoreHandles more_h_;
   pono::SettingsHandles settings_h_;
   double tune_zoff_ = 0.0;         // tracked Z babystep offset (Expert Tune pill)
-  lv_obj_t *mesh_scr_ = nullptr, *system_scr_ = nullptr, *power_scr_ = nullptr;
+  lv_obj_t *mesh_scr_ = nullptr, *system_scr_ = nullptr, *power_scr_ = nullptr, *lights_scr_ = nullptr;
   pono::MeshHandles mesh_h_;
   pono::SystemHandles system_h_;
   pono::PowerHandles power_h_;
+  pono::LightsHandles lights_h_;
   std::vector<float> mesh_z_;      // flattened probed_matrix for the heatmap
   double move_step_ = 1.0;        // selected jog step (mm)
   std::vector<std::string> files_names_;  // index -> gcode filename for row taps
