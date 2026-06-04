@@ -122,7 +122,7 @@ WifiPanel::WifiPanel(std::mutex &l)
   lv_obj_set_style_text_font(wifi_title, pono::font_h2, 0);
   lv_obj_set_style_text_color(wifi_title, pono::color_text_primary, 0);
   lv_obj_add_flag(wifi_title, LV_OBJ_FLAG_FLOATING);
-  lv_obj_align(wifi_title, LV_ALIGN_TOP_LEFT, 64, 14);
+  lv_obj_align(wifi_title, LV_ALIGN_TOP_MID, 0, 14);   // centered: Back left, Wi-Fi center, Refresh right
   lv_obj_align(back_btn.get_container(), LV_ALIGN_TOP_LEFT, 8, 6);
   lv_obj_align(refresh_btn.get_container(), LV_ALIGN_TOP_RIGHT, -8, 6);
 
@@ -151,6 +151,7 @@ void WifiPanel::foreground() {
     return;
   }
   lv_label_set_text(wifi_label, "Scanning for networks...");
+  lv_obj_add_flag(password_input, LV_OBJ_FLAG_HIDDEN);  // no empty box during scan
   lv_obj_clear_flag(prompt_cont, LV_OBJ_FLAG_HIDDEN);
   lv_obj_clear_flag(spinner, LV_OBJ_FLAG_HIDDEN);
   wpa_event.send_command("SCAN");
