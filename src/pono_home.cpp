@@ -863,6 +863,41 @@ void seg_highlight(lv_obj_t *const *btns, int n, int active) {
   }
 }
 
+void build_confirm(lv_obj_t *parent, ConfirmHandles *h) {
+  // Scrim first -> lower z than the card; both live on lv_layer_top, hidden
+  // until the app shows them before a destructive action.
+  lv_obj_t *scrim = lv_obj_create(parent);
+  lv_obj_remove_style_all(scrim);
+  lv_obj_set_size(scrim, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_bg_color(scrim, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(scrim, LV_OPA_50, 0);
+  lv_obj_add_flag(scrim, LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(scrim, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *cd = card(parent, 70, 71, 340, 130, color_surface_raised, 14);  // centered on 480x272
+  vgrad(cd, color_surface_elevated, color_surface_raised);
+  lv_obj_set_style_border_color(cd, color_accent_primary, 0);
+  lv_obj_set_style_border_width(cd, 1, 0);
+  lv_obj_set_style_border_opa(cd, LV_OPA_70, 0);
+  lv_obj_set_style_shadow_color(cd, lv_color_black(), 0);
+  lv_obj_set_style_shadow_width(cd, 24, 0);
+  lv_obj_set_style_shadow_opa(cd, LV_OPA_50, 0);
+  lv_obj_add_flag(cd, LV_OBJ_FLAG_HIDDEN);
+
+  lv_obj_t *msg = lbl(cd, "Are you sure?", font_body, color_text_primary, 0, 0);
+  lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(msg, 308);
+  lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(msg, LV_ALIGN_TOP_MID, 0, 22);
+
+  lv_obj_t *cancel = tap_btn(cd, 16, 76, 150, 40, "Cancel", font_body, color_text_primary);
+  lv_obj_t *confirm = card(cd, 174, 76, 150, 40, color_state_error, 10);
+  vgrad(confirm, lv_color_hex(0xff5a5f), lv_color_hex(0xd92d36));
+  lv_obj_center(lbl(confirm, "Confirm", font_body, color_surface_base, 0, 0));
+
+  if (h) { h->scrim = scrim; h->card = cd; h->msg = msg; h->cancel = cancel; h->confirm = confirm; }
+}
+
 void build_lights(lv_obj_t *parent, LightsHandles *h) {
   lv_obj_t *back = screen_header(parent, "Lights");
   if (h) h->back = back;

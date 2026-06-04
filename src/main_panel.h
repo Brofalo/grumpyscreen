@@ -25,6 +25,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <functional>
 
 class MainPanel : public NotifyConsumer {
  public:
@@ -100,6 +101,8 @@ class MainPanel : public NotifyConsumer {
   void show_pono(lv_obj_t *scr);          // hide cockpit + others, reveal scr
   void back_to_home();                    // hide all sub-screens, show the cockpit
   void populate_system();                 // fill the System screen (version/ip/uptime)
+  void confirm(const char *msg, std::function<void()> action);  // modal confirm before destructive actions
+  static void _confirm_tap(lv_event_t *e);
   void render_bed_mesh(const json &bm);   // draw the heatmap from a bed_mesh status object
   void populate_files();                  // query Moonraker, fill the Files list
   static void _sub_tap(lv_event_t *e);    // sub-screen button -> gcode action
@@ -150,6 +153,8 @@ class MainPanel : public NotifyConsumer {
   pono::LightsHandles lights_h_;
   int led_case_level_ = 2;  // 0=off,1=50%,2=full -> Lights screen highlight (default boot=full)
   int led_hot_level_ = 2;
+  pono::ConfirmHandles confirm_h_;            // modal confirm dialog (on lv_layer_top)
+  std::function<void()> pending_confirm_;     // action to run if the user confirms
   std::vector<float> mesh_z_;      // flattened probed_matrix for the heatmap
   double move_step_ = 1.0;        // selected jog step (mm)
   std::vector<std::string> files_names_;  // index -> gcode filename for row taps

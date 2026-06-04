@@ -376,6 +376,29 @@ void MainPanel::create_pono_screens() {
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_sub_tap, LV_EVENT_CLICKED, this);
   if (fan_h_.part_slider) lv_obj_add_event_cb(fan_h_.part_slider, &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
   if (tune_h_.speed)      lv_obj_add_event_cb(tune_h_.speed, &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
+
+  // Modal confirm dialog on the top layer (above every sub-screen).
+  pono::build_confirm(lv_layer_top(), &confirm_h_);
+  if (confirm_h_.cancel)  lv_obj_add_event_cb(confirm_h_.cancel,  &MainPanel::_confirm_tap, LV_EVENT_CLICKED, this);
+  if (confirm_h_.confirm) lv_obj_add_event_cb(confirm_h_.confirm, &MainPanel::_confirm_tap, LV_EVENT_CLICKED, this);
+  if (confirm_h_.scrim)   lv_obj_add_event_cb(confirm_h_.scrim,   &MainPanel::_confirm_tap, LV_EVENT_CLICKED, this);
+}
+
+void MainPanel::confirm(const char *msg, std::function<void()> action) {
+  pending_confirm_ = std::move(action);
+  if (confirm_h_.msg) lv_label_set_text(confirm_h_.msg, msg);
+  if (confirm_h_.scrim)  { lv_obj_clear_flag(confirm_h_.scrim, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(confirm_h_.scrim); }
+  if (confirm_h_.card)   { lv_obj_clear_flag(confirm_h_.card,  LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(confirm_h_.card); }
+}
+
+void MainPanel::_confirm_tap(lv_event_t *e) {
+  auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
+  lv_obj_t *t = lv_event_get_target(e);
+  bool ok = (t == s->confirm_h_.confirm);
+  if (s->confirm_h_.card)  { lv_obj_add_flag(s->confirm_h_.card,  LV_OBJ_FLAG_HIDDEN); lv_obj_move_background(s->confirm_h_.card); }
+  if (s->confirm_h_.scrim) { lv_obj_add_flag(s->confirm_h_.scrim, LV_OBJ_FLAG_HIDDEN); lv_obj_move_background(s->confirm_h_.scrim); }
+  if (ok && s->pending_confirm_) s->pending_confirm_();
+  s->pending_confirm_ = nullptr;
 }
 
 void MainPanel::show_pono(lv_obj_t *scr) {
@@ -546,10 +569,10 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     s->show_pono(s->lights_scr_); return;
   }
   // Power actions
-  if (t == s->power_h_.restart_klipper) { s->ws.gcode_script("RESTART"); return; }
-  if (t == s->power_h_.restart_fw)      { s->ws.gcode_script("FIRMWARE_RESTART"); return; }
-  if (t == s->power_h_.reboot)          { s->ws.send_jsonrpc("machine.reboot"); return; }
-  if (t == s->power_h_.shutdown)        { s->ws.send_jsonrpc("machine.shutdown"); return; }
+  if (t == s->power_h_.restart_klipper) { s->confirm("Restart Klipper?",       [s]{ s->ws.gcode_script("RESTART"); }); return; }
+  if (t == s->power_h_.restart_fw)      { s->confirm("Restart firmware?",      [s]{ s->ws.gcode_script("FIRMWARE_RESTART"); }); return; }
+  if (t == s->power_h_.reboot)          { s->confirm("Reboot the printer?",    [s]{ s->ws.send_jsonrpc("machine.reboot"); }); return; }
+  if (t == s->power_h_.shutdown)        { s->confirm("Shut down the printer?", [s]{ s->ws.send_jsonrpc("machine.shutdown"); }); return; }
   // Lights (SET_LED white channel) - fire the command AND move the highlight
   // to the chosen level so the active selection is visible.
   pono::LightsHandles &li = s->lights_h_;
@@ -601,9 +624,14 @@ void MainPanel::_file_row_cb(lv_event_t *e) {
   lv_obj_t *row = lv_event_get_target(e);
   size_t idx = (size_t)(uintptr_t)lv_obj_get_user_data(row);
   if (idx < s->files_names_.size()) {
-    json p = {{"filename", s->files_names_[idx]}};
-    s->ws.send_jsonrpc("printer.print.start", p, [](json &) {});
-    s->back_to_home();
+    std::string fn = s->files_names_[idx];
+    std::string base = fn.substr(fn.find_last_of('/') + 1);  // npos+1 == 0 -> whole string
+    if (base.size() > 38) base = base.substr(0, 36) + "..";
+    s->confirm(fmt::format("Print {}?", base).c_str(), [s, fn]{
+      json p = {{"filename", fn}};
+      s->ws.send_jsonrpc("printer.print.start", p, [](json &) {});
+      s->back_to_home();
+    });
   }
 }
 
@@ -623,7 +651,11 @@ void MainPanel::populate_files() {
         std::string path = f.value("path", std::string());
         if (path.empty()) continue;
         this->files_names_.push_back(path);
-        pono::files_add_row(this->files_h_.list, path.c_str(), "gcode");
+        double sz = f.value("size", 0.0);  // bytes (server.files.list carries size)
+        std::string meta = sz >= 1048576.0 ? fmt::format("{:.1f} MB", sz / 1048576.0)
+                         : sz >= 1024.0     ? fmt::format("{:.0f} KB", sz / 1024.0)
+                                            : fmt::format("{:.0f} B", sz);
+        pono::files_add_row(this->files_h_.list, path.c_str(), meta.c_str());
         lv_obj_t *row = lv_obj_get_child(this->files_h_.list,
                                          lv_obj_get_child_cnt(this->files_h_.list) - 1);
         if (row) {

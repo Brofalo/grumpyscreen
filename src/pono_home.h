@@ -189,6 +189,15 @@ void build_lights(lv_obj_t *parent, LightsHandles *h = nullptr);
 // Highlight one button in a segmented row (e.g. Off/50%/Full); dim the others.
 void seg_highlight(lv_obj_t *const *btns, int n, int active);
 
+// Modal confirm dialog (scrim + card + message + Cancel/Confirm). Built once
+// onto lv_layer_top by the app; shown before destructive actions (reboot,
+// shutdown, restart). The app sets the message and wires the buttons.
+struct ConfirmHandles {
+  lv_obj_t *scrim = nullptr, *card = nullptr, *msg = nullptr,
+           *cancel = nullptr, *confirm = nullptr;
+};
+void build_confirm(lv_obj_t *parent, ConfirmHandles *h = nullptr);
+
 // Re-render the heatmap from a row-major z matrix (rows x cols, mm), color-
 // mapped across [zmin,zmax]. Front row drawn at the bottom. Safe to call live.
 void mesh_render(lv_obj_t *grid, const float *z, int rows, int cols, float zmin, float zmax);

@@ -187,6 +187,12 @@ int main(int argc, char **argv) {
     pono::build_power(lv_scr_act());
   } else if (screen == "lights") {
     pono::build_lights(lv_scr_act());
+  } else if (screen == "confirm") {
+    pono::ConfirmHandles ch;
+    pono::build_confirm(lv_scr_act(), &ch);
+    lv_label_set_text(ch.msg, "Shut down the printer?");
+    lv_obj_clear_flag(ch.scrim, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(ch.card, LV_OBJ_FLAG_HIDDEN);
   } else if (screen == "idle") {
     pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
   } else {
