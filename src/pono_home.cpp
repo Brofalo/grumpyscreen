@@ -173,6 +173,12 @@ HomeModel demo_home_idle_model() {
   return m;
 }
 
+// Forward decls: sub-screen chrome is defined in the native section below,
+// but build_tune (above it) references screen_header.
+static lv_obj_t *screen_header(lv_obj_t *parent, const char *title);
+static lv_obj_t *tap_btn(lv_obj_t *p, int x, int y, int w, int h,
+                         const char *txt, const lv_font_t *f, lv_color_t tc);
+
 // ---- the cockpit -----------------------------------------------------------
 
 lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
@@ -308,65 +314,58 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
 // Flexibility lives one tap in: the two tiers up top, granular calibrations in
 // the middle, and a live speed slider at the base (the smooth 60fps moment -
 // dragging repaints only the slider, so it stays buttery on this SoC).
-void build_tune(lv_obj_t *parent) {
+void build_tune(lv_obj_t *parent, TuneHandles *h) {
   const lv_font_t *ms = &lv_font_montserrat_14;
-
-  lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_pad_all(parent, 0, 0);
-  lv_obj_set_style_bg_color(parent, lv_color_hex(0x0c1422), 0);
-  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x05090f), 0);
-  lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
-  lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
-
-  // left rail with a back chip
-  lv_obj_t *rail = card(parent, 0, 0, 52, 272, color_surface_raised, 0);
-  vgrad(rail, color_surface_elevated, color_surface_raised);
-  lv_obj_t *back = card(parent, 8, 12, 36, 36, color_surface_elevated, 10);
-  hairline(back, color_text_tertiary, opa_border_medium);
-  lv_obj_t *bi = lbl(parent, LV_SYMBOL_LEFT, ms, color_accent_primary, 0, 0);
-  lv_obj_align_to(bi, back, LV_ALIGN_CENTER, 0, 0);
-
-  lbl(parent, "Tune", font_h1, color_text_primary, 64, 6);
+  lv_obj_t *back = screen_header(parent, "Tune");
+  if (h) h->back = back;
 
   // ---- two tiers ----
-  lv_obj_t *st = card(parent, 64, 44, 192, 46, color_surface_elevated, 12);
+  lv_obj_t *st = card(parent, 12, 54, 224, 50, color_surface_elevated, 12);
   vgrad(st, color_surface_elevated, color_surface_raised);
   hairline(st, color_text_tertiary, opa_border_medium);
-  lbl(parent, "Standard", font_body, color_text_primary, 78, 52);
-  lbl(parent, "full auto-calibrate", font_micro, color_text_secondary, 78, 71);
+  lv_obj_t *stt = lbl(st, "Standard", font_body, color_text_primary, 0, 0);
+  lv_obj_align(stt, LV_ALIGN_TOP_LEFT, 14, 8);
+  lv_obj_t *sts = lbl(st, "full auto-calibrate", font_micro, color_text_secondary, 0, 0);
+  lv_obj_align(sts, LV_ALIGN_BOTTOM_LEFT, 14, -8);
+  if (h) h->standard = st;
 
-  lv_obj_t *om = card(parent, 266, 44, 192, 46, color_surface_base, 12);
+  lv_obj_t *om = card(parent, 244, 54, 224, 50, color_surface_base, 12);
   vgrad(om, color_surface_elevated, color_surface_base);
   lv_obj_set_style_border_color(om, color_accent_primary, 0);
   lv_obj_set_style_border_width(om, 2, 0);
   lv_obj_set_style_border_opa(om, LV_OPA_COVER, 0);
   soft_shadow(om, color_accent_primary, 10, LV_OPA_40);
-  lbl(parent, "OMEGA  1000%", font_body, color_accent_primary, 280, 52);
-  lbl(parent, "enhanced suite", font_micro, color_text_secondary, 280, 71);
+  lv_obj_t *omt = lbl(om, "OMEGA  1000%", font_body, color_accent_primary, 0, 0);
+  lv_obj_align(omt, LV_ALIGN_TOP_LEFT, 14, 8);
+  lv_obj_t *oms = lbl(om, "enhanced suite", font_micro, color_text_secondary, 0, 0);
+  lv_obj_align(oms, LV_ALIGN_BOTTOM_LEFT, 14, -8);
+  if (h) h->omega = om;
 
-  // ---- individual calibrations (the granular knobs) ----
-  lbl(parent, "INDIVIDUAL", font_micro, color_text_secondary, 64, 98);
+  // ---- individual calibrations ----
+  lbl(parent, "INDIVIDUAL", font_micro, color_text_secondary, 12, 112);
   const char *cals[5] = {"Bed Mesh", "Pressure Adv", "Flow", "Input Shaper", "Z-Offset"};
   for (int i = 0; i < 5; i++) {
     int col = i % 3, row = i / 3;
-    int x = 64 + col * 134;
-    int y = 114 + row * 46;
-    lv_obj_t *t = card(parent, x, y, 126, 40, color_surface_elevated, 10);
+    int x = 12 + col * 154;
+    int y = 128 + row * 44;
+    lv_obj_t *t = card(parent, x, y, 146, 38, color_surface_elevated, 10);
     vgrad(t, color_surface_elevated, color_surface_raised);
     hairline(t, color_text_tertiary, opa_border_subtle);
-    lv_obj_t *nl = lbl(parent, cals[i], font_caption, color_text_primary, 0, 0);
-    lv_obj_align_to(nl, t, LV_ALIGN_LEFT_MID, 10, 0);
-    lv_obj_t *ch = lbl(parent, LV_SYMBOL_RIGHT, ms, color_text_tertiary, 0, 0);
-    lv_obj_align_to(ch, t, LV_ALIGN_RIGHT_MID, -8, 0);
+    lv_obj_t *nl = lbl(t, cals[i], font_caption, color_text_primary, 0, 0);
+    lv_obj_align(nl, LV_ALIGN_LEFT_MID, 12, 0);
+    lv_obj_t *ch = lbl(t, LV_SYMBOL_RIGHT, ms, color_text_tertiary, 0, 0);
+    lv_obj_align(ch, LV_ALIGN_RIGHT_MID, -8, 0);
+    if (h) h->cals[i] = t;
   }
 
-  // ---- live speed slider (the "smooth where it matters" moment) ----
-  lbl(parent, "SPEED", font_micro, color_text_secondary, 64, 212);
+  // ---- live speed slider ----
+  lbl(parent, "SPEED", font_micro, color_text_secondary, 12, 224);
   lv_obj_t *spv = lbl(parent, "100%", font_num_small, color_accent_primary, 0, 0);
-  lv_obj_set_pos(spv, 424, 210);
+  lv_obj_align(spv, LV_ALIGN_TOP_RIGHT, -14, 222);
+  if (h) h->speed_val = spv;
   lv_obj_t *sl = lv_slider_create(parent);
-  lv_obj_set_pos(sl, 64, 232);
-  lv_obj_set_size(sl, 394, 10);
+  lv_obj_set_pos(sl, 12, 244);
+  lv_obj_set_size(sl, 456, 10);
   lv_slider_set_range(sl, 50, 200);
   lv_slider_set_value(sl, 100, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(sl, color_surface_elevated, LV_PART_MAIN);
@@ -378,6 +377,7 @@ void build_tune(lv_obj_t *parent) {
   lv_obj_set_style_shadow_color(sl, color_accent_primary, LV_PART_KNOB);
   lv_obj_set_style_shadow_width(sl, 10, LV_PART_KNOB);
   lv_obj_set_style_shadow_opa(sl, LV_OPA_50, LV_PART_KNOB);
+  if (h) h->speed = sl;
 }
 
 // ---- Expert Tune screen ----------------------------------------------------
@@ -491,6 +491,262 @@ void build_settings(lv_obj_t *parent) {
   value_pill(setting_row(list, "Seam position"), "Aligned");
   value_pill(setting_row(list, "Flow ratio"), "0.97");
   value_pill(setting_row(list, "Pressure advance"), "0.040");
+}
+
+// ============================================================================
+// Native sub-screens (replace the legacy guppyscreen panels). Each is a full
+// 480x272 screen built on the same grid + tokens as the cockpit, with a back
+// chip top-left. The app shows/hides them over the cockpit and wires actions.
+// ============================================================================
+
+// Shared chrome: depth backdrop + top bar (back chip + title + divider).
+// Returns the back chip so the caller wires "return to cockpit".
+static lv_obj_t *screen_header(lv_obj_t *parent, const char *title) {
+  const lv_font_t *ms = &lv_font_montserrat_14;
+  lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_style_pad_all(parent, 0, 0);
+  lv_obj_set_style_bg_color(parent, lv_color_hex(0x0b1220), 0);
+  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x070b12), 0);
+  lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+  lv_obj_t *back = card(parent, 12, 10, 42, 28, color_surface_elevated, 10);
+  vgrad(back, color_surface_elevated, color_surface_raised);
+  hairline(back, color_text_tertiary, opa_border_medium);
+  lv_obj_t *bi = lbl(back, LV_SYMBOL_LEFT, ms, color_accent_primary, 0, 0);
+  lv_obj_center(bi);
+  lbl(parent, title, font_h2, color_text_primary, 64, 13);
+  card(parent, 12, 44, 456, 1, color_text_tertiary, 0, opa_border_subtle);
+  return back;
+}
+
+// Generic tappable card-button with a centered label.
+static lv_obj_t *tap_btn(lv_obj_t *p, int x, int y, int w, int h,
+                         const char *txt, const lv_font_t *f, lv_color_t tc) {
+  lv_obj_t *b = card(p, x, y, w, h, color_surface_elevated, 10);
+  vgrad(b, color_surface_elevated, color_surface_raised);
+  hairline(b, color_text_tertiary, opa_border_medium);
+  lv_obj_t *l = lbl(b, txt, f, tc, 0, 0);
+  lv_obj_center(l);
+  return b;
+}
+
+void build_move(lv_obj_t *parent, MoveHandles *h) {
+  const lv_font_t *ms = &lv_font_montserrat_14;
+  lv_obj_t *back = screen_header(parent, "Move");
+  if (h) h->back = back;
+
+  const int bs = 50;
+  // ---- XY jog cross (left) ----
+  const int cx = 78, cy = 112;
+  lv_obj_t *yp = tap_btn(parent, cx, cy - bs - 8, bs, bs, LV_SYMBOL_UP, ms, color_text_primary);
+  lv_obj_t *ym = tap_btn(parent, cx, cy + bs + 8, bs, bs, LV_SYMBOL_DOWN, ms, color_text_primary);
+  lv_obj_t *xm = tap_btn(parent, cx - bs - 8, cy, bs, bs, LV_SYMBOL_LEFT, ms, color_text_primary);
+  lv_obj_t *xp = tap_btn(parent, cx + bs + 8, cy, bs, bs, LV_SYMBOL_RIGHT, ms, color_text_primary);
+  lv_obj_t *hxy = tap_btn(parent, cx, cy, bs, bs, LV_SYMBOL_HOME, ms, color_accent_primary);
+  if (h) { h->xplus = xp; h->xminus = xm; h->yplus = yp; h->yminus = ym; h->home_xy = hxy; }
+
+  // ---- Z jog ----
+  const int zx = 212;
+  lv_obj_t *zp = tap_btn(parent, zx, cy - bs - 8, bs, bs, LV_SYMBOL_UP, ms, color_text_primary);
+  lv_obj_t *zm = tap_btn(parent, zx, cy + bs + 8, bs, bs, LV_SYMBOL_DOWN, ms, color_text_primary);
+  lbl(parent, "Z", font_num_small, color_text_secondary, zx + 20, cy + 16);
+  if (h) { h->zplus = zp; h->zminus = zm; }
+
+  // ---- step selector ----
+  lbl(parent, "step (mm)", font_micro, color_text_tertiary, 282, 40);
+  const char *steps[4] = {"0.1", "1", "10", "100"};
+  for (int i = 0; i < 4; i++) {
+    int sw = 44, sx = 280 + i * (sw + 4);
+    bool on = (i == 1);
+    lv_obj_t *sb = card(parent, sx, 54, sw, 32, on ? color_accent_primary : color_surface_elevated, 8);
+    if (!on) { vgrad(sb, color_surface_elevated, color_surface_raised); hairline(sb, color_text_tertiary, opa_border_subtle); }
+    lv_obj_t *sl = lbl(sb, steps[i], font_caption, on ? color_surface_base : color_text_secondary, 0, 0);
+    lv_obj_center(sl);
+    if (h) h->step[i] = sb;
+  }
+
+  // ---- home all + motors off ----
+  lv_obj_t *ha = card(parent, 280, 96, 188, 46, color_accent_primary, 10);
+  vgrad(ha, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
+  lv_obj_t *hal = lbl(ha, LV_SYMBOL_HOME "  Home All", ms, color_surface_base, 0, 0);
+  lv_obj_center(hal);
+  lv_obj_t *mo = tap_btn(parent, 280, 150, 188, 46, "Motors Off", font_body, color_text_secondary);
+  if (h) { h->home_all = ha; h->motors_off = mo; }
+
+  // ---- position readout ----
+  lv_obj_t *pc = card(parent, 280, 204, 188, 44, color_surface_base, 10);
+  hairline(pc, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *pl = lbl(pc, "X --  Y --  Z --", font_caption, color_text_secondary, 0, 0);
+  lv_obj_center(pl);
+  if (h) h->pos = pl;
+}
+
+void build_filament(lv_obj_t *parent, FilamentHandles *h) {
+  const lv_font_t *ms = &lv_font_montserrat_14;
+  lv_obj_t *back = screen_header(parent, "Filament");
+  if (h) h->back = back;
+
+  // nozzle temp banner (live)
+  lv_obj_t *tc = card(parent, 12, 52, 456, 40, color_surface_elevated, 10);
+  vgrad(tc, color_surface_elevated, color_surface_raised);
+  hairline(tc, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *tn = lbl(tc, "Nozzle", font_caption, color_text_secondary, 0, 0);
+  lv_obj_align(tn, LV_ALIGN_LEFT_MID, 14, 0);
+  lv_obj_t *tv = lbl(tc, "-- / --", font_num_small, color_text_primary, 0, 0);
+  lv_obj_align(tv, LV_ALIGN_RIGHT_MID, -14, 0);
+  if (h) h->temp = tv;
+
+  // load / unload (primary)
+  lv_obj_t *ld = card(parent, 12, 100, 224, 50, color_accent_primary, 10);
+  vgrad(ld, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
+  lv_obj_t *ldl = lbl(ld, LV_SYMBOL_DOWN "  Load", ms, color_surface_base, 0, 0);
+  lv_obj_center(ldl);
+  lv_obj_t *ul = tap_btn(parent, 244, 100, 224, 50, LV_SYMBOL_UP "  Unload", ms, color_text_primary);
+  if (h) { h->load = ld; h->unload = ul; }
+
+  // extrude / retract
+  lv_obj_t *ex = tap_btn(parent, 12, 158, 224, 44, "Extrude 25", font_body, color_text_primary);
+  lv_obj_t *rt = tap_btn(parent, 244, 158, 224, 44, "Retract 25", font_body, color_text_primary);
+  if (h) { h->extrude = ex; h->retract = rt; }
+
+  // preheat presets + cooldown
+  lbl(parent, "preheat", font_micro, color_text_tertiary, 12, 210);
+  const char *pn[3] = {"PLA", "PETG", "PA-CF"};
+  for (int i = 0; i < 3; i++) {
+    lv_obj_t *pb = tap_btn(parent, 12 + i * 100, 224, 92, 36, pn[i], font_caption, color_accent_primary);
+    if (h) h->preset[i] = pb;
+  }
+  lv_obj_t *cd = tap_btn(parent, 312, 224, 156, 36, "Cooldown", font_caption, color_text_secondary);
+  if (h) h->cooldown = cd;
+}
+
+// one temperature column (nozzle or bed): current, target, 3 presets, Off.
+// out = [cur, tgt, b0, b1, b2, off].
+static void temp_section(lv_obj_t *parent, int x, int w, const char *name,
+                         const char *p0, const char *p1, const char *p2,
+                         lv_obj_t *out[6]) {
+  lv_obj_t *c = card(parent, x, 52, w, 196, color_surface_raised, 14);
+  vgrad(c, color_surface_elevated, color_surface_raised);
+  hairline(c, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *nm = lbl(c, name, font_caption, color_text_secondary, 0, 0);
+  lv_obj_align(nm, LV_ALIGN_TOP_MID, 0, 12);
+  lv_obj_t *cv = lbl(c, "--", font_num_large, color_text_primary, 0, 0);
+  lv_obj_align(cv, LV_ALIGN_TOP_MID, 0, 34);
+  lv_obj_t *tv = lbl(c, "off", font_micro, color_text_secondary, 0, 0);
+  lv_obj_align(tv, LV_ALIGN_TOP_MID, 0, 80);
+  out[0] = cv; out[1] = tv;
+  const char *ps[3] = {p0, p1, p2};
+  int pw = (w - 24 - 2 * 6) / 3;
+  for (int i = 0; i < 3; i++) {
+    lv_obj_t *pb = card(c, 12 + i * (pw + 6), 106, pw, 36, color_surface_elevated, 8);
+    vgrad(pb, color_surface_elevated, color_surface_raised);
+    hairline(pb, color_text_tertiary, opa_border_subtle);
+    lv_obj_t *pl = lbl(pb, ps[i], font_micro, color_accent_primary, 0, 0);
+    lv_obj_center(pl);
+    out[2 + i] = pb;
+  }
+  lv_obj_t *ob = card(c, 12, 150, w - 24, 34, color_surface_base, 8);
+  hairline(ob, color_state_error, opa_border_medium);
+  lv_obj_t *ol = lbl(ob, "Off", font_caption, color_state_error, 0, 0);
+  lv_obj_center(ol);
+  out[5] = ob;
+}
+
+void build_temps(lv_obj_t *parent, TempsHandles *h) {
+  lv_obj_t *back = screen_header(parent, "Temperature");
+  if (h) h->back = back;
+  lv_obj_t *nz[6], *bd[6];
+  temp_section(parent, 12, 224, "NOZZLE", "PLA 220", "PETG 240", "PA 260", nz);
+  temp_section(parent, 244, 224, "BED", "PLA 60", "PETG 80", "PA 75", bd);
+  if (h) {
+    h->nz_cur = nz[0]; h->nz_tgt = nz[1];
+    h->nz_preset[0] = nz[2]; h->nz_preset[1] = nz[3]; h->nz_preset[2] = nz[4]; h->nz_off = nz[5];
+    h->bd_cur = bd[0]; h->bd_tgt = bd[1];
+    h->bd_preset[0] = bd[2]; h->bd_preset[1] = bd[3]; h->bd_preset[2] = bd[4]; h->bd_off = bd[5];
+  }
+}
+
+void build_fans(lv_obj_t *parent, FansHandles *h) {
+  lv_obj_t *back = screen_header(parent, "Fans");
+  if (h) h->back = back;
+
+  lv_obj_t *c = card(parent, 12, 56, 456, 108, color_surface_raised, 14);
+  vgrad(c, color_surface_elevated, color_surface_raised);
+  hairline(c, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *nm = lbl(c, "Part cooling fan", font_caption, color_text_secondary, 0, 0);
+  lv_obj_align(nm, LV_ALIGN_TOP_LEFT, 16, 14);
+  lv_obj_t *pv = lbl(c, "--%", font_num_large, color_accent_primary, 0, 0);
+  lv_obj_align(pv, LV_ALIGN_TOP_RIGHT, -16, 8);
+  if (h) h->part_val = pv;
+  lv_obj_t *sl = lv_slider_create(c);
+  lv_obj_align(sl, LV_ALIGN_BOTTOM_MID, 0, -16);
+  lv_obj_set_size(sl, 420, 10);
+  lv_slider_set_range(sl, 0, 100);
+  lv_slider_set_value(sl, 0, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(sl, color_surface_base, LV_PART_MAIN);
+  lv_obj_set_style_radius(sl, 5, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(sl, 5, LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
+  if (h) h->part_slider = sl;
+
+  lv_obj_t *off = tap_btn(parent, 12, 176, 148, 44, "Off", font_body, color_text_secondary);
+  lv_obj_t *h50 = tap_btn(parent, 166, 176, 148, 44, "50%", font_body, color_text_primary);
+  lv_obj_t *full = card(parent, 320, 176, 148, 44, color_accent_primary, 10);
+  vgrad(full, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
+  lv_obj_t *fl = lbl(full, "Full", font_body, color_surface_base, 0, 0);
+  lv_obj_center(fl);
+  if (h) { h->off = off; h->p50 = h50; h->full = full; }
+
+  lv_obj_t *ac = card(parent, 12, 230, 456, 32, color_surface_elevated, 8);
+  hairline(ac, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *an = lbl(ac, "Other fans", font_micro, color_text_secondary, 0, 0);
+  lv_obj_align(an, LV_ALIGN_LEFT_MID, 16, 0);
+  lv_obj_t *av = lbl(ac, "auto", font_caption, color_text_secondary, 0, 0);
+  lv_obj_align(av, LV_ALIGN_RIGHT_MID, -16, 0);
+  if (h) h->aux_val = av;
+}
+
+// Append one file row to the Files list (public: the app populates real files).
+void files_add_row(lv_obj_t *list, const char *name, const char *meta) {
+  lv_obj_t *r = lv_obj_create(list);
+  lv_obj_remove_style_all(r);
+  lv_obj_set_size(r, lv_pct(100), 46);
+  vgrad(r, color_surface_elevated, color_surface_raised);
+  lv_obj_set_style_radius(r, 10, 0);
+  hairline(r, color_text_tertiary, opa_border_subtle);
+  lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *ic = lbl(r, LV_SYMBOL_FILE, &lv_font_montserrat_14, color_accent_primary, 0, 0);
+  lv_obj_align(ic, LV_ALIGN_LEFT_MID, 14, 0);
+  lv_obj_t *nm = lbl(r, name, font_caption, color_text_primary, 0, 0);
+  lv_obj_align(nm, LV_ALIGN_LEFT_MID, 40, -7);
+  lv_obj_t *mt = lbl(r, meta, font_micro, color_text_secondary, 0, 0);
+  lv_obj_align(mt, LV_ALIGN_LEFT_MID, 40, 10);
+  lv_obj_t *pi = lbl(r, LV_SYMBOL_PLAY, &lv_font_montserrat_14, color_accent_secondary, 0, 0);
+  lv_obj_align(pi, LV_ALIGN_RIGHT_MID, -14, 0);
+}
+
+void build_files(lv_obj_t *parent, FilesHandles *h) {
+  lv_obj_t *back = screen_header(parent, "Files");
+  if (h) h->back = back;
+  lv_obj_t *list = lv_obj_create(parent);
+  lv_obj_remove_style_all(list);
+  lv_obj_set_pos(list, 12, 52);
+  lv_obj_set_size(list, 456, 206);
+  lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(list, 8, 0);
+  lv_obj_set_scroll_dir(list, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
+  lv_obj_set_style_bg_color(list, color_accent_primary, LV_PART_SCROLLBAR);
+  lv_obj_set_style_bg_opa(list, LV_OPA_40, LV_PART_SCROLLBAR);
+  lv_obj_set_style_width(list, 3, LV_PART_SCROLLBAR);
+  lv_obj_set_style_radius(list, 2, LV_PART_SCROLLBAR);
+  if (h) h->list = list;
+  // placeholder rows; the app clears + repopulates from Moonraker.
+  files_add_row(list, "omega_cube.gcode", "18m  .  PA-CF");
+  files_add_row(list, "benchy_0.25.gcode", "1h 12m  .  PA-CF");
+  files_add_row(list, "bracket_v3.gcode", "42m  .  PLA");
+  files_add_row(list, "phone_stand.gcode", "2h 04m  .  PETG");
 }
 
 } // namespace pono

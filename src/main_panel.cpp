@@ -5,6 +5,7 @@
 #include "pono_theme.h"  // Phase A.4: surface + accent tokens for tab UI
 
 #include <string>
+#include <cstdint>
 
 LV_IMG_DECLARE(filament_img);
 LV_IMG_DECLARE(light_img);
@@ -264,6 +265,7 @@ void MainPanel::create_panel() {
   hm.nozzle = 0; hm.nozzle_set = 0; hm.bed = 0; hm.bed_set = 0;
   pono::build_home(home_scr, hm, &home_h);
   attach_home_taps();
+  create_pono_screens();   // native Move/Filament/Temps/Fans/Files/Tune overlays (hidden)
   lv_obj_add_flag(home_scr, LV_OBJ_FLAG_HIDDEN);  // revealed on connect
 }
 
@@ -280,13 +282,182 @@ void MainPanel::_home_tap(lv_event_t *e) {
   auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
   lv_obj_t *t = lv_event_get_target(e);
   pono::HomeHandles &h = s->home_h;
-  if (t == h.btn_pausestop) s->print_status_panel.foreground();                    // Pause/Stop -> live print controls (pause/resume/cancel)
-  else if (t == h.qa[2]) s->print_panel.foreground();                              // Files
-  else if (t == h.qa[0]) s->homing_panel.foreground();                             // Move
-  else if (t == h.qa[1] || t == h.tile_nozzle || t == h.tile_bed) s->extruder_panel.foreground();  // Filament, temps
-  else if (t == h.qa[3]) s->fan_panel.foreground();                                // Fans
-  else if (t == h.tile_tune)  s->ws.gcode_script("PONO_CAL_STANDARD");  // standard on-device calibrate
-  else if (t == h.tile_omega) s->ws.gcode_script("PONO_CAL_OMEGA");     // enhanced 1000% suite (queues + prompts)
+  if (t == h.btn_pausestop) {                           // primary: Pause while printing, else Print -> Files
+    if (s->home_printing_) s->ws.gcode_script("PAUSE");
+    else { s->populate_files(); s->show_pono(s->files_scr_); }
+  }
+  else if (t == h.qa[0]) s->show_pono(s->move_scr_);    // Move
+  else if (t == h.qa[1]) s->show_pono(s->fil_scr_);     // Filament
+  else if (t == h.qa[2]) { s->populate_files(); s->show_pono(s->files_scr_); }  // Files
+  else if (t == h.qa[3]) s->show_pono(s->fan_scr_);     // Fans
+  else if (t == h.tile_nozzle || t == h.tile_bed) s->show_pono(s->temp_scr_);   // temps
+  else if (t == h.tile_tune) s->show_pono(s->tune_scr_);  // Tune
+}
+
+// ---- Pono native sub-screen management ----
+
+void MainPanel::create_pono_screens() {
+  auto make = [&]() -> lv_obj_t * {
+    lv_obj_t *s = lv_obj_create(lv_scr_act());
+    lv_obj_remove_style_all(s);
+    lv_obj_set_size(s, 480, 272);
+    lv_obj_set_pos(s, 0, 0);
+    lv_obj_clear_flag(s, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_add_flag(s, LV_OBJ_FLAG_HIDDEN);
+    return s;
+  };
+  move_scr_  = make(); pono::build_move(move_scr_, &move_h_);
+  fil_scr_   = make(); pono::build_filament(fil_scr_, &fil_h_);
+  temp_scr_  = make(); pono::build_temps(temp_scr_, &temp_h_);
+  fan_scr_   = make(); pono::build_fans(fan_scr_, &fan_h_);
+  files_scr_ = make(); pono::build_files(files_scr_, &files_h_);
+  tune_scr_  = make(); pono::build_tune(tune_scr_, &tune_h_);
+
+  lv_obj_t *taps[] = {
+    move_h_.back, move_h_.xplus, move_h_.xminus, move_h_.yplus, move_h_.yminus,
+    move_h_.zplus, move_h_.zminus, move_h_.home_xy, move_h_.home_all, move_h_.motors_off,
+    move_h_.step[0], move_h_.step[1], move_h_.step[2], move_h_.step[3],
+    fil_h_.back, fil_h_.load, fil_h_.unload, fil_h_.extrude, fil_h_.retract,
+    fil_h_.preset[0], fil_h_.preset[1], fil_h_.preset[2], fil_h_.cooldown,
+    temp_h_.back, temp_h_.nz_preset[0], temp_h_.nz_preset[1], temp_h_.nz_preset[2], temp_h_.nz_off,
+    temp_h_.bd_preset[0], temp_h_.bd_preset[1], temp_h_.bd_preset[2], temp_h_.bd_off,
+    fan_h_.back, fan_h_.off, fan_h_.p50, fan_h_.full,
+    files_h_.back,
+    tune_h_.back, tune_h_.standard, tune_h_.omega,
+    tune_h_.cals[0], tune_h_.cals[1], tune_h_.cals[2], tune_h_.cals[3], tune_h_.cals[4],
+  };
+  for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_sub_tap, LV_EVENT_CLICKED, this);
+  if (fan_h_.part_slider) lv_obj_add_event_cb(fan_h_.part_slider, &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
+  if (tune_h_.speed)      lv_obj_add_event_cb(tune_h_.speed, &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
+}
+
+void MainPanel::show_pono(lv_obj_t *scr) {
+  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_};
+  for (lv_obj_t *s : all) if (s) lv_obj_add_flag(s, LV_OBJ_FLAG_HIDDEN);
+  if (home_scr) lv_obj_add_flag(home_scr, LV_OBJ_FLAG_HIDDEN);
+  if (scr) { lv_obj_clear_flag(scr, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(scr); }
+}
+
+void MainPanel::back_to_home() {
+  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_};
+  for (lv_obj_t *s : all) if (s) lv_obj_add_flag(s, LV_OBJ_FLAG_HIDDEN);
+  show_home();
+}
+
+void MainPanel::_sub_tap(lv_event_t *e) {
+  auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
+  lv_obj_t *t = lv_event_get_target(e);
+  pono::MoveHandles &mv = s->move_h_;
+  pono::FilamentHandles &fl = s->fil_h_;
+  pono::TempsHandles &tp = s->temp_h_;
+  pono::FansHandles &fn = s->fan_h_;
+  pono::TuneHandles &tu = s->tune_h_;
+  // back chips
+  if (t == mv.back || t == fl.back || t == tp.back || t == fn.back ||
+      t == s->files_h_.back || t == tu.back) { s->back_to_home(); return; }
+  // Move jog (relative)
+  double st = s->move_step_;
+  if (t == mv.xplus)  { s->ws.gcode_script(fmt::format("G91\nG1 X{} F6000\nG90", st)); return; }
+  if (t == mv.xminus) { s->ws.gcode_script(fmt::format("G91\nG1 X-{} F6000\nG90", st)); return; }
+  if (t == mv.yplus)  { s->ws.gcode_script(fmt::format("G91\nG1 Y{} F6000\nG90", st)); return; }
+  if (t == mv.yminus) { s->ws.gcode_script(fmt::format("G91\nG1 Y-{} F6000\nG90", st)); return; }
+  if (t == mv.zplus)  { s->ws.gcode_script(fmt::format("G91\nG1 Z{} F600\nG90", st)); return; }
+  if (t == mv.zminus) { s->ws.gcode_script(fmt::format("G91\nG1 Z-{} F600\nG90", st)); return; }
+  if (t == mv.home_xy)    { s->ws.gcode_script("G28 X Y"); return; }
+  if (t == mv.home_all)   { s->ws.gcode_script("G28"); return; }
+  if (t == mv.motors_off) { s->ws.gcode_script("M84"); return; }
+  for (int i = 0; i < 4; i++) if (t == mv.step[i]) {
+    static const double vals[4] = {0.1, 1.0, 10.0, 100.0};
+    s->move_step_ = vals[i];
+    for (int k = 0; k < 4; k++) {
+      if (!mv.step[k]) continue;
+      bool on = (k == i);
+      lv_obj_set_style_bg_color(mv.step[k], on ? pono::color_accent_primary : pono::color_surface_elevated, 0);
+      lv_obj_t *l = lv_obj_get_child(mv.step[k], 0);
+      if (l) lv_obj_set_style_text_color(l, on ? pono::color_surface_base : pono::color_text_secondary, 0);
+    }
+    return;
+  }
+  // Filament
+  if (t == fl.load)    { s->ws.gcode_script("LOAD_FILAMENT"); return; }
+  if (t == fl.unload)  { s->ws.gcode_script("UNLOAD_FILAMENT"); return; }
+  if (t == fl.extrude) { s->ws.gcode_script("M83\nG1 E25 F300"); return; }
+  if (t == fl.retract) { s->ws.gcode_script("M83\nG1 E-25 F1800"); return; }
+  if (t == fl.preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=220"); return; }
+  if (t == fl.preset[1]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=240"); return; }
+  if (t == fl.preset[2]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=260"); return; }
+  if (t == fl.cooldown)  { s->ws.gcode_script("TURN_OFF_HEATERS"); return; }
+  // Temps
+  if (t == tp.nz_preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=220"); return; }
+  if (t == tp.nz_preset[1]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=240"); return; }
+  if (t == tp.nz_preset[2]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=260"); return; }
+  if (t == tp.nz_off)       { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=0"); return; }
+  if (t == tp.bd_preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=60"); return; }
+  if (t == tp.bd_preset[1]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=80"); return; }
+  if (t == tp.bd_preset[2]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=75"); return; }
+  if (t == tp.bd_off)       { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0"); return; }
+  // Fans (quick)
+  if (t == fn.off)  { s->ws.gcode_script("M106 S0"); return; }
+  if (t == fn.p50)  { s->ws.gcode_script("M106 S128"); return; }
+  if (t == fn.full) { s->ws.gcode_script("M106 S255"); return; }
+  // Tune
+  if (t == tu.standard) { s->ws.gcode_script("PONO_CAL_STANDARD"); return; }
+  if (t == tu.omega)    { s->ws.gcode_script("PONO_CAL_OMEGA"); return; }
+  for (int i = 0; i < 5; i++) if (t == tu.cals[i]) { s->ws.gcode_script("PONO_CAL_STANDARD"); return; }  // individual cals -> guided standard (placeholder)
+}
+
+void MainPanel::_fan_slider_cb(lv_event_t *e) {
+  auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
+  lv_obj_t *t = lv_event_get_target(e);
+  int v = lv_slider_get_value(t);
+  if (t == s->fan_h_.part_slider) {
+    s->ws.gcode_script(fmt::format("M106 S{}", (int)(v * 255 / 100)));
+    if (s->fan_h_.part_val) lv_label_set_text(s->fan_h_.part_val, fmt::format("{}%", v).c_str());
+  } else if (t == s->tune_h_.speed) {
+    s->ws.gcode_script(fmt::format("M220 S{}", v));
+    if (s->tune_h_.speed_val) lv_label_set_text(s->tune_h_.speed_val, fmt::format("{}%", v).c_str());
+  }
+}
+
+void MainPanel::_file_row_cb(lv_event_t *e) {
+  auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
+  lv_obj_t *row = lv_event_get_target(e);
+  size_t idx = (size_t)(uintptr_t)lv_obj_get_user_data(row);
+  if (idx < s->files_names_.size()) {
+    json p = {{"filename", s->files_names_[idx]}};
+    s->ws.send_jsonrpc("printer.print.start", p, [](json &) {});
+    s->back_to_home();
+  }
+}
+
+void MainPanel::populate_files() {
+  if (!files_h_.list) return;
+  json p = {{"root", "gcodes"}};
+  ws.send_jsonrpc("server.files.list", p, [this](json &j) {
+    std::lock_guard<std::mutex> lock(this->lv_lock);
+    if (!this->files_h_.list) return;
+    lv_obj_clean(this->files_h_.list);
+    this->files_names_.clear();
+    auto &res = j["/result"_json_pointer];
+    if (res.is_array()) {
+      int n = 0;
+      for (auto &f : res) {
+        if (n++ >= 40) break;
+        std::string path = f.value("path", std::string());
+        if (path.empty()) continue;
+        this->files_names_.push_back(path);
+        pono::files_add_row(this->files_h_.list, path.c_str(), "gcode");
+        lv_obj_t *row = lv_obj_get_child(this->files_h_.list,
+                                         lv_obj_get_child_cnt(this->files_h_.list) - 1);
+        if (row) {
+          lv_obj_set_user_data(row, (void *)(uintptr_t)(this->files_names_.size() - 1));
+          lv_obj_add_event_cb(row, &MainPanel::_file_row_cb, LV_EVENT_CLICKED, this);
+        }
+      }
+    }
+    if (this->files_names_.empty())
+      pono::files_add_row(this->files_h_.list, "No gcode files", "upload via Mainsail");
+  });
 }
 
 void MainPanel::attach_home_taps() {

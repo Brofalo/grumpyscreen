@@ -24,6 +24,7 @@
 #include <map>
 #include <memory>
 #include <string>
+#include <vector>
 
 class MainPanel : public NotifyConsumer {
  public:
@@ -94,6 +95,14 @@ class MainPanel : public NotifyConsumer {
   void create_main(lv_obj_t *parent);
   void rebuild_home();        // Pono: rebuild the cockpit in the current state's layout (idle<->printing flip)
   void attach_home_taps();    // Pono: wire cockpit tap targets to _home_tap (reused after rebuild)
+  // ---- Pono native sub-screens (replace the legacy panels) ----
+  void create_pono_screens();             // build Move/Filament/Temps/Fans/Files/Tune into hidden overlays
+  void show_pono(lv_obj_t *scr);          // hide cockpit + others, reveal scr
+  void back_to_home();                    // hide all sub-screens, show the cockpit
+  void populate_files();                  // query Moonraker, fill the Files list
+  static void _sub_tap(lv_event_t *e);    // sub-screen button -> gcode action
+  static void _fan_slider_cb(lv_event_t *e);
+  static void _file_row_cb(lv_event_t *e);
   static void _tabview_event_cb(lv_event_t *e);
   KWebSocketClient &ws;
   HomingPanel homing_panel;
@@ -119,6 +128,17 @@ class MainPanel : public NotifyConsumer {
   int home_layer_ = 0, home_layer_total_ = 0;
   std::string home_job_;          // current filename (stable storage for the rebuild model)
   std::string home_eta_;          // computed ETA string (stable storage for the rebuild model)
+  // ---- Pono native sub-screens ----
+  lv_obj_t *move_scr_ = nullptr, *fil_scr_ = nullptr, *temp_scr_ = nullptr;
+  lv_obj_t *fan_scr_ = nullptr, *files_scr_ = nullptr, *tune_scr_ = nullptr;
+  pono::MoveHandles move_h_;
+  pono::FilamentHandles fil_h_;
+  pono::TempsHandles temp_h_;
+  pono::FansHandles fan_h_;
+  pono::FilesHandles files_h_;
+  pono::TuneHandles tune_h_;
+  double move_step_ = 1.0;        // selected jog step (mm)
+  std::vector<std::string> files_names_;  // index -> gcode filename for row taps
   PrintStatusPanel print_status_panel;
   PrintPanel print_panel;
   Numpad numpad;

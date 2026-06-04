@@ -70,11 +70,60 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out = nu
 // Keeps the always-on idle dashboard at zero animation cost.
 void set_state_pulse(lv_obj_t *dot, bool on);
 
+// ---- Native sub-screen handles (the app wires actions + live values) ----
+struct MoveHandles {
+  lv_obj_t *back = nullptr, *pos = nullptr;
+  lv_obj_t *xplus = nullptr, *xminus = nullptr, *yplus = nullptr, *yminus = nullptr;
+  lv_obj_t *zplus = nullptr, *zminus = nullptr;
+  lv_obj_t *home_xy = nullptr, *home_all = nullptr, *motors_off = nullptr;
+  lv_obj_t *step[4] = {nullptr, nullptr, nullptr, nullptr};  // 0.1 / 1 / 10 / 100 mm
+};
+
+// Build the native Move (jog) screen: XY cross, Z jog, step selector, home/off,
+// and a live position readout. The app wires taps to relative moves + homing.
+void build_move(lv_obj_t *parent, MoveHandles *h = nullptr);
+
+struct FilamentHandles {
+  lv_obj_t *back = nullptr, *temp = nullptr;
+  lv_obj_t *load = nullptr, *unload = nullptr, *extrude = nullptr, *retract = nullptr;
+  lv_obj_t *preset[3] = {nullptr, nullptr, nullptr};  // PLA / PETG / PA-CF preheat
+  lv_obj_t *cooldown = nullptr;
+};
+void build_filament(lv_obj_t *parent, FilamentHandles *h = nullptr);
+
+struct TempsHandles {
+  lv_obj_t *back = nullptr;
+  lv_obj_t *nz_cur = nullptr, *nz_tgt = nullptr, *bd_cur = nullptr, *bd_tgt = nullptr;
+  lv_obj_t *nz_preset[3] = {nullptr, nullptr, nullptr}, *nz_off = nullptr;
+  lv_obj_t *bd_preset[3] = {nullptr, nullptr, nullptr}, *bd_off = nullptr;
+};
+void build_temps(lv_obj_t *parent, TempsHandles *h = nullptr);
+
+struct FansHandles {
+  lv_obj_t *back = nullptr;
+  lv_obj_t *part_val = nullptr, *part_slider = nullptr, *aux_val = nullptr;
+  lv_obj_t *off = nullptr, *p50 = nullptr, *full = nullptr;
+};
+void build_fans(lv_obj_t *parent, FansHandles *h = nullptr);
+
+struct FilesHandles {
+  lv_obj_t *back = nullptr, *list = nullptr;
+};
+void build_files(lv_obj_t *parent, FilesHandles *h = nullptr);
+// Append a file row to the Files list (the app populates from Moonraker).
+void files_add_row(lv_obj_t *list, const char *name, const char *meta);
+
+struct TuneHandles {
+  lv_obj_t *back = nullptr, *standard = nullptr, *omega = nullptr;
+  lv_obj_t *speed = nullptr, *speed_val = nullptr;
+  lv_obj_t *cals[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};  // Bed Mesh/PA/Flow/Shaper/Z-Offset
+};
+
 // Build the Tune screen into `parent`: the two calibrate tiers (Standard +
 // the enhanced OMEGA), a grid of individual calibrations (bed mesh, pressure
 // advance, flow, input shaper, z-offset), and a live speed slider. Pure LVGL
 // + theme; the real app wires taps + the slider to Moonraker.
-void build_tune(lv_obj_t *parent);
+void build_tune(lv_obj_t *parent, TuneHandles *h = nullptr);
 
 // Build the Expert Tune screen into `parent`: category chips + a scrollable
 // list of tunable parameters with real editors (slider / switch / value

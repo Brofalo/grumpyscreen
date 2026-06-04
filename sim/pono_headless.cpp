@@ -163,6 +163,16 @@ int main(int argc, char **argv) {
     lv_obj_set_style_radius(ded, 8, 0);
     lv_label_set_text(ded, "Dedicated to Elio and Io\nmy little cousins");
     lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -10);
+  } else if (screen == "move") {
+    pono::build_move(lv_scr_act());
+  } else if (screen == "filament") {
+    pono::build_filament(lv_scr_act());
+  } else if (screen == "temps" || screen == "temp") {
+    pono::build_temps(lv_scr_act());
+  } else if (screen == "fans") {
+    pono::build_fans(lv_scr_act());
+  } else if (screen == "files") {
+    pono::build_files(lv_scr_act());
   } else if (screen == "tune") {
     pono::build_tune(lv_scr_act());
   } else if (screen == "settings" || screen == "expert") {
