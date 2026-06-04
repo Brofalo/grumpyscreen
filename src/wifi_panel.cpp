@@ -2,6 +2,7 @@
 #include "utils.h"
 #include "config.h"
 #include "logger.h"
+#include "pono_theme.h"  // pono::font_h2 + color tokens for the restyled header
 
 #include <sstream>
 #include <iostream>
