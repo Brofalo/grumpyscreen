@@ -422,14 +422,14 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // Temps manual steppers: nudge the live target by 5 C (clamped to safe range)
   {
     auto clampi = [](int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); };
-    if (t == tp.nz_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ - 5, 0, 300))); return; }
-    if (t == tp.nz_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ + 5, 0, 300))); return; }
+    if (t == tp.nz_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ - 5, 0, 330))); return; }
+    if (t == tp.nz_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ + 5, 0, 330))); return; }
     if (t == tp.bd_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ - 5, 0, 120))); return; }
     if (t == tp.bd_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ + 5, 0, 120))); return; }
   }
-  // Temps keypad: tap the big number to type an exact target
-  if (t == tp.nz_cur) { s->numpad.set_callback([s](double v){ s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  (int)(v + 0.5))); }); s->numpad.foreground_reset(); return; }
-  if (t == tp.bd_cur) { s->numpad.set_callback([s](double v){ s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", (int)(v + 0.5))); }); s->numpad.foreground_reset(); return; }
+  // Temps keypad: tap the big number to type an exact target (clamped to heater limits)
+  if (t == tp.nz_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>330?330:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  n)); }); s->numpad.foreground_reset(); return; }
+  if (t == tp.bd_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>120?120:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", n)); }); s->numpad.foreground_reset(); return; }
   // Fans (quick)
   if (t == fn.off)  { s->ws.gcode_script("M106 S0"); return; }
   if (t == fn.p50)  { s->ws.gcode_script("M106 S128"); return; }
@@ -446,10 +446,10 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // z-offset uses live babystep. Every control writes straight to Klipper and
   // updates its pill so the change is visible immediately.
   pono::SettingsHandles &se = s->settings_h_;
-  if (t == se.speed) { s->numpad.set_callback([s](double v){ int sp=(int)(v+0.5); s->ws.gcode_script(fmt::format("M220 S{}", sp)); pono::pill_set(s->settings_h_.speed, fmt::format("{}%", sp).c_str()); }); s->numpad.foreground_reset(); return; }
-  if (t == se.flow)  { s->numpad.set_callback([s](double v){ int fl=(int)(v+0.5); s->ws.gcode_script(fmt::format("M221 S{}", fl)); pono::pill_set(s->settings_h_.flow, fmt::format("{}%", fl).c_str()); }); s->numpad.foreground_reset(); return; }
-  if (t == se.pa)    { s->numpad.set_callback([s](double v){ s->ws.gcode_script(fmt::format("SET_PRESSURE_ADVANCE ADVANCE={:.3f}", v)); pono::pill_set(s->settings_h_.pa, fmt::format("{:.3f}", v).c_str()); }); s->numpad.foreground_reset(); return; }
-  if (t == se.zoff)  { s->numpad.set_callback([s](double v){ s->tune_zoff_=v; s->ws.gcode_script(fmt::format("SET_GCODE_OFFSET Z={:.3f} MOVE=1", v)); pono::pill_set(s->settings_h_.zoff, fmt::format("{:.3f}", v).c_str()); }); s->numpad.foreground_reset(); return; }
+  if (t == se.speed) { s->numpad.set_callback([s](double v){ int sp=(int)(v+0.5); sp=sp<10?10:(sp>300?300:sp); s->ws.gcode_script(fmt::format("M220 S{}", sp)); pono::pill_set(s->settings_h_.speed, fmt::format("{}%", sp).c_str()); }); s->numpad.foreground_reset(); return; }
+  if (t == se.flow)  { s->numpad.set_callback([s](double v){ int fl=(int)(v+0.5); fl=fl<50?50:(fl>200?200:fl); s->ws.gcode_script(fmt::format("M221 S{}", fl)); pono::pill_set(s->settings_h_.flow, fmt::format("{}%", fl).c_str()); }); s->numpad.foreground_reset(); return; }
+  if (t == se.pa)    { s->numpad.set_callback([s](double v){ double a=v<0?0:(v>1.0?1.0:v); s->ws.gcode_script(fmt::format("SET_PRESSURE_ADVANCE ADVANCE={:.3f}", a)); pono::pill_set(s->settings_h_.pa, fmt::format("{:.3f}", a).c_str()); }); s->numpad.foreground_reset(); return; }
+  if (t == se.zoff)  { s->numpad.set_callback([s](double v){ s->tune_zoff_=v; s->ws.gcode_script(fmt::format("SET_GCODE_OFFSET Z={:.3f} MOVE=0", v)); pono::pill_set(s->settings_h_.zoff, fmt::format("{:.3f}", v).c_str()); }); s->numpad.foreground_reset(); return; }
   if (t == se.fan)   { s->numpad.set_callback([s](double v){ int p=(int)(v+0.5); p = p<0?0:(p>100?100:p); s->ws.gcode_script(fmt::format("M106 S{}", p*255/100)); pono::pill_set(s->settings_h_.fan, fmt::format("{}%", p).c_str()); }); s->numpad.foreground_reset(); return; }
   if (t == se.speed_p[0]) { s->ws.gcode_script("M220 S50");  pono::pill_set(se.speed, "50%");  return; }
   if (t == se.speed_p[1]) { s->ws.gcode_script("M220 S100"); pono::pill_set(se.speed, "100%"); return; }
@@ -460,8 +460,8 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == se.fan_p[0])   { s->ws.gcode_script("M106 S0");   pono::pill_set(se.fan, "0%");   return; }
   if (t == se.fan_p[1])   { s->ws.gcode_script("M106 S128"); pono::pill_set(se.fan, "50%");  return; }
   if (t == se.fan_p[2])   { s->ws.gcode_script("M106 S255"); pono::pill_set(se.fan, "100%"); return; }
-  if (t == se.zoff_minus) { s->tune_zoff_ -= 0.01; s->ws.gcode_script("SET_GCODE_OFFSET Z_ADJUST=-0.01 MOVE=1"); pono::pill_set(se.zoff, fmt::format("{:.3f}", s->tune_zoff_).c_str()); return; }
-  if (t == se.zoff_plus)  { s->tune_zoff_ += 0.01; s->ws.gcode_script("SET_GCODE_OFFSET Z_ADJUST=0.01 MOVE=1");  pono::pill_set(se.zoff, fmt::format("{:.3f}", s->tune_zoff_).c_str()); return; }
+  if (t == se.zoff_minus) { s->tune_zoff_ -= 0.01; s->ws.gcode_script("SET_GCODE_OFFSET Z_ADJUST=-0.01 MOVE=0"); pono::pill_set(se.zoff, fmt::format("{:.3f}", s->tune_zoff_).c_str()); return; }
+  if (t == se.zoff_plus)  { s->tune_zoff_ += 0.01; s->ws.gcode_script("SET_GCODE_OFFSET Z_ADJUST=0.01 MOVE=0");  pono::pill_set(se.zoff, fmt::format("{:.3f}", s->tune_zoff_).c_str()); return; }
 }
 
 void MainPanel::_fan_slider_cb(lv_event_t *e) {
