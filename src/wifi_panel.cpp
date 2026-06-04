@@ -109,6 +109,22 @@ WifiPanel::WifiPanel(std::mutex &l)
   lv_obj_move_background(cont);
   lv_obj_move_foreground(spinner);
 
+  // ---- Pono restyle: depth backdrop + a real top header (back + title +
+  // refresh) instead of the two floating image buttons hanging bottom-right ----
+  lv_obj_set_style_bg_color(cont, lv_color_hex(0x0b1220), 0);
+  lv_obj_set_style_bg_grad_color(cont, lv_color_hex(0x070b12), 0);
+  lv_obj_set_style_bg_grad_dir(cont, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_bg_opa(cont, LV_OPA_COVER, 0);
+  lv_obj_set_style_pad_top(cont, 46, 0);  // clear the header band
+  lv_obj_t *wifi_title = lv_label_create(cont);
+  lv_label_set_text(wifi_title, "Wi-Fi");
+  lv_obj_set_style_text_font(wifi_title, pono::font_h2, 0);
+  lv_obj_set_style_text_color(wifi_title, pono::color_text_primary, 0);
+  lv_obj_add_flag(wifi_title, LV_OBJ_FLAG_FLOATING);
+  lv_obj_align(wifi_title, LV_ALIGN_TOP_LEFT, 64, 14);
+  lv_obj_align(back_btn.get_container(), LV_ALIGN_TOP_LEFT, 8, 6);
+  lv_obj_align(refresh_btn.get_container(), LV_ALIGN_TOP_RIGHT, -8, 6);
+
   wpa_event.register_callback("WifiPanel",
       [this](const std::string &event) { this->handle_wpa_event(event); });
 
@@ -125,6 +141,16 @@ WifiPanel::~WifiPanel() {
 void WifiPanel::foreground() {
   LOG_TRACE("wifi panel fg");
   lv_obj_move_foreground(cont);
+  // fallback: no Wi-Fi adapter -> say so instead of spinning forever
+  if (KUtils::get_wifi_interface().empty()) {
+    lv_obj_add_flag(spinner, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(wifi_table, LV_OBJ_FLAG_HIDDEN);
+    lv_label_set_text(wifi_label, "No Wi-Fi adapter detected");
+    lv_obj_clear_flag(prompt_cont, LV_OBJ_FLAG_HIDDEN);
+    return;
+  }
+  lv_label_set_text(wifi_label, "Scanning for networks...");
+  lv_obj_clear_flag(prompt_cont, LV_OBJ_FLAG_HIDDEN);
   lv_obj_clear_flag(spinner, LV_OBJ_FLAG_HIDDEN);
   wpa_event.send_command("SCAN");
 }
@@ -259,7 +285,13 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
       }
     } // while
     lv_obj_scroll_to_y(wifi_table, 0, LV_ANIM_OFF);
-    lv_obj_clear_flag(wifi_table, LV_OBJ_FLAG_HIDDEN);
+    if (index == 0) {  // fallback: scan returned nothing
+      lv_obj_add_flag(wifi_table, LV_OBJ_FLAG_HIDDEN);
+      lv_label_set_text(wifi_label, "No networks found - tap Refresh");
+      lv_obj_clear_flag(prompt_cont, LV_OBJ_FLAG_HIDDEN);
+    } else {
+      lv_obj_clear_flag(wifi_table, LV_OBJ_FLAG_HIDDEN);
+    }
     lv_obj_add_flag(spinner, LV_OBJ_FLAG_HIDDEN);
   } else if (event.rfind("<3>CTRL-EVENT-CONNECTED", 0) == 0) {
     if (find_current_network()) {
@@ -305,6 +337,14 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
     } else {
       lv_label_set_text(wifi_label, "");
     }
+  } else if (event.find("CTRL-EVENT-SSID-TEMP-DISABLED") != std::string::npos ||
+             event.find("4WAY-HANDSHAKE-FAILED") != std::string::npos ||
+             event.find("reason=WRONG_KEY") != std::string::npos) {
+    // fallback: auth/handshake failure -> say so (usually a wrong password)
+    std::lock_guard<std::mutex> lock(lv_lock);
+    lv_label_set_text(wifi_label, "Connection failed - check the password");
+    lv_obj_clear_flag(prompt_cont, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_add_flag(spinner, LV_OBJ_FLAG_HIDDEN);
   }
 }
 

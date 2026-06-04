@@ -201,6 +201,7 @@ void MainPanel::consume(json &j) {
       set_temp_lbl(temp_h_.bd_tgt, home_bed_set_ > 0 ? fmt::format("set {}", home_bed_set_) : std::string("off"), 76);
       { auto bm = V("/params/0/bed_mesh"); if (!bm.is_null()) render_bed_mesh(bm); }  // heatmap on mesh change
       if (printing) {  // progress + layer + ETA only while a job runs
+        lv_disp_trigger_activity(NULL);  // keep the dashboard awake while printing (no blank mid-print)
         int pct = (int)(home_progress_ * 100.0 + 0.5);
         lv_arc_set_value(home_h.arc, pct);
         if (home_h.pct) {
