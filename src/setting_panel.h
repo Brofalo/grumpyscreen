@@ -16,6 +16,10 @@ class SettingPanel {
 
   lv_obj_t *get_container();
 
+  // Surface the existing Wi-Fi panel from the Pono More menu (reuses the full
+  // wpa scan/connect UI). Its own back button sends it to the background again.
+  void show_wifi() { wifi_panel.foreground(); }
+
   void handle_callback(lv_event_t *event);
 
   static void _handle_callback(lv_event_t *event) {

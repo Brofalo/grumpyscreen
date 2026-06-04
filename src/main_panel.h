@@ -131,12 +131,14 @@ class MainPanel : public NotifyConsumer {
   // ---- Pono native sub-screens ----
   lv_obj_t *move_scr_ = nullptr, *fil_scr_ = nullptr, *temp_scr_ = nullptr;
   lv_obj_t *fan_scr_ = nullptr, *files_scr_ = nullptr, *tune_scr_ = nullptr;
+  lv_obj_t *more_scr_ = nullptr, *settings_scr_ = nullptr, *settings_back_ = nullptr;
   pono::MoveHandles move_h_;
   pono::FilamentHandles fil_h_;
   pono::TempsHandles temp_h_;
   pono::FansHandles fan_h_;
   pono::FilesHandles files_h_;
   pono::TuneHandles tune_h_;
+  pono::MoreHandles more_h_;
   double move_step_ = 1.0;        // selected jog step (mm)
   std::vector<std::string> files_names_;  // index -> gcode filename for row taps
   PrintStatusPanel print_status_panel;

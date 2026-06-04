@@ -185,6 +185,17 @@ void MainPanel::consume(json &j) {
           home_bed_set_ > 0 ? fmt::format("/ {}", home_bed_set_).c_str() : "off");
         lv_obj_align(home_h.bed_set, LV_ALIGN_RIGHT_MID, -14, 0);
       }
+      // mirror live temps onto the Temperature sub-screen (current + target);
+      // re-align after set_text so the centered values stay centered as they grow
+      auto set_temp_lbl = [](lv_obj_t *o, const std::string &txt, lv_coord_t dy) {
+        if (!o) return;
+        lv_label_set_text(o, txt.c_str());
+        lv_obj_align(o, LV_ALIGN_TOP_MID, 0, dy);
+      };
+      set_temp_lbl(temp_h_.nz_cur, fmt::format("{}", home_nozzle_), 28);
+      set_temp_lbl(temp_h_.nz_tgt, home_nozzle_set_ > 0 ? fmt::format("set {}", home_nozzle_set_) : std::string("off"), 76);
+      set_temp_lbl(temp_h_.bd_cur, fmt::format("{}", home_bed_), 28);
+      set_temp_lbl(temp_h_.bd_tgt, home_bed_set_ > 0 ? fmt::format("set {}", home_bed_set_) : std::string("off"), 76);
       if (printing) {  // progress + layer + ETA only while a job runs
         int pct = (int)(home_progress_ * 100.0 + 0.5);
         lv_arc_set_value(home_h.arc, pct);
@@ -292,6 +303,7 @@ void MainPanel::_home_tap(lv_event_t *e) {
   else if (t == h.qa[3]) s->show_pono(s->fan_scr_);     // Fans
   else if (t == h.tile_nozzle || t == h.tile_bed) s->show_pono(s->temp_scr_);   // temps
   else if (t == h.tile_tune) s->show_pono(s->tune_scr_);  // Tune
+  else if (t == h.tile_more) s->show_pono(s->more_scr_);  // More menu
 }
 
 // ---- Pono native sub-screen management ----
@@ -312,6 +324,8 @@ void MainPanel::create_pono_screens() {
   fan_scr_   = make(); pono::build_fans(fan_scr_, &fan_h_);
   files_scr_ = make(); pono::build_files(files_scr_, &files_h_);
   tune_scr_  = make(); pono::build_tune(tune_scr_, &tune_h_);
+  more_scr_  = make(); pono::build_more(more_scr_, &more_h_);
+  settings_scr_ = make(); pono::build_settings(settings_scr_, &settings_back_);
 
   lv_obj_t *taps[] = {
     move_h_.back, move_h_.xplus, move_h_.xminus, move_h_.yplus, move_h_.yminus,
@@ -321,10 +335,13 @@ void MainPanel::create_pono_screens() {
     fil_h_.preset[0], fil_h_.preset[1], fil_h_.preset[2], fil_h_.cooldown,
     temp_h_.back, temp_h_.nz_preset[0], temp_h_.nz_preset[1], temp_h_.nz_preset[2], temp_h_.nz_off,
     temp_h_.bd_preset[0], temp_h_.bd_preset[1], temp_h_.bd_preset[2], temp_h_.bd_off,
+    temp_h_.nz_minus, temp_h_.nz_plus, temp_h_.bd_minus, temp_h_.bd_plus,
     fan_h_.back, fan_h_.off, fan_h_.p50, fan_h_.full,
     files_h_.back,
     tune_h_.back, tune_h_.standard, tune_h_.omega,
     tune_h_.cals[0], tune_h_.cals[1], tune_h_.cals[2], tune_h_.cals[3], tune_h_.cals[4],
+    more_h_.back, more_h_.wifi, more_h_.expert, more_h_.restart,
+    settings_back_,
   };
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_sub_tap, LV_EVENT_CLICKED, this);
   if (fan_h_.part_slider) lv_obj_add_event_cb(fan_h_.part_slider, &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
@@ -332,14 +349,14 @@ void MainPanel::create_pono_screens() {
 }
 
 void MainPanel::show_pono(lv_obj_t *scr) {
-  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_};
+  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_};
   for (lv_obj_t *s : all) if (s) lv_obj_add_flag(s, LV_OBJ_FLAG_HIDDEN);
   if (home_scr) lv_obj_add_flag(home_scr, LV_OBJ_FLAG_HIDDEN);
   if (scr) { lv_obj_clear_flag(scr, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(scr); }
 }
 
 void MainPanel::back_to_home() {
-  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_};
+  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_};
   for (lv_obj_t *s : all) if (s) lv_obj_add_flag(s, LV_OBJ_FLAG_HIDDEN);
   show_home();
 }
@@ -354,7 +371,8 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   pono::TuneHandles &tu = s->tune_h_;
   // back chips
   if (t == mv.back || t == fl.back || t == tp.back || t == fn.back ||
-      t == s->files_h_.back || t == tu.back) { s->back_to_home(); return; }
+      t == s->files_h_.back || t == tu.back ||
+      t == s->more_h_.back || t == s->settings_back_) { s->back_to_home(); return; }
   // Move jog (relative)
   double st = s->move_step_;
   if (t == mv.xplus)  { s->ws.gcode_script(fmt::format("G91\nG1 X{} F6000\nG90", st)); return; }
@@ -396,6 +414,14 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == tp.bd_preset[1]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=80"); return; }
   if (t == tp.bd_preset[2]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=75"); return; }
   if (t == tp.bd_off)       { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0"); return; }
+  // Temps manual steppers: nudge the live target by 5 C (clamped to safe range)
+  {
+    auto clampi = [](int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); };
+    if (t == tp.nz_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ - 5, 0, 300))); return; }
+    if (t == tp.nz_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ + 5, 0, 300))); return; }
+    if (t == tp.bd_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ - 5, 0, 120))); return; }
+    if (t == tp.bd_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ + 5, 0, 120))); return; }
+  }
   // Fans (quick)
   if (t == fn.off)  { s->ws.gcode_script("M106 S0"); return; }
   if (t == fn.p50)  { s->ws.gcode_script("M106 S128"); return; }
@@ -404,6 +430,10 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == tu.standard) { s->ws.gcode_script("PONO_CAL_STANDARD"); return; }
   if (t == tu.omega)    { s->ws.gcode_script("PONO_CAL_OMEGA"); return; }
   for (int i = 0; i < 5; i++) if (t == tu.cals[i]) { s->ws.gcode_script("PONO_CAL_STANDARD"); return; }  // individual cals -> guided standard (placeholder)
+  // More menu rows
+  if (t == s->more_h_.wifi)    { s->setting_panel.show_wifi(); return; }       // reuse the wpa scan/connect panel
+  if (t == s->more_h_.expert)  { s->show_pono(s->settings_scr_); return; }     // Expert Tune surface
+  if (t == s->more_h_.restart) { s->ws.gcode_script("FIRMWARE_RESTART"); return; }
 }
 
 void MainPanel::_fan_slider_cb(lv_event_t *e) {
@@ -463,7 +493,7 @@ void MainPanel::populate_files() {
 void MainPanel::attach_home_taps() {
   lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.qa[0], home_h.qa[1],
                        home_h.qa[2], home_h.qa[3], home_h.tile_nozzle, home_h.tile_bed,
-                       home_h.tile_tune, home_h.tile_omega };
+                       home_h.tile_tune, home_h.tile_omega, home_h.tile_more };
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_home_tap, LV_EVENT_CLICKED, this);
 }
 

@@ -296,7 +296,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   for (int i = 0; i < 5; i++) {
     int x = bx0 + i * (tw + tg);
     lv_obj_t *t = nav_tile(parent, x, BAR_Y, tw, BAR_H, bi[i], bn[i], ms);
-    if (out && i < 4) out->qa[i] = t;
+    if (out) { if (i < 4) out->qa[i] = t; else out->tile_more = t; }
   }
 
   if (out) {
@@ -410,7 +410,7 @@ static void value_pill(lv_obj_t *row, const char *val) {
   lv_obj_center(v);
 }
 
-void build_settings(lv_obj_t *parent) {
+void build_settings(lv_obj_t *parent, lv_obj_t **back_out) {
   const lv_font_t *ms = &lv_font_montserrat_14;
 
   lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
@@ -426,6 +426,7 @@ void build_settings(lv_obj_t *parent) {
   hairline(back, color_text_tertiary, opa_border_medium);
   lv_obj_t *bi = lbl(parent, LV_SYMBOL_LEFT, ms, color_accent_primary, 0, 0);
   lv_obj_align_to(bi, back, LV_ALIGN_CENTER, 0, 0);
+  if (back_out) *back_out = back;
 
   lbl(parent, "Expert Tune", font_h1, color_text_primary, 64, 6);
 
@@ -624,28 +625,39 @@ void build_filament(lv_obj_t *parent, FilamentHandles *h) {
 // out = [cur, tgt, b0, b1, b2, off].
 static void temp_section(lv_obj_t *parent, int x, int w, const char *name,
                          const char *p0, const char *p1, const char *p2,
-                         lv_obj_t *out[6]) {
+                         lv_obj_t *out[8]) {
   lv_obj_t *c = card(parent, x, 52, w, 196, color_surface_raised, 14);
   vgrad(c, color_surface_elevated, color_surface_raised);
   hairline(c, color_text_tertiary, opa_border_subtle);
   lv_obj_t *nm = lbl(c, name, font_caption, color_text_secondary, 0, 0);
-  lv_obj_align(nm, LV_ALIGN_TOP_MID, 0, 12);
+  lv_obj_align(nm, LV_ALIGN_TOP_MID, 0, 10);
   lv_obj_t *cv = lbl(c, "--", font_num_large, color_text_primary, 0, 0);
-  lv_obj_align(cv, LV_ALIGN_TOP_MID, 0, 34);
-  lv_obj_t *tv = lbl(c, "off", font_micro, color_text_secondary, 0, 0);
-  lv_obj_align(tv, LV_ALIGN_TOP_MID, 0, 80);
-  out[0] = cv; out[1] = tv;
+  lv_obj_align(cv, LV_ALIGN_TOP_MID, 0, 28);
+  // manual -/+ steppers flanking the live target value (the "set temp" control)
+  lv_obj_t *mn = card(c, 10, 68, 46, 34, color_surface_elevated, 8);
+  vgrad(mn, color_surface_elevated, color_surface_raised);
+  hairline(mn, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *mnl = lbl(mn, LV_SYMBOL_MINUS, &lv_font_montserrat_14, color_accent_primary, 0, 0);
+  lv_obj_center(mnl);
+  lv_obj_t *ps_btn = card(c, w - 10 - 46, 68, 46, 34, color_surface_elevated, 8);
+  vgrad(ps_btn, color_surface_elevated, color_surface_raised);
+  hairline(ps_btn, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *psl = lbl(ps_btn, LV_SYMBOL_PLUS, &lv_font_montserrat_14, color_accent_primary, 0, 0);
+  lv_obj_center(psl);
+  lv_obj_t *tv = lbl(c, "off", font_caption, color_accent_primary, 0, 0);
+  lv_obj_align(tv, LV_ALIGN_TOP_MID, 0, 76);
+  out[0] = cv; out[1] = tv; out[6] = mn; out[7] = ps_btn;
   const char *ps[3] = {p0, p1, p2};
   int pw = (w - 24 - 2 * 6) / 3;
   for (int i = 0; i < 3; i++) {
-    lv_obj_t *pb = card(c, 12 + i * (pw + 6), 106, pw, 36, color_surface_elevated, 8);
+    lv_obj_t *pb = card(c, 12 + i * (pw + 6), 110, pw, 34, color_surface_elevated, 8);
     vgrad(pb, color_surface_elevated, color_surface_raised);
     hairline(pb, color_text_tertiary, opa_border_subtle);
-    lv_obj_t *pl = lbl(pb, ps[i], font_micro, color_accent_primary, 0, 0);
-    lv_obj_center(pl);
+    lv_obj_t *lab = lbl(pb, ps[i], font_micro, color_accent_primary, 0, 0);
+    lv_obj_center(lab);
     out[2 + i] = pb;
   }
-  lv_obj_t *ob = card(c, 12, 150, w - 24, 34, color_surface_base, 8);
+  lv_obj_t *ob = card(c, 12, 152, w - 24, 32, color_surface_base, 8);
   hairline(ob, color_state_error, opa_border_medium);
   lv_obj_t *ol = lbl(ob, "Off", font_caption, color_state_error, 0, 0);
   lv_obj_center(ol);
@@ -655,15 +667,54 @@ static void temp_section(lv_obj_t *parent, int x, int w, const char *name,
 void build_temps(lv_obj_t *parent, TempsHandles *h) {
   lv_obj_t *back = screen_header(parent, "Temperature");
   if (h) h->back = back;
-  lv_obj_t *nz[6], *bd[6];
+  lv_obj_t *nz[8], *bd[8];
   temp_section(parent, 12, 224, "NOZZLE", "PLA 220", "PETG 240", "PA 260", nz);
   temp_section(parent, 244, 224, "BED", "PLA 60", "PETG 80", "PA 75", bd);
   if (h) {
     h->nz_cur = nz[0]; h->nz_tgt = nz[1];
     h->nz_preset[0] = nz[2]; h->nz_preset[1] = nz[3]; h->nz_preset[2] = nz[4]; h->nz_off = nz[5];
+    h->nz_minus = nz[6]; h->nz_plus = nz[7];
     h->bd_cur = bd[0]; h->bd_tgt = bd[1];
     h->bd_preset[0] = bd[2]; h->bd_preset[1] = bd[3]; h->bd_preset[2] = bd[4]; h->bd_off = bd[5];
+    h->bd_minus = bd[6]; h->bd_plus = bd[7];
   }
+}
+
+void build_more(lv_obj_t *parent, MoreHandles *h) {
+  lv_obj_t *back = screen_header(parent, "More");
+  if (h) h->back = back;
+
+  lv_obj_t *list = lv_obj_create(parent);
+  lv_obj_remove_style_all(list);
+  lv_obj_set_pos(list, 12, 56);
+  lv_obj_set_size(list, 456, 206);
+  lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(list, 8, 0);
+  lv_obj_clear_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+
+  auto row = [&](const char *icon, const char *title, const char *sub) -> lv_obj_t * {
+    lv_obj_t *r = lv_obj_create(list);
+    lv_obj_remove_style_all(r);
+    lv_obj_set_size(r, lv_pct(100), 58);
+    vgrad(r, color_surface_elevated, color_surface_raised);
+    lv_obj_set_style_radius(r, 12, 0);
+    hairline(r, color_text_tertiary, opa_border_subtle);
+    lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *ic = lbl(r, icon, &lv_font_montserrat_14, color_accent_primary, 0, 0);
+    lv_obj_align(ic, LV_ALIGN_LEFT_MID, 16, 0);
+    lv_obj_t *tl = lbl(r, title, font_body, color_text_primary, 0, 0);
+    lv_obj_align(tl, LV_ALIGN_LEFT_MID, 48, -9);
+    lv_obj_t *sl = lbl(r, sub, font_micro, color_text_secondary, 0, 0);
+    lv_obj_align(sl, LV_ALIGN_LEFT_MID, 48, 10);
+    lv_obj_t *ch = lbl(r, LV_SYMBOL_RIGHT, &lv_font_montserrat_14, color_text_tertiary, 0, 0);
+    lv_obj_align(ch, LV_ALIGN_RIGHT_MID, -14, 0);
+    return r;
+  };
+
+  lv_obj_t *w = row(LV_SYMBOL_WIFI, "Wi-Fi & Network", "Scan and connect");
+  lv_obj_t *e = row(LV_SYMBOL_SETTINGS, "Expert Tune", "Full slicer-grade settings");
+  lv_obj_t *rs = row(LV_SYMBOL_REFRESH, "Restart Firmware", "Reload Klipper and UI");
+  if (h) { h->wifi = w; h->expert = e; h->restart = rs; }
 }
 
 void build_fans(lv_obj_t *parent, FansHandles *h) {

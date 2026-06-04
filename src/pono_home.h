@@ -58,6 +58,7 @@ struct HomeHandles {
   lv_obj_t *tile_bed = nullptr;
   lv_obj_t *btn_pausestop = nullptr;
   lv_obj_t *qa[4] = {nullptr, nullptr, nullptr, nullptr}; // Move/Filament/Files/Fans
+  lv_obj_t *tile_more = nullptr;  // 5th nav tile -> More menu
 };
 
 // Build the full 480x272 home cockpit into `parent` (a screen-sized object).
@@ -96,8 +97,18 @@ struct TempsHandles {
   lv_obj_t *nz_cur = nullptr, *nz_tgt = nullptr, *bd_cur = nullptr, *bd_tgt = nullptr;
   lv_obj_t *nz_preset[3] = {nullptr, nullptr, nullptr}, *nz_off = nullptr;
   lv_obj_t *bd_preset[3] = {nullptr, nullptr, nullptr}, *bd_off = nullptr;
+  lv_obj_t *nz_minus = nullptr, *nz_plus = nullptr;  // manual -/+ step (nozzle)
+  lv_obj_t *bd_minus = nullptr, *bd_plus = nullptr;  // manual -/+ step (bed)
 };
 void build_temps(lv_obj_t *parent, TempsHandles *h = nullptr);
+
+// More menu: the 5th cockpit tile. Lists secondary tools (Wi-Fi, Expert Tune,
+// restart) as tappable rows. The app wires each row to its action.
+struct MoreHandles {
+  lv_obj_t *back = nullptr;
+  lv_obj_t *wifi = nullptr, *expert = nullptr, *restart = nullptr;
+};
+void build_more(lv_obj_t *parent, MoreHandles *h = nullptr);
 
 struct FansHandles {
   lv_obj_t *back = nullptr;
@@ -128,7 +139,8 @@ void build_tune(lv_obj_t *parent, TuneHandles *h = nullptr);
 // Build the Expert Tune screen into `parent`: category chips + a scrollable
 // list of tunable parameters with real editors (slider / switch / value
 // field). The full-tuneability surface; the real app populates it from the
-// shared settings schema and writes changes back.
-void build_settings(lv_obj_t *parent);
+// shared settings schema and writes changes back. If back_out is non-null it
+// receives the back chip so the app can wire return-to-home navigation.
+void build_settings(lv_obj_t *parent, lv_obj_t **back_out = nullptr);
 
 } // namespace pono
