@@ -78,7 +78,7 @@ Numpad::Numpad(lv_obj_t *parent)
   lv_obj_set_style_bg_opa(kb, LV_OPA_COVER, LV_PART_ITEMS);
   lv_obj_set_style_text_color(kb, pono::color_text_primary, LV_PART_ITEMS);
   lv_obj_set_style_radius(kb, 8, LV_PART_ITEMS);
-  lv_obj_set_style_text_font(kb, pono::font_body, LV_PART_ITEMS);
+  lv_obj_set_style_text_font(kb, &lv_font_montserrat_14, LV_PART_ITEMS);  // carries digits + LV_SYMBOL glyphs (backspace)
   lv_obj_set_style_bg_color(kb, pono::color_accent_primary, LV_PART_ITEMS | LV_STATE_PRESSED);
 
   lv_obj_add_event_cb(kb, &Numpad::_handle_input, LV_EVENT_VALUE_CHANGED, this);

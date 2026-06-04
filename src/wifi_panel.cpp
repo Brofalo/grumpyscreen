@@ -66,6 +66,9 @@ WifiPanel::WifiPanel(std::mutex &l)
   
   lv_table_set_col_width(wifi_table, 0, screen_width);
   lv_table_set_col_width(wifi_table, 1, 100);
+  // montserrat carries the LV_SYMBOL glyphs (wifi/lock/ok); the theme's text
+  // font does not, so the signal/lock cells were rendering as tofu boxes.
+  lv_obj_set_style_text_font(wifi_table, &lv_font_montserrat_14, LV_PART_ITEMS);
   
   lv_obj_add_event_cb(wifi_table, &WifiPanel::_handle_callback, LV_EVENT_VALUE_CHANGED, this);
   lv_obj_add_event_cb(wifi_table, &WifiPanel::_handle_callback, LV_EVENT_SIZE_CHANGED, this);
