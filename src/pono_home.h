@@ -125,6 +125,8 @@ struct FilesHandles {
 void build_files(lv_obj_t *parent, FilesHandles *h = nullptr);
 // Append a file row to the Files list (the app populates from Moonraker).
 void files_add_row(lv_obj_t *list, const char *name, const char *meta);
+// Apply async per-file metadata: swap glyph -> thumbnail + refresh the meta line.
+void files_apply_meta(lv_obj_t *row, const char *thumb_path, int zoom, const char *meta);
 
 struct TuneHandles {
   lv_obj_t *back = nullptr, *standard = nullptr, *omega = nullptr;

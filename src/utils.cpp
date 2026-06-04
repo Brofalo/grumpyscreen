@@ -44,11 +44,11 @@ namespace KUtils {
       auto scaled_width = scale * 300;
       LOG_DEBUG("using thumb at scaled width {}", scaled_width);
       uint32_t closest_index = 0;
-      size_t thumb_width = 0;
       auto width = thumbs.at(0)["width"].is_number()
 	        ? thumbs.at(0)["width"].template get<int>()
 	        : std::stoi(thumbs.at(0)["width"].template get<std::string>());
       int closest = std::abs(scaled_width - width);
+      size_t thumb_width = width;  // init to first thumb; loop narrows it (was 0 -> div-by-zero when index 0 won)
       for (int i = 0; i < thumbs.size(); i++) {
 	      width = thumbs.at(i)["width"].is_number()
 	        ? thumbs.at(i)["width"].template get<int>()

@@ -643,6 +643,7 @@ void MainPanel::populate_files() {
     if (!this->files_h_.list) return;
     lv_obj_clean(this->files_h_.list);
     this->files_names_.clear();
+    uint32_t gen = ++this->files_gen_;  // any async metadata from a prior populate is now stale
     auto &res = j["/result"_json_pointer];
     if (res.is_array()) {
       int n = 0;
@@ -661,6 +662,28 @@ void MainPanel::populate_files() {
         if (row) {
           lv_obj_set_user_data(row, (void *)(uintptr_t)(this->files_names_.size() - 1));
           lv_obj_add_event_cb(row, &MainPanel::_file_row_cb, LV_EVENT_CLICKED, this);
+          // async per-file metadata: thumbnail + est time + filament type
+          json mp = {{"filename", path}};
+          this->ws.send_jsonrpc("server.files.metadata", mp, [this, gen, row, path](json &meta) {
+            std::lock_guard<std::mutex> mlock(this->lv_lock);
+            if (gen != this->files_gen_) return;  // Files list was rebuilt; row is stale
+            auto thumb = KUtils::get_thumbnail(path, meta, 0.17);
+            std::string ipath = thumb.first.empty() ? "" : ("A:" + thumb.first);
+            int zoom = thumb.second > 0 ? (int)(46 * 256 / (int)thumb.second) : 0;
+            std::string m;
+            auto et = meta["/result/estimated_time"_json_pointer];
+            if (et.is_number()) {
+              int secs = (int)et.template get<double>();
+              m = secs >= 3600 ? fmt::format("{}h {}m", secs / 3600, (secs % 3600) / 60)
+                               : fmt::format("{}m", secs / 60);
+            }
+            auto ft = meta["/result/filament_type"_json_pointer];
+            if (ft.is_string()) {
+              auto t = ft.template get<std::string>();
+              m = m.empty() ? t : m + "  .  " + t;
+            }
+            pono::files_apply_meta(row, ipath.c_str(), zoom, m.c_str());
+          });
         }
       }
     }

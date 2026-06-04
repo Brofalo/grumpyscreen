@@ -158,6 +158,7 @@ class MainPanel : public NotifyConsumer {
   std::vector<float> mesh_z_;      // flattened probed_matrix for the heatmap
   double move_step_ = 1.0;        // selected jog step (mm)
   std::vector<std::string> files_names_;  // index -> gcode filename for row taps
+  uint32_t files_gen_ = 0;                 // bumped on each Files rebuild; async metadata checks it before touching a row
   PrintStatusPanel print_status_panel;
   PrintPanel print_panel;
   Numpad numpad;

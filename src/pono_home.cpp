@@ -968,19 +968,48 @@ void build_fans(lv_obj_t *parent, FansHandles *h) {
 void files_add_row(lv_obj_t *list, const char *name, const char *meta) {
   lv_obj_t *r = lv_obj_create(list);
   lv_obj_remove_style_all(r);
-  lv_obj_set_size(r, lv_pct(100), 46);
+  lv_obj_set_size(r, lv_pct(100), 54);
   vgrad(r, color_surface_elevated, color_surface_raised);
   lv_obj_set_style_radius(r, 10, 0);
   hairline(r, color_text_tertiary, opa_border_subtle);
   lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
+  // child 0: thumbnail image (hidden until the app loads one from metadata).
+  // pivot 0,0 + pos so a zoom-to-fit lands the visual exactly in a 46px slot.
+  lv_obj_t *th = lv_img_create(r);
+  lv_obj_add_flag(th, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_set_style_radius(th, 6, 0);
+  lv_obj_set_style_clip_corner(th, true, 0);
+  lv_img_set_pivot(th, 0, 0);
+  lv_obj_set_pos(th, 8, 4);
+  // child 1: fallback file glyph (shown until a thumbnail replaces it)
   lv_obj_t *ic = lbl(r, LV_SYMBOL_FILE, &lv_font_montserrat_14, color_accent_primary, 0, 0);
-  lv_obj_align(ic, LV_ALIGN_LEFT_MID, 14, 0);
+  lv_obj_align(ic, LV_ALIGN_LEFT_MID, 18, 0);
+  // child 2: name, child 3: meta
   lv_obj_t *nm = lbl(r, name, font_caption, color_text_primary, 0, 0);
-  lv_obj_align(nm, LV_ALIGN_LEFT_MID, 40, -7);
+  lv_obj_align(nm, LV_ALIGN_LEFT_MID, 62, -8);
   lv_obj_t *mt = lbl(r, meta, font_micro, color_text_secondary, 0, 0);
-  lv_obj_align(mt, LV_ALIGN_LEFT_MID, 40, 10);
+  lv_obj_align(mt, LV_ALIGN_LEFT_MID, 62, 10);
+  // child 4: play
   lv_obj_t *pi = lbl(r, LV_SYMBOL_PLAY, &lv_font_montserrat_14, color_accent_secondary, 0, 0);
   lv_obj_align(pi, LV_ALIGN_RIGHT_MID, -14, 0);
+}
+
+// Apply async metadata to a file row: swap the glyph for the loaded thumbnail
+// (child 0 img, child 1 glyph) and refresh the meta line (child 3).
+void files_apply_meta(lv_obj_t *row, const char *thumb_path, int zoom, const char *meta) {
+  if (!row) return;
+  lv_obj_t *th = lv_obj_get_child(row, 0);
+  lv_obj_t *ic = lv_obj_get_child(row, 1);
+  lv_obj_t *mt = lv_obj_get_child(row, 3);
+  if (th && thumb_path && thumb_path[0]) {
+    lv_img_set_src(th, thumb_path);
+    lv_img_set_pivot(th, 0, 0);
+    if (zoom > 0) lv_img_set_zoom(th, zoom);
+    lv_obj_set_pos(th, 8, 4);
+    lv_obj_clear_flag(th, LV_OBJ_FLAG_HIDDEN);
+    if (ic) lv_obj_add_flag(ic, LV_OBJ_FLAG_HIDDEN);
+  }
+  if (mt && meta && meta[0]) lv_label_set_text(mt, meta);
 }
 
 void build_files(lv_obj_t *parent, FilesHandles *h) {
