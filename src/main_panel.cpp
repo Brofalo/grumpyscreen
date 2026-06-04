@@ -199,6 +199,18 @@ void MainPanel::consume(json &j) {
       set_temp_lbl(temp_h_.nz_tgt, home_nozzle_set_ > 0 ? fmt::format("set {}", home_nozzle_set_) : std::string("off"), 76);
       set_temp_lbl(temp_h_.bd_cur, fmt::format("{}", home_bed_), 28);
       set_temp_lbl(temp_h_.bd_tgt, home_bed_set_ > 0 ? fmt::format("set {}", home_bed_set_) : std::string("off"), 76);
+      // mirror nozzle onto the Filament screen banner (was a static "-- / --")
+      if (fil_h_.temp) {
+        lv_label_set_text(fil_h_.temp, fmt::format("{} / {}", home_nozzle_,
+          home_nozzle_set_ > 0 ? std::to_string(home_nozzle_set_) : std::string("off")).c_str());
+        lv_obj_align(fil_h_.temp, LV_ALIGN_RIGHT_MID, -14, 0);
+      }
+      // mirror part-cooling fan speed onto the Fans screen value + slider
+      { auto v = V("/params/0/fan/speed"); if (!v.is_null()) {
+          int fpct = (int)(v.template get<double>() * 100.0 + 0.5);
+          if (fan_h_.part_val)    lv_label_set_text(fan_h_.part_val, fmt::format("{}%", fpct).c_str());
+          if (fan_h_.part_slider) lv_slider_set_value(fan_h_.part_slider, fpct, LV_ANIM_OFF);
+      } }
       { auto bm = V("/params/0/bed_mesh"); if (!bm.is_null()) render_bed_mesh(bm); }  // heatmap on mesh change
       if (printing) {  // progress + layer + ETA only while a job runs
         lv_disp_trig_activity(NULL);  // keep the dashboard awake while printing (no blank mid-print)

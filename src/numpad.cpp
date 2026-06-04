@@ -14,6 +14,7 @@ enum { NP_DOT = 9, NP_ZERO = 10, NP_BKSP = 11, NP_CANCEL = 12, NP_OK = 13 };
 static void numpad_draw_cb(lv_event_t *e) {
   lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
   if (dsc->part != LV_PART_ITEMS) return;
+  if (!dsc->rect_dsc) return;  // match the label_dsc guard below; no rect to recolor
   if (dsc->id == NP_OK) {
     dsc->rect_dsc->bg_color = pono::color_accent_primary;
     if (dsc->label_dsc) dsc->label_dsc->color = pono::color_surface_base;

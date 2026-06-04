@@ -122,7 +122,7 @@ WifiPanel::WifiPanel(std::mutex &l)
   // pushed BOTH header and content down, piling them on top of each other.
   // (margin styles are not compiled into this LVGL, so pad is the lever.)
   lv_obj_set_style_pad_top(cont, 0, 0);
-  lv_obj_set_style_pad_top(top_cont, 56, 0);
+  lv_obj_set_style_pad_top(top_cont, 64, 0);  // clear the back/refresh image+label buttons fully
   lv_obj_t *wifi_title = lv_label_create(cont);
   lv_label_set_text(wifi_title, "Wi-Fi");
   lv_obj_set_style_text_font(wifi_title, pono::font_h2, 0);
@@ -187,9 +187,12 @@ void WifiPanel::remove_network(lv_event_t *e) {
   lv_msgbox_close(obj);
 
   if (action == "OK") {
+    // A rescan on the wpa thread can clear list_networks between the long-press
+    // and this confirm; don't dereference end().
+    auto it = list_networks.find(selected_network);
+    if (it == list_networks.end()) return;
     LOG_INFO("Removing network {}", selected_network);
-    auto nid = list_networks.find(selected_network)->second;
-    wpa_event.send_command(fmt::format("REMOVE_NETWORK {}", nid));
+    wpa_event.send_command(fmt::format("REMOVE_NETWORK {}", it->second));
     wpa_event.send_command("SAVE_CONFIG");
   }
 }
@@ -254,13 +257,19 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
     wifi_name_db.clear();
     uint32_t index = 0;
 
+    // Take the LVGL lock before ANY UI mutation. handle_wpa_event runs on the
+    // wpa event-loop thread, so the label/table writes below race the render
+    // thread without it. find_current_network() only hits the wpa socket, so
+    // it is safe (if briefly blocking) to hold the lock across it.
+    std::lock_guard<std::mutex> lock(lv_lock);
+
     if (find_current_network()) {
       LOG_TRACE("handle wpa event scan results - current network {}", cur_network);
     } else {
       lv_label_set_text(wifi_label, "");
     }
 
-    std::lock_guard<std::mutex> lock(lv_lock);
+    lv_table_set_row_cnt(wifi_table, 0);  // drop stale rows so a shorter scan leaves no tappable ghosts
     while (std::getline(f, line)) {
       if (line.rfind("bss", 0) == 0) {
 	      continue;
@@ -269,7 +278,9 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
       auto wifi_parts = KUtils::split(line, '\t');
       LOG_TRACE("wifi parts {}", join(wifi_parts, ", "));
       if (wifi_parts.size() == 5) {
-        auto inserted = wifi_name_db.insert({wifi_parts[4], std::stoi(wifi_parts[2])});
+        int signal = 0;
+        try { signal = std::stoi(wifi_parts[2]); } catch (...) { continue; }  // skip malformed scan lines
+        auto inserted = wifi_name_db.insert({wifi_parts[4], signal});
         if (inserted.second) {
           lv_table_set_cell_value(wifi_table, index, 0, wifi_parts[4].c_str());
           if (cur_network != wifi_parts[4]) {
@@ -316,6 +327,7 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
       
       std::lock_guard<std::mutex> lock(lv_lock);
 
+      lv_table_set_row_cnt(wifi_table, 0);  // rebuild cleanly so no stale rows linger
       uint32_t index = 0;
       for (const auto &wifi : pairs) {
         lv_table_set_cell_value(wifi_table, index, 0, wifi.first.c_str());
@@ -352,6 +364,9 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
     std::lock_guard<std::mutex> lock(lv_lock);
     lv_label_set_text(wifi_label, "Connection failed - check the password");
     lv_obj_clear_flag(prompt_cont, LV_OBJ_FLAG_HIDDEN);
+    // re-show the field + keyboard (both hidden on submit) so a retry is possible
+    lv_obj_clear_flag(password_input, LV_OBJ_FLAG_HIDDEN);
+    lv_event_send(password_input, LV_EVENT_FOCUSED, NULL);
     lv_obj_add_flag(spinner, LV_OBJ_FLAG_HIDDEN);
   }
 }

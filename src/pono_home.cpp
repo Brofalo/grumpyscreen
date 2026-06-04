@@ -912,12 +912,12 @@ void build_fans(lv_obj_t *parent, FansHandles *h) {
   lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
   if (h) h->part_slider = sl;
 
+  // Uniform momentary buttons - the slider above is the source of truth for
+  // the live fan speed. (Full used to be hard-painted cyan, which read as a
+  // permanent "active" state even with the fan off.)
   lv_obj_t *off = tap_btn(parent, 12, 176, 148, 44, "Off", font_body, color_text_secondary);
   lv_obj_t *h50 = tap_btn(parent, 166, 176, 148, 44, "50%", font_body, color_text_primary);
-  lv_obj_t *full = card(parent, 320, 176, 148, 44, color_accent_primary, 10);
-  vgrad(full, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
-  lv_obj_t *fl = lbl(full, "Full", font_body, color_surface_base, 0, 0);
-  lv_obj_center(fl);
+  lv_obj_t *full = tap_btn(parent, 320, 176, 148, 44, "Full", font_body, color_text_primary);
   if (h) { h->off = off; h->p50 = h50; h->full = full; }
 
   lv_obj_t *ac = card(parent, 12, 230, 456, 32, color_surface_elevated, 8);

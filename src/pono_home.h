@@ -102,12 +102,13 @@ struct TempsHandles {
 };
 void build_temps(lv_obj_t *parent, TempsHandles *h = nullptr);
 
-// More menu: the 5th cockpit tile. Lists secondary tools (Wi-Fi, Expert Tune,
-// restart) as tappable rows. The app wires each row to its action.
+// More menu: the 5th cockpit tile. Lists secondary tools (Wi-Fi, Bed Mesh,
+// Expert Tune, Lights, System, Power) as tappable rows. The app wires each
+// row to its action.
 struct MoreHandles {
   lv_obj_t *back = nullptr;
   lv_obj_t *wifi = nullptr, *expert = nullptr, *mesh = nullptr, *led = nullptr,
-           *system = nullptr, *power = nullptr, *restart = nullptr;
+           *system = nullptr, *power = nullptr;
 };
 void build_more(lv_obj_t *parent, MoreHandles *h = nullptr);
 
