@@ -834,7 +834,7 @@ void build_system(lv_obj_t *parent, SystemHandles *h) {
   lv_obj_t *hn = inforow("Hostname");
   lv_obj_t *ip = inforow("IP address");
   lv_obj_t *up = inforow("Uptime");
-  lv_obj_t *mc = inforow("MCU temp");
+  lv_obj_t *mc = inforow("CPU temp");
   if (h) { h->version = fw; h->host = hn; h->ip = ip; h->uptime = up; h->mcu = mc; }
 }
 
@@ -852,6 +852,17 @@ void build_power(lv_obj_t *parent, PowerHandles *h) {
   if (h) { h->restart_klipper = rk; h->restart_fw = rf; h->reboot = rb; h->shutdown = sd; }
 }
 
+void seg_highlight(lv_obj_t *const *btns, int n, int active) {
+  for (int i = 0; i < n; i++) {
+    if (!btns[i]) continue;
+    bool on = (i == active);
+    lv_obj_set_style_bg_color(btns[i], on ? lv_color_hex(0x33eaff) : color_surface_elevated, 0);
+    lv_obj_set_style_bg_grad_color(btns[i], on ? lv_color_hex(0x00b3cc) : color_surface_raised, 0);
+    lv_obj_t *l = lv_obj_get_child(btns[i], 0);
+    if (l) lv_obj_set_style_text_color(l, on ? color_surface_base : color_text_secondary, 0);
+  }
+}
+
 void build_lights(lv_obj_t *parent, LightsHandles *h) {
   lv_obj_t *back = screen_header(parent, "Lights");
   if (h) h->back = back;
@@ -864,14 +875,15 @@ void build_lights(lv_obj_t *parent, LightsHandles *h) {
     const int bw = 134, bh = 38, gap = 8, x0 = 16, by = 40;
     *off = tap_btn(c, x0, by, bw, bh, "Off", font_caption, color_text_secondary);
     *mid = tap_btn(c, x0 + bw + gap, by, bw, bh, "50%", font_caption, color_text_primary);
-    lv_obj_t *fl = card(c, x0 + 2 * (bw + gap), by, bw, bh, color_accent_primary, 8);
-    vgrad(fl, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
-    lv_obj_center(lbl(fl, "Full", font_caption, color_surface_base, 0, 0));
-    *full = fl;
+    *full = tap_btn(c, x0 + 2 * (bw + gap), by, bw, bh, "Full", font_caption, color_text_primary);
   };
   lv_obj_t *co, *cm, *cf, *ho, *hm, *hf;
   section(56, "Case", &co, &cm, &cf);
   section(150, "Hotend", &ho, &hm, &hf);
+  // Default highlight to Full (boot state). The app moves it on tap and re-
+  // applies the tracked level when the screen is reopened.
+  lv_obj_t *cb[3] = {co, cm, cf}; seg_highlight(cb, 3, 2);
+  lv_obj_t *hb[3] = {ho, hm, hf}; seg_highlight(hb, 3, 2);
   if (h) { h->case_off = co; h->case_50 = cm; h->case_full = cf;
            h->hot_off = ho; h->hot_50 = hm; h->hot_full = hf; }
 }

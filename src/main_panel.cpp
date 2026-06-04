@@ -422,12 +422,28 @@ void MainPanel::populate_system() {
   { std::ifstream f("/proc/sys/kernel/hostname"); std::getline(f, host); }
   if (system_h_.host) lv_label_set_text(system_h_.host, host.c_str());
 
-  std::string ip = KUtils::interface_ip(KUtils::get_wifi_interface());
+  // Pick the interface that actually holds a routable IPv4. The old code asked
+  // only the wifi interface, which reads 0.0.0.0 on this wired-only printer.
+  // Prefer ethernet, then wifi, then any other non-loopback link.
+  std::string ip;
+  auto good = [](const std::string &s) { return !s.empty() && s != "0.0.0.0"; };
+  std::vector<std::string> cand{"eth0"};
+  std::string wifi_if = KUtils::get_wifi_interface();
+  if (!wifi_if.empty()) cand.push_back(wifi_if);
+  for (const auto &nm : KUtils::get_interfaces()) cand.push_back(nm);
+  for (const auto &nm : cand) {
+    if (nm == "lo") continue;
+    std::string c = KUtils::interface_ip(nm);
+    if (good(c)) { ip = c; break; }
+  }
   if (system_h_.ip) lv_label_set_text(system_h_.ip, ip.empty() ? "--" : ip.c_str());
 
   { std::ifstream f("/proc/uptime"); double up = 0; f >> up;
     int hh = (int)up / 3600, mm = ((int)up % 3600) / 60;
     if (system_h_.uptime) lv_label_set_text(system_h_.uptime, fmt::format("{}h {}m", hh, mm).c_str()); }
+
+  { std::ifstream f("/sys/class/thermal/thermal_zone0/temp"); long mdeg = -1; f >> mdeg;
+    if (system_h_.mcu) lv_label_set_text(system_h_.mcu, mdeg > 0 ? fmt::format("{:.1f} C", mdeg / 1000.0).c_str() : "--"); }
 }
 
 void MainPanel::_sub_tap(lv_event_t *e) {
@@ -510,20 +526,29 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == s->more_h_.mesh)    { s->show_pono(s->mesh_scr_); return; }         // Bed mesh heatmap
   if (t == s->more_h_.system)  { s->populate_system(); s->show_pono(s->system_scr_); return; }
   if (t == s->more_h_.power)   { s->show_pono(s->power_scr_); return; }
-  if (t == s->more_h_.led)     { s->show_pono(s->lights_scr_); return; }
+  if (t == s->more_h_.led)     {
+    lv_obj_t *cb[3] = {s->lights_h_.case_off, s->lights_h_.case_50, s->lights_h_.case_full};
+    lv_obj_t *hb[3] = {s->lights_h_.hot_off,  s->lights_h_.hot_50,  s->lights_h_.hot_full};
+    pono::seg_highlight(cb, 3, s->led_case_level_);
+    pono::seg_highlight(hb, 3, s->led_hot_level_);
+    s->show_pono(s->lights_scr_); return;
+  }
   // Power actions
   if (t == s->power_h_.restart_klipper) { s->ws.gcode_script("RESTART"); return; }
   if (t == s->power_h_.restart_fw)      { s->ws.gcode_script("FIRMWARE_RESTART"); return; }
   if (t == s->power_h_.reboot)          { s->ws.send_jsonrpc("machine.reboot"); return; }
   if (t == s->power_h_.shutdown)        { s->ws.send_jsonrpc("machine.shutdown"); return; }
-  // Lights (SET_LED white channel)
+  // Lights (SET_LED white channel) - fire the command AND move the highlight
+  // to the chosen level so the active selection is visible.
   pono::LightsHandles &li = s->lights_h_;
-  if (t == li.case_off)  { s->ws.gcode_script("SET_LED LED=case WHITE=0");    return; }
-  if (t == li.case_50)   { s->ws.gcode_script("SET_LED LED=case WHITE=0.5");  return; }
-  if (t == li.case_full) { s->ws.gcode_script("SET_LED LED=case WHITE=1.0");  return; }
-  if (t == li.hot_off)   { s->ws.gcode_script("SET_LED LED=hotend WHITE=0");   return; }
-  if (t == li.hot_50)    { s->ws.gcode_script("SET_LED LED=hotend WHITE=0.5"); return; }
-  if (t == li.hot_full)  { s->ws.gcode_script("SET_LED LED=hotend WHITE=1.0"); return; }
+  lv_obj_t *cb[3] = {li.case_off, li.case_50, li.case_full};
+  lv_obj_t *hb[3] = {li.hot_off,  li.hot_50,  li.hot_full};
+  if (t == li.case_off)  { s->ws.gcode_script("SET_LED LED=case WHITE=0");    s->led_case_level_ = 0; pono::seg_highlight(cb, 3, 0); return; }
+  if (t == li.case_50)   { s->ws.gcode_script("SET_LED LED=case WHITE=0.5");  s->led_case_level_ = 1; pono::seg_highlight(cb, 3, 1); return; }
+  if (t == li.case_full) { s->ws.gcode_script("SET_LED LED=case WHITE=1.0");  s->led_case_level_ = 2; pono::seg_highlight(cb, 3, 2); return; }
+  if (t == li.hot_off)   { s->ws.gcode_script("SET_LED LED=hotend WHITE=0");   s->led_hot_level_ = 0; pono::seg_highlight(hb, 3, 0); return; }
+  if (t == li.hot_50)    { s->ws.gcode_script("SET_LED LED=hotend WHITE=0.5"); s->led_hot_level_ = 1; pono::seg_highlight(hb, 3, 1); return; }
+  if (t == li.hot_full)  { s->ws.gcode_script("SET_LED LED=hotend WHITE=1.0"); s->led_hot_level_ = 2; pono::seg_highlight(hb, 3, 2); return; }
   // Expert Tune (live): value pills open the keypad, presets apply directly,
   // z-offset uses live babystep. Every control writes straight to Klipper and
   // updates its pill so the change is visible immediately.

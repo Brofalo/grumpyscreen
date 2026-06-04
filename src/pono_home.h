@@ -185,6 +185,9 @@ struct LightsHandles {
 };
 void build_lights(lv_obj_t *parent, LightsHandles *h = nullptr);
 
+// Highlight one button in a segmented row (e.g. Off/50%/Full); dim the others.
+void seg_highlight(lv_obj_t *const *btns, int n, int active);
+
 // Re-render the heatmap from a row-major z matrix (rows x cols, mm), color-
 // mapped across [zmin,zmax]. Front row drawn at the bottom. Safe to call live.
 void mesh_render(lv_obj_t *grid, const float *z, int rows, int cols, float zmin, float zmax);

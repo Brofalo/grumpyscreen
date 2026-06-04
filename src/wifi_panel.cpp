@@ -116,15 +116,20 @@ WifiPanel::WifiPanel(std::mutex &l)
   lv_obj_set_style_bg_grad_color(cont, lv_color_hex(0x070b12), 0);
   lv_obj_set_style_bg_grad_dir(cont, LV_GRAD_DIR_VER, 0);
   lv_obj_set_style_bg_opa(cont, LV_OPA_COVER, 0);
-  lv_obj_set_style_pad_top(cont, 46, 0);  // clear the header band
+  // pad_top 0 keeps the floating header (back/title/refresh) in the y=0..56
+  // top band; the scrolling content (table + prompt) is pushed below it with a
+  // top margin instead. The old pad_top pushed BOTH down, piling the header on
+  // top of the first table rows.
+  lv_obj_set_style_pad_top(cont, 0, 0);
+  lv_obj_set_style_margin_top(top_cont, 56, 0);
   lv_obj_t *wifi_title = lv_label_create(cont);
   lv_label_set_text(wifi_title, "Wi-Fi");
   lv_obj_set_style_text_font(wifi_title, pono::font_h2, 0);
   lv_obj_set_style_text_color(wifi_title, pono::color_text_primary, 0);
   lv_obj_add_flag(wifi_title, LV_OBJ_FLAG_FLOATING);
-  lv_obj_align(wifi_title, LV_ALIGN_TOP_MID, 0, 14);   // centered: Back left, Wi-Fi center, Refresh right
-  lv_obj_align(back_btn.get_container(), LV_ALIGN_TOP_LEFT, 8, 6);
-  lv_obj_align(refresh_btn.get_container(), LV_ALIGN_TOP_RIGHT, -8, 6);
+  lv_obj_align(wifi_title, LV_ALIGN_TOP_MID, 0, 16);   // centered: Back left, Wi-Fi center, Refresh right
+  lv_obj_align(back_btn.get_container(), LV_ALIGN_TOP_LEFT, 8, 8);
+  lv_obj_align(refresh_btn.get_container(), LV_ALIGN_TOP_RIGHT, -8, 8);
 
   wpa_event.register_callback("WifiPanel",
       [this](const std::string &event) { this->handle_wpa_event(event); });

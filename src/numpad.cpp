@@ -24,11 +24,23 @@ static void numpad_draw_cb(lv_event_t *e) {
 }
 
 Numpad::Numpad(lv_obj_t *parent)
-  : edit_cont(lv_obj_create(parent))
+  : scrim(lv_obj_create(parent))
+  , edit_cont(lv_obj_create(parent))
   , input(lv_textarea_create(edit_cont))
   , kb(lv_btnmatrix_create(edit_cont))
   , ready_cb([](double v){})
 {
+  // Full-screen modal backdrop behind the card. Without it, taps outside
+  // the keypad fall through lv_layer_top to the screen below and actuate
+  // whatever sits there (e.g. an Expert Tune preset chip). Tap = cancel.
+  lv_obj_remove_style_all(scrim);
+  lv_obj_set_size(scrim, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_bg_color(scrim, lv_color_black(), 0);
+  lv_obj_set_style_bg_opa(scrim, LV_OPA_40, 0);
+  lv_obj_add_flag(scrim, LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(scrim, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_event_cb(scrim, &Numpad::_handle_scrim, LV_EVENT_CLICKED, this);
+
   // Centered modal card (was a cramped 48% right-edge panel).
   lv_obj_add_flag(edit_cont, LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_CLICKABLE);
   lv_obj_clear_flag(edit_cont, LV_OBJ_FLAG_SCROLLABLE);
@@ -90,6 +102,10 @@ Numpad::~Numpad() {
     lv_obj_del(edit_cont);
     edit_cont = NULL;
   }
+  if (scrim != NULL) {
+    lv_obj_del(scrim);
+    scrim = NULL;
+  }
 }
 
 void Numpad::set_callback(std::function<void(double)> cb) {
@@ -103,9 +119,7 @@ void Numpad::handle_input(lv_event_t *e) {
   if (txt == NULL) return;
 
   if (strcmp(txt, "Cancel") == 0) {
-    lv_textarea_set_text(input, "");
-    lv_obj_add_flag(edit_cont, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_move_background(edit_cont);
+    dismiss();
     return;
   }
   if (strcmp(txt, "OK") == 0) {
@@ -113,9 +127,7 @@ void Numpad::handle_input(lv_event_t *e) {
     if (value.length() > 0) {
       try { ready_cb(std::stod(value)); } catch (...) {}
     }
-    lv_textarea_set_text(input, "");
-    lv_obj_add_flag(edit_cont, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_move_background(edit_cont);
+    dismiss();
     return;
   }
   if (strcmp(txt, LV_SYMBOL_BACKSPACE) == 0) {
@@ -128,6 +140,16 @@ void Numpad::handle_input(lv_event_t *e) {
 void Numpad::foreground_reset() {
   LOG_TRACE("resetting foreground");
   lv_textarea_set_text(input, "");
+  lv_obj_clear_flag(scrim, LV_OBJ_FLAG_HIDDEN);
   lv_obj_clear_flag(edit_cont, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_move_foreground(edit_cont);
+  lv_obj_move_foreground(scrim);      // backdrop above the page...
+  lv_obj_move_foreground(edit_cont);  // ...card above the backdrop
+}
+
+void Numpad::dismiss() {
+  lv_textarea_set_text(input, "");
+  lv_obj_add_flag(edit_cont, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_add_flag(scrim, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_background(edit_cont);
+  lv_obj_move_background(scrim);
 }

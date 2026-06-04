@@ -148,6 +148,8 @@ class MainPanel : public NotifyConsumer {
   pono::SystemHandles system_h_;
   pono::PowerHandles power_h_;
   pono::LightsHandles lights_h_;
+  int led_case_level_ = 2;  // 0=off,1=50%,2=full -> Lights screen highlight (default boot=full)
+  int led_hot_level_ = 2;
   std::vector<float> mesh_z_;      // flattened probed_matrix for the heatmap
   double move_step_ = 1.0;        // selected jog step (mm)
   std::vector<std::string> files_names_;  // index -> gcode filename for row taps

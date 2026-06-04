@@ -19,12 +19,19 @@ class Numpad {
     panel->handle_input(event);
   };
 
+  static void _handle_scrim(lv_event_t *event) {
+    Numpad *panel = (Numpad*)event->user_data;
+    panel->dismiss();
+  };
+
   /* static void _handle_defocused(lv_event_t *event) { */
   /*   Numpad *panel = (Numpad*)event->user_data; */
   /*   panel->handle_defocused(event); */
   /* }; */
 
  private:
+  void dismiss();   // hide card + scrim, restore z-order
+  lv_obj_t *scrim;  // full-screen modal backdrop (declared first -> lower z than card)
   lv_obj_t *edit_cont;
   lv_obj_t *input;
   lv_obj_t *kb;
