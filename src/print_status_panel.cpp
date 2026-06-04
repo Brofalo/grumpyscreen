@@ -290,7 +290,9 @@ void PrintStatusPanel::handle_metadata(const std::string &gcode_file, json &j) {
     const std::string img_path = "A:" + fullpath;
 
     auto screen_width = lv_disp_get_physical_hor_res(NULL);
-    uint32_t normalized_thumb_scale = ((0.34 * (double)screen_width) / (double)thumb_detail.second) * 256;
+    uint32_t normalized_thumb_scale = thumb_detail.second > 0
+        ? (uint32_t)(((0.34 * (double)screen_width) / (double)thumb_detail.second) * 256)
+        : 256;  // width unknown (e.g. single-thumbnail gcode) -> 1:1, avoid divide-by-zero
     lv_img_set_src(thumbnail, img_path.c_str());
     lv_img_set_zoom(thumbnail, normalized_thumb_scale);
     mini_print_status.update_img(img_path, thumb_detail.second);

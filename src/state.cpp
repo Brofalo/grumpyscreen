@@ -62,7 +62,11 @@ json &State::get_data() {
 
 json &State::get_data(const json::json_pointer& ptr) {
   std::lock_guard<std::mutex> guard(lock);
-  return data[ptr];
+  // operator[] would INSERT a null subtree on every miss, slowly bloating the
+  // shared printer state with phantom keys. Callers are read-only, so return a
+  // shared null sentinel for absent paths instead of grafting one in.
+  static json null_j;
+  return data.contains(ptr) ? data.at(ptr) : null_j;
 }
 
 void State::consume(json &j) {

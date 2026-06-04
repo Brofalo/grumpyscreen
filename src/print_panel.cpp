@@ -143,6 +143,10 @@ void PrintPanel::subscribe() {
 
     if (d.contains("result")) {
       for (auto f : d["result"]) {
+        // guard malformed entries: get<uint32_t>() / string conversion would
+        // throw on the websocket thread and drop the connection
+        if (!f.contains("path") || !f["path"].is_string() ||
+            !f.contains("modified") || !f["modified"].is_number()) continue;
         root.add_path(KUtils::split(f["path"], '/'), f["path"], f["modified"].template get<uint32_t>());
       }
     }
