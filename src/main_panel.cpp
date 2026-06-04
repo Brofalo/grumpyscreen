@@ -325,7 +325,7 @@ void MainPanel::create_pono_screens() {
   files_scr_ = make(); pono::build_files(files_scr_, &files_h_);
   tune_scr_  = make(); pono::build_tune(tune_scr_, &tune_h_);
   more_scr_  = make(); pono::build_more(more_scr_, &more_h_);
-  settings_scr_ = make(); pono::build_settings(settings_scr_, &settings_back_);
+  settings_scr_ = make(); pono::build_settings(settings_scr_, &settings_h_);
 
   lv_obj_t *taps[] = {
     move_h_.back, move_h_.xplus, move_h_.xminus, move_h_.yplus, move_h_.yminus,
@@ -336,12 +336,17 @@ void MainPanel::create_pono_screens() {
     temp_h_.back, temp_h_.nz_preset[0], temp_h_.nz_preset[1], temp_h_.nz_preset[2], temp_h_.nz_off,
     temp_h_.bd_preset[0], temp_h_.bd_preset[1], temp_h_.bd_preset[2], temp_h_.bd_off,
     temp_h_.nz_minus, temp_h_.nz_plus, temp_h_.bd_minus, temp_h_.bd_plus,
+    temp_h_.nz_cur, temp_h_.bd_cur,
     fan_h_.back, fan_h_.off, fan_h_.p50, fan_h_.full,
     files_h_.back,
     tune_h_.back, tune_h_.standard, tune_h_.omega,
     tune_h_.cals[0], tune_h_.cals[1], tune_h_.cals[2], tune_h_.cals[3], tune_h_.cals[4],
     more_h_.back, more_h_.wifi, more_h_.expert, more_h_.restart,
-    settings_back_,
+    settings_h_.back, settings_h_.speed, settings_h_.flow, settings_h_.zoff, settings_h_.pa, settings_h_.fan,
+    settings_h_.speed_p[0], settings_h_.speed_p[1], settings_h_.speed_p[2],
+    settings_h_.flow_p[0], settings_h_.flow_p[1], settings_h_.flow_p[2],
+    settings_h_.fan_p[0], settings_h_.fan_p[1], settings_h_.fan_p[2],
+    settings_h_.zoff_minus, settings_h_.zoff_plus,
   };
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_sub_tap, LV_EVENT_CLICKED, this);
   if (fan_h_.part_slider) lv_obj_add_event_cb(fan_h_.part_slider, &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
@@ -372,7 +377,7 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // back chips
   if (t == mv.back || t == fl.back || t == tp.back || t == fn.back ||
       t == s->files_h_.back || t == tu.back ||
-      t == s->more_h_.back || t == s->settings_back_) { s->back_to_home(); return; }
+      t == s->more_h_.back || t == s->settings_h_.back) { s->back_to_home(); return; }
   // Move jog (relative)
   double st = s->move_step_;
   if (t == mv.xplus)  { s->ws.gcode_script(fmt::format("G91\nG1 X{} F6000\nG90", st)); return; }
@@ -422,6 +427,9 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     if (t == tp.bd_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ - 5, 0, 120))); return; }
     if (t == tp.bd_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ + 5, 0, 120))); return; }
   }
+  // Temps keypad: tap the big number to type an exact target
+  if (t == tp.nz_cur) { s->numpad.set_callback([s](double v){ s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  (int)(v + 0.5))); }); s->numpad.foreground_reset(); return; }
+  if (t == tp.bd_cur) { s->numpad.set_callback([s](double v){ s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", (int)(v + 0.5))); }); s->numpad.foreground_reset(); return; }
   // Fans (quick)
   if (t == fn.off)  { s->ws.gcode_script("M106 S0"); return; }
   if (t == fn.p50)  { s->ws.gcode_script("M106 S128"); return; }
@@ -434,6 +442,26 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == s->more_h_.wifi)    { s->setting_panel.show_wifi(); return; }       // reuse the wpa scan/connect panel
   if (t == s->more_h_.expert)  { s->show_pono(s->settings_scr_); return; }     // Expert Tune surface
   if (t == s->more_h_.restart) { s->ws.gcode_script("FIRMWARE_RESTART"); return; }
+  // Expert Tune (live): value pills open the keypad, presets apply directly,
+  // z-offset uses live babystep. Every control writes straight to Klipper and
+  // updates its pill so the change is visible immediately.
+  pono::SettingsHandles &se = s->settings_h_;
+  if (t == se.speed) { s->numpad.set_callback([s](double v){ int sp=(int)(v+0.5); s->ws.gcode_script(fmt::format("M220 S{}", sp)); pono::pill_set(s->settings_h_.speed, fmt::format("{}%", sp).c_str()); }); s->numpad.foreground_reset(); return; }
+  if (t == se.flow)  { s->numpad.set_callback([s](double v){ int fl=(int)(v+0.5); s->ws.gcode_script(fmt::format("M221 S{}", fl)); pono::pill_set(s->settings_h_.flow, fmt::format("{}%", fl).c_str()); }); s->numpad.foreground_reset(); return; }
+  if (t == se.pa)    { s->numpad.set_callback([s](double v){ s->ws.gcode_script(fmt::format("SET_PRESSURE_ADVANCE ADVANCE={:.3f}", v)); pono::pill_set(s->settings_h_.pa, fmt::format("{:.3f}", v).c_str()); }); s->numpad.foreground_reset(); return; }
+  if (t == se.zoff)  { s->numpad.set_callback([s](double v){ s->tune_zoff_=v; s->ws.gcode_script(fmt::format("SET_GCODE_OFFSET Z={:.3f} MOVE=1", v)); pono::pill_set(s->settings_h_.zoff, fmt::format("{:.3f}", v).c_str()); }); s->numpad.foreground_reset(); return; }
+  if (t == se.fan)   { s->numpad.set_callback([s](double v){ int p=(int)(v+0.5); p = p<0?0:(p>100?100:p); s->ws.gcode_script(fmt::format("M106 S{}", p*255/100)); pono::pill_set(s->settings_h_.fan, fmt::format("{}%", p).c_str()); }); s->numpad.foreground_reset(); return; }
+  if (t == se.speed_p[0]) { s->ws.gcode_script("M220 S50");  pono::pill_set(se.speed, "50%");  return; }
+  if (t == se.speed_p[1]) { s->ws.gcode_script("M220 S100"); pono::pill_set(se.speed, "100%"); return; }
+  if (t == se.speed_p[2]) { s->ws.gcode_script("M220 S150"); pono::pill_set(se.speed, "150%"); return; }
+  if (t == se.flow_p[0])  { s->ws.gcode_script("M221 S95");  pono::pill_set(se.flow, "95%");  return; }
+  if (t == se.flow_p[1])  { s->ws.gcode_script("M221 S100"); pono::pill_set(se.flow, "100%"); return; }
+  if (t == se.flow_p[2])  { s->ws.gcode_script("M221 S105"); pono::pill_set(se.flow, "105%"); return; }
+  if (t == se.fan_p[0])   { s->ws.gcode_script("M106 S0");   pono::pill_set(se.fan, "0%");   return; }
+  if (t == se.fan_p[1])   { s->ws.gcode_script("M106 S128"); pono::pill_set(se.fan, "50%");  return; }
+  if (t == se.fan_p[2])   { s->ws.gcode_script("M106 S255"); pono::pill_set(se.fan, "100%"); return; }
+  if (t == se.zoff_minus) { s->tune_zoff_ -= 0.01; s->ws.gcode_script("SET_GCODE_OFFSET Z_ADJUST=-0.01 MOVE=1"); pono::pill_set(se.zoff, fmt::format("{:.3f}", s->tune_zoff_).c_str()); return; }
+  if (t == se.zoff_plus)  { s->tune_zoff_ += 0.01; s->ws.gcode_script("SET_GCODE_OFFSET Z_ADJUST=0.01 MOVE=1");  pono::pill_set(se.zoff, fmt::format("{:.3f}", s->tune_zoff_).c_str()); return; }
 }
 
 void MainPanel::_fan_slider_cb(lv_event_t *e) {

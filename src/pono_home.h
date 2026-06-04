@@ -136,11 +136,22 @@ struct TuneHandles {
 // + theme; the real app wires taps + the slider to Moonraker.
 void build_tune(lv_obj_t *parent, TuneHandles *h = nullptr);
 
-// Build the Expert Tune screen into `parent`: category chips + a scrollable
-// list of tunable parameters with real editors (slider / switch / value
-// field). The full-tuneability surface; the real app populates it from the
-// shared settings schema and writes changes back. If back_out is non-null it
-// receives the back chip so the app can wire return-to-home navigation.
-void build_settings(lv_obj_t *parent, lv_obj_t **back_out = nullptr);
+// Expert Tune: the deep LIVE printer-tuning surface (the slicer-geometry
+// settings live in the AIO Orca panel; the printer can only tune what Klipper
+// controls live). Every value pill is keypad-tappable; speed/flow/fan also
+// carry quick presets, z-offset carries babystep -/+ . The app wires each to
+// its Klipper command and reflects live status back into the pills.
+struct SettingsHandles {
+  lv_obj_t *back = nullptr;
+  lv_obj_t *speed = nullptr, *flow = nullptr, *zoff = nullptr, *pa = nullptr, *fan = nullptr;
+  lv_obj_t *speed_p[3] = {nullptr, nullptr, nullptr};   // 50 / 100 / 150 %
+  lv_obj_t *flow_p[3]  = {nullptr, nullptr, nullptr};   // 95 / 100 / 105 %
+  lv_obj_t *fan_p[3]   = {nullptr, nullptr, nullptr};   // Off / 50 / Full
+  lv_obj_t *zoff_minus = nullptr, *zoff_plus = nullptr; // -/+ 0.01 babystep
+};
+void build_settings(lv_obj_t *parent, SettingsHandles *h = nullptr);
+
+// Update the value text on a value pill (the app reflects applied tunes).
+void pill_set(lv_obj_t *pill, const char *txt);
 
 } // namespace pono

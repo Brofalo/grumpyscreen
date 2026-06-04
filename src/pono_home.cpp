@@ -395,8 +395,10 @@ static lv_obj_t *setting_row(lv_obj_t *list, const char *name) {
   return r;
 }
 
-// Tappable value field on the right of a row (tap -> editor/keypad in the app).
-static void value_pill(lv_obj_t *row, const char *val) {
+// Tappable value field on the right of a row (tap -> keypad in the app).
+// Returns the pill so the app can wire the tap and update the value text
+// (the value label is the pill's first child).
+static lv_obj_t *value_pill(lv_obj_t *row, const char *val) {
   lv_obj_t *p = lv_obj_create(row);
   lv_obj_remove_style_all(p);
   lv_obj_set_size(p, 80, 26);
@@ -406,46 +408,50 @@ static void value_pill(lv_obj_t *row, const char *val) {
   lv_obj_set_style_radius(p, 6, 0);
   hairline(p, color_accent_primary, opa_border_medium);
   lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_add_flag(p, LV_OBJ_FLAG_CLICKABLE);
   lv_obj_t *v = lbl(p, val, font_caption, color_accent_primary, 0, 0);
   lv_obj_center(v);
+  return p;
 }
 
-void build_settings(lv_obj_t *parent, lv_obj_t **back_out) {
-  const lv_font_t *ms = &lv_font_montserrat_14;
+// Set the value text on a pill returned by value_pill (label is child 0).
+void pill_set(lv_obj_t *pill, const char *txt) {
+  if (!pill) return;
+  lv_obj_t *v = lv_obj_get_child(pill, 0);
+  if (v) { lv_label_set_text(v, txt); lv_obj_center(v); }
+}
 
-  lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_set_style_pad_all(parent, 0, 0);
-  lv_obj_set_style_bg_color(parent, lv_color_hex(0x0c1422), 0);
-  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x05090f), 0);
-  lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
-  lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
-
-  lv_obj_t *rail = card(parent, 0, 0, 52, 272, color_surface_raised, 0);
-  vgrad(rail, color_surface_elevated, color_surface_raised);
-  lv_obj_t *back = card(parent, 8, 12, 36, 36, color_surface_elevated, 10);
-  hairline(back, color_text_tertiary, opa_border_medium);
-  lv_obj_t *bi = lbl(parent, LV_SYMBOL_LEFT, ms, color_accent_primary, 0, 0);
-  lv_obj_align_to(bi, back, LV_ALIGN_CENTER, 0, 0);
-  if (back_out) *back_out = back;
-
-  lbl(parent, "Expert Tune", font_h1, color_text_primary, 64, 6);
-
-  // category chips (active = Quality)
-  const char *cats[5] = {"Quality", "Speed", "Walls", "Infill", "Filament"};
-  for (int i = 0; i < 5; i++) {
-    int x = 64 + i * 79;
-    bool active = (i == 0);
-    lv_obj_t *c = card(parent, x, 44, 74, 26, active ? color_accent_primary : color_surface_elevated, 13);
-    if (!active) { vgrad(c, color_surface_elevated, color_surface_raised); hairline(c, color_text_tertiary, opa_border_subtle); }
-    lv_obj_t *cl = lbl(parent, cats[i], font_micro, active ? color_surface_base : color_text_secondary, 0, 0);
-    lv_obj_align_to(cl, c, LV_ALIGN_CENTER, 0, 0);
+// A row of three tappable preset chips (quick values beside the keypad).
+static void chip_row(lv_obj_t *list, const char *a, const char *b, const char *c, lv_obj_t *out[3]) {
+  lv_obj_t *r = lv_obj_create(list);
+  lv_obj_remove_style_all(r);
+  lv_obj_set_size(r, lv_pct(100), 30);
+  lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_flex_flow(r, LV_FLEX_FLOW_ROW);
+  lv_obj_set_flex_align(r, LV_FLEX_ALIGN_SPACE_BETWEEN, LV_FLEX_ALIGN_CENTER, LV_FLEX_ALIGN_CENTER);
+  const char *labs[3] = {a, b, c};
+  for (int i = 0; i < 3; i++) {
+    lv_obj_t *ch = lv_obj_create(r);
+    lv_obj_remove_style_all(ch);
+    lv_obj_set_size(ch, 140, 30);
+    vgrad(ch, color_surface_elevated, color_surface_raised);
+    lv_obj_set_style_radius(ch, 7, 0);
+    hairline(ch, color_text_tertiary, opa_border_subtle);
+    lv_obj_clear_flag(ch, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *l = lbl(ch, labs[i], font_micro, color_accent_primary, 0, 0);
+    lv_obj_center(l);
+    out[i] = ch;
   }
+}
 
-  // scrollable parameter list (the full-tuneability surface)
+void build_settings(lv_obj_t *parent, SettingsHandles *h) {
+  lv_obj_t *back = screen_header(parent, "Expert Tune");
+  if (h) h->back = back;
+
   lv_obj_t *list = lv_obj_create(parent);
   lv_obj_remove_style_all(list);
-  lv_obj_set_pos(list, 64, 78);
-  lv_obj_set_size(list, 400, 188);
+  lv_obj_set_pos(list, 12, 54);
+  lv_obj_set_size(list, 456, 210);
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(list, 7, 0);
   lv_obj_set_scroll_dir(list, LV_DIR_VER);
@@ -455,43 +461,39 @@ void build_settings(lv_obj_t *parent, lv_obj_t **back_out) {
   lv_obj_set_style_width(list, 3, LV_PART_SCROLLBAR);
   lv_obj_set_style_radius(list, 2, LV_PART_SCROLLBAR);
 
-  value_pill(setting_row(list, "Layer height"), "0.16 mm");
-  value_pill(setting_row(list, "Wall loops"), "3");
+  // Speed factor (M220) + quick presets
+  { lv_obj_t *p = value_pill(setting_row(list, "Speed factor"), "100%"); if (h) h->speed = p; }
+  { lv_obj_t *c[3]; chip_row(list, "50%", "100%", "150%", c); if (h) { h->speed_p[0] = c[0]; h->speed_p[1] = c[1]; h->speed_p[2] = c[2]; } }
 
-  // infill: inline slider + live value
+  // Flow factor (M221) + quick presets
+  { lv_obj_t *p = value_pill(setting_row(list, "Flow factor"), "100%"); if (h) h->flow = p; }
+  { lv_obj_t *c[3]; chip_row(list, "95%", "100%", "105%", c); if (h) { h->flow_p[0] = c[0]; h->flow_p[1] = c[1]; h->flow_p[2] = c[2]; } }
+
+  // Z-offset (live babystep via SET_GCODE_OFFSET): [-] value [+], value also keypad-tappable
   {
-    lv_obj_t *r = setting_row(list, "Infill density");
-    lv_obj_t *iv = lbl(r, "15%", font_num_small, color_accent_primary, 0, 0);
-    lv_obj_align(iv, LV_ALIGN_RIGHT_MID, -10, 0);
-    lv_obj_t *sl = lv_slider_create(r);
-    lv_obj_align(sl, LV_ALIGN_RIGHT_MID, -56, 0);
-    lv_obj_set_size(sl, 96, 8);
-    lv_slider_set_range(sl, 0, 100);
-    lv_slider_set_value(sl, 15, LV_ANIM_OFF);
-    lv_obj_set_style_bg_color(sl, color_surface_base, LV_PART_MAIN);
-    lv_obj_set_style_radius(sl, 4, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
-    lv_obj_set_style_radius(sl, 4, LV_PART_INDICATOR);
-    lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
+    lv_obj_t *r = setting_row(list, "Z-offset");
+    lv_obj_t *pls = card(r, 0, 0, 34, 28, color_surface_elevated, 7);
+    vgrad(pls, color_surface_elevated, color_surface_raised);
+    hairline(pls, color_text_tertiary, opa_border_subtle);
+    lv_obj_align(pls, LV_ALIGN_RIGHT_MID, -8, 0);
+    lv_obj_center(lbl(pls, LV_SYMBOL_PLUS, &lv_font_montserrat_14, color_accent_primary, 0, 0));
+    lv_obj_t *pv = value_pill(r, "0.000");
+    lv_obj_set_width(pv, 68);
+    lv_obj_align(pv, LV_ALIGN_RIGHT_MID, -48, 0);
+    lv_obj_t *mns = card(r, 0, 0, 34, 28, color_surface_elevated, 7);
+    vgrad(mns, color_surface_elevated, color_surface_raised);
+    hairline(mns, color_text_tertiary, opa_border_subtle);
+    lv_obj_align(mns, LV_ALIGN_RIGHT_MID, -122, 0);
+    lv_obj_center(lbl(mns, LV_SYMBOL_MINUS, &lv_font_montserrat_14, color_accent_primary, 0, 0));
+    if (h) { h->zoff = pv; h->zoff_plus = pls; h->zoff_minus = mns; }
   }
 
-  value_pill(setting_row(list, "Top/bottom layers"), "4");
+  // Pressure advance (SET_PRESSURE_ADVANCE)
+  { lv_obj_t *p = value_pill(setting_row(list, "Pressure advance"), "0.040"); if (h) h->pa = p; }
 
-  // ironing: a real toggle
-  {
-    lv_obj_t *r = setting_row(list, "Ironing");
-    lv_obj_t *sw = lv_switch_create(r);
-    lv_obj_align(sw, LV_ALIGN_RIGHT_MID, -10, 0);
-    lv_obj_set_size(sw, 46, 24);
-    lv_obj_add_state(sw, LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(sw, color_surface_base, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(sw, color_accent_primary, LV_PART_INDICATOR | LV_STATE_CHECKED);
-    lv_obj_set_style_bg_color(sw, color_text_primary, LV_PART_KNOB);
-  }
-
-  value_pill(setting_row(list, "Seam position"), "Aligned");
-  value_pill(setting_row(list, "Flow ratio"), "0.97");
-  value_pill(setting_row(list, "Pressure advance"), "0.040");
+  // Part fan (M106) + quick presets
+  { lv_obj_t *p = value_pill(setting_row(list, "Part fan"), "0%"); if (h) h->fan = p; }
+  { lv_obj_t *c[3]; chip_row(list, "Off", "50%", "Full", c); if (h) { h->fan_p[0] = c[0]; h->fan_p[1] = c[1]; h->fan_p[2] = c[2]; } }
 }
 
 // ============================================================================
@@ -633,6 +635,8 @@ static void temp_section(lv_obj_t *parent, int x, int w, const char *name,
   lv_obj_align(nm, LV_ALIGN_TOP_MID, 0, 10);
   lv_obj_t *cv = lbl(c, "--", font_num_large, color_text_primary, 0, 0);
   lv_obj_align(cv, LV_ALIGN_TOP_MID, 0, 28);
+  lv_obj_add_flag(cv, LV_OBJ_FLAG_CLICKABLE);   // tap the number to type an exact target
+  lv_obj_set_ext_click_area(cv, 18);            // fat-finger touch target
   // manual -/+ steppers flanking the live target value (the "set temp" control)
   lv_obj_t *mn = card(c, 10, 68, 46, 34, color_surface_elevated, 8);
   vgrad(mn, color_surface_elevated, color_surface_raised);
