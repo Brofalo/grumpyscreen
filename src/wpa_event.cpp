@@ -101,6 +101,10 @@ void WpaEvent::handle_wpa_events(void *data, int len) {
 }
 
 std::string WpaEvent::send_command(const std::string &cmd) {
+  // conn and the response handling are shared between the UI thread (scan/
+  // connect) and the wpa event thread (scan-results/list-networks). Concurrent
+  // wpa_ctrl_request calls corrupt the shared connection -> crash. Serialize.
+  std::lock_guard<std::mutex> lk(cmd_mutex_);
   char resp[4096];
   size_t len = sizeof(resp) -1;
   if (conn != NULL) {

@@ -257,13 +257,13 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
     wifi_name_db.clear();
     uint32_t index = 0;
 
-    // Take the LVGL lock before ANY UI mutation. handle_wpa_event runs on the
-    // wpa event-loop thread, so the label/table writes below race the render
-    // thread without it. find_current_network() only hits the wpa socket, so
-    // it is safe (if briefly blocking) to hold the lock across it.
+    // find_current_network() does blocking wpa socket I/O - run it WITHOUT the
+    // render lock. Then take lv_lock only for the UI writes. (send_command is
+    // serialized internally, so the socket itself is safe across threads.)
+    bool have_current = find_current_network();
     std::lock_guard<std::mutex> lock(lv_lock);
 
-    if (find_current_network()) {
+    if (have_current) {
       LOG_TRACE("handle wpa event scan results - current network {}", cur_network);
     } else {
       lv_label_set_text(wifi_label, "");

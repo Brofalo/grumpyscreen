@@ -7,6 +7,7 @@
 
 #include <map>
 #include <functional>
+#include <mutex>
 
 class WpaEvent : private hv::EventLoopThread {
  public:
@@ -28,6 +29,7 @@ class WpaEvent : private hv::EventLoopThread {
 
  private:
   struct wpa_ctrl *conn;
+  std::mutex cmd_mutex_;  // serialize send_command: conn + the resp buffer are shared across the UI and wpa threads
   std::map<std::string, std::function<void(const std::string&)>> callbacks;
 };
 
