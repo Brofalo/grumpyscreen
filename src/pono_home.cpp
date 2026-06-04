@@ -684,6 +684,84 @@ void build_temps(lv_obj_t *parent, TempsHandles *h) {
   }
 }
 
+// ---- Bed mesh heatmap -------------------------------------------------------
+// 5-stop colormap blue->cyan->green->yellow->red across t in [0,1].
+static lv_color_t heat_color(float t) {
+  if (t < 0.f) t = 0.f;
+  if (t > 1.f) t = 1.f;
+  float r, g, b;
+  if (t < 0.25f)      { float u = t / 0.25f;           r = 0;     g = u;     b = 1; }
+  else if (t < 0.5f)  { float u = (t - 0.25f) / 0.25f; r = 0;     g = 1;     b = 1 - u; }
+  else if (t < 0.75f) { float u = (t - 0.5f) / 0.25f;  r = u;     g = 1;     b = 0; }
+  else                { float u = (t - 0.75f) / 0.25f; r = 1;     g = 1 - u; b = 0; }
+  return lv_color_make((uint8_t)(r * 255), (uint8_t)(g * 255), (uint8_t)(b * 255));
+}
+
+void mesh_render(lv_obj_t *grid, const float *z, int rows, int cols, float zmin, float zmax) {
+  if (!grid || !z || rows < 1 || cols < 1) return;
+  lv_obj_clean(grid);
+  int gw = lv_obj_get_width(grid);  if (gw <= 0) gw = 192;
+  int gh = lv_obj_get_height(grid); if (gh <= 0) gh = 192;
+  float range = zmax - zmin; if (range < 1e-6f) range = 1e-6f;
+  int cw = gw / cols, ch = gh / rows;
+  for (int r = 0; r < rows; r++)
+    for (int c = 0; c < cols; c++) {
+      float t = (z[r * cols + c] - zmin) / range;
+      lv_obj_t *cell = lv_obj_create(grid);
+      lv_obj_remove_style_all(cell);
+      lv_obj_set_size(cell, cw + 1, ch + 1);
+      lv_obj_set_pos(cell, c * cw, (rows - 1 - r) * ch);  // front row at the bottom
+      lv_obj_set_style_bg_color(cell, heat_color(t), 0);
+      lv_obj_set_style_bg_opa(cell, LV_OPA_COVER, 0);
+      lv_obj_clear_flag(cell, LV_OBJ_FLAG_SCROLLABLE);
+    }
+}
+
+void build_mesh(lv_obj_t *parent, MeshHandles *h) {
+  lv_obj_t *back = screen_header(parent, "Bed Mesh");
+  if (h) h->back = back;
+
+  lv_obj_t *grid = lv_obj_create(parent);
+  lv_obj_remove_style_all(grid);
+  lv_obj_set_pos(grid, 14, 60);
+  lv_obj_set_size(grid, 192, 192);
+  lv_obj_set_style_bg_color(grid, color_surface_base, 0);
+  lv_obj_set_style_bg_opa(grid, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(grid, 6, 0);
+  lv_obj_set_style_clip_corner(grid, true, 0);
+  hairline(grid, color_text_tertiary, opa_border_medium);
+  lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
+  if (h) h->grid = grid;
+
+  lv_obj_t *pf = lbl(parent, "Profile: default", font_caption, color_text_primary, 220, 66);
+  if (h) h->profile = pf;
+  lv_obj_t *rg = lbl(parent, "Range: --", font_micro, color_text_secondary, 220, 92);
+  if (h) h->range = rg;
+
+  lv_obj_t *bar = lv_obj_create(parent);  // legend: red (high) top -> blue (low) bottom
+  lv_obj_remove_style_all(bar);
+  lv_obj_set_pos(bar, 220, 132);
+  lv_obj_set_size(bar, 22, 104);
+  lv_obj_set_style_bg_color(bar, lv_color_make(255, 0, 0), 0);
+  lv_obj_set_style_bg_grad_color(bar, lv_color_make(0, 80, 255), 0);
+  lv_obj_set_style_bg_grad_dir(bar, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(bar, 4, 0);
+  lbl(parent, "high", font_micro, color_text_secondary, 250, 132);
+  lbl(parent, "low", font_micro, color_text_secondary, 250, 222);
+
+  // demo surface so the sim and first boot show a heatmap before a real probe
+  static const float demo[49] = {
+    0.05f, 0.03f, 0.00f,-0.02f, 0.00f, 0.03f, 0.06f,
+    0.03f, 0.01f,-0.02f,-0.04f,-0.02f, 0.01f, 0.04f,
+    0.00f,-0.02f,-0.05f,-0.07f,-0.05f,-0.02f, 0.01f,
+   -0.02f,-0.04f,-0.07f,-0.09f,-0.07f,-0.03f, 0.00f,
+    0.00f,-0.02f,-0.05f,-0.07f,-0.04f,-0.01f, 0.02f,
+    0.03f, 0.01f,-0.02f,-0.03f,-0.01f, 0.02f, 0.05f,
+    0.06f, 0.04f, 0.01f, 0.00f, 0.02f, 0.05f, 0.08f };
+  mesh_render(grid, demo, 7, 7, -0.09f, 0.08f);
+}
+
 void build_more(lv_obj_t *parent, MoreHandles *h) {
   lv_obj_t *back = screen_header(parent, "More");
   if (h) h->back = back;
@@ -694,7 +772,11 @@ void build_more(lv_obj_t *parent, MoreHandles *h) {
   lv_obj_set_size(list, 456, 206);
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
   lv_obj_set_style_pad_row(list, 8, 0);
-  lv_obj_clear_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_set_scroll_dir(list, LV_DIR_VER);
+  lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
+  lv_obj_set_style_bg_color(list, color_accent_primary, LV_PART_SCROLLBAR);
+  lv_obj_set_style_bg_opa(list, LV_OPA_40, LV_PART_SCROLLBAR);
+  lv_obj_set_style_width(list, 3, LV_PART_SCROLLBAR);
 
   auto row = [&](const char *icon, const char *title, const char *sub) -> lv_obj_t * {
     lv_obj_t *r = lv_obj_create(list);
@@ -715,10 +797,58 @@ void build_more(lv_obj_t *parent, MoreHandles *h) {
     return r;
   };
 
-  lv_obj_t *w = row(LV_SYMBOL_WIFI, "Wi-Fi & Network", "Scan and connect");
-  lv_obj_t *e = row(LV_SYMBOL_SETTINGS, "Expert Tune", "Full slicer-grade settings");
-  lv_obj_t *rs = row(LV_SYMBOL_REFRESH, "Restart Firmware", "Reload Klipper and UI");
-  if (h) { h->wifi = w; h->expert = e; h->restart = rs; }
+  lv_obj_t *w  = row(LV_SYMBOL_WIFI, "Wi-Fi & Network", "Scan and connect");
+  lv_obj_t *m  = row(LV_SYMBOL_IMAGE, "Bed Mesh", "Live probed surface heatmap");
+  lv_obj_t *e  = row(LV_SYMBOL_SETTINGS, "Expert Tune", "Live print tuning");
+  lv_obj_t *sy = row(LV_SYMBOL_LIST, "System", "Version, network, uptime");
+  lv_obj_t *pw = row(LV_SYMBOL_POWER, "Power", "Restart, reboot, shutdown");
+  if (h) { h->wifi = w; h->mesh = m; h->expert = e; h->system = sy; h->power = pw; }
+}
+
+void build_system(lv_obj_t *parent, SystemHandles *h) {
+  lv_obj_t *back = screen_header(parent, "System");
+  if (h) h->back = back;
+  lv_obj_t *list = lv_obj_create(parent);
+  lv_obj_remove_style_all(list);
+  lv_obj_set_pos(list, 12, 58);
+  lv_obj_set_size(list, 456, 200);
+  lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
+  lv_obj_set_style_pad_row(list, 7, 0);
+  lv_obj_clear_flag(list, LV_OBJ_FLAG_SCROLLABLE);
+  auto inforow = [&](const char *name) -> lv_obj_t * {
+    lv_obj_t *r = lv_obj_create(list);
+    lv_obj_remove_style_all(r);
+    lv_obj_set_size(r, lv_pct(100), 34);
+    vgrad(r, color_surface_elevated, color_surface_raised);
+    lv_obj_set_style_radius(r, 8, 0);
+    hairline(r, color_text_tertiary, opa_border_subtle);
+    lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_t *n = lbl(r, name, font_caption, color_text_secondary, 0, 0);
+    lv_obj_align(n, LV_ALIGN_LEFT_MID, 14, 0);
+    lv_obj_t *v = lbl(r, "--", font_caption, color_text_primary, 0, 0);
+    lv_obj_align(v, LV_ALIGN_RIGHT_MID, -14, 0);
+    return v;
+  };
+  lv_obj_t *fw = inforow("Firmware");
+  lv_obj_t *hn = inforow("Hostname");
+  lv_obj_t *ip = inforow("IP address");
+  lv_obj_t *up = inforow("Uptime");
+  lv_obj_t *mc = inforow("MCU temp");
+  if (h) { h->version = fw; h->host = hn; h->ip = ip; h->uptime = up; h->mcu = mc; }
+}
+
+void build_power(lv_obj_t *parent, PowerHandles *h) {
+  lv_obj_t *back = screen_header(parent, "Power");
+  if (h) h->back = back;
+  lv_obj_t *rk = tap_btn(parent, 12, 64, 224, 86, "Restart Klipper", font_body, color_text_primary);
+  lv_obj_t *rf = tap_btn(parent, 244, 64, 224, 86, "Restart Firmware", font_body, color_text_primary);
+  lv_obj_t *rb = card(parent, 12, 160, 224, 86, color_state_warning, 12);
+  vgrad(rb, lv_color_hex(0xffc04a), lv_color_hex(0xff9e1b));
+  lv_obj_center(lbl(rb, "Reboot", font_body, color_surface_base, 0, 0));
+  lv_obj_t *sd = card(parent, 244, 160, 224, 86, color_state_error, 12);
+  vgrad(sd, lv_color_hex(0xff5a5a), lv_color_hex(0xd83232));
+  lv_obj_center(lbl(sd, "Shutdown", font_body, color_surface_base, 0, 0));
+  if (h) { h->restart_klipper = rk; h->restart_fw = rf; h->reboot = rb; h->shutdown = sd; }
 }
 
 void build_fans(lv_obj_t *parent, FansHandles *h) {

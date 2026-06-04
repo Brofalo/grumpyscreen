@@ -99,6 +99,8 @@ class MainPanel : public NotifyConsumer {
   void create_pono_screens();             // build Move/Filament/Temps/Fans/Files/Tune into hidden overlays
   void show_pono(lv_obj_t *scr);          // hide cockpit + others, reveal scr
   void back_to_home();                    // hide all sub-screens, show the cockpit
+  void populate_system();                 // fill the System screen (version/ip/uptime)
+  void render_bed_mesh(const json &bm);   // draw the heatmap from a bed_mesh status object
   void populate_files();                  // query Moonraker, fill the Files list
   static void _sub_tap(lv_event_t *e);    // sub-screen button -> gcode action
   static void _fan_slider_cb(lv_event_t *e);
@@ -141,6 +143,11 @@ class MainPanel : public NotifyConsumer {
   pono::MoreHandles more_h_;
   pono::SettingsHandles settings_h_;
   double tune_zoff_ = 0.0;         // tracked Z babystep offset (Expert Tune pill)
+  lv_obj_t *mesh_scr_ = nullptr, *system_scr_ = nullptr, *power_scr_ = nullptr;
+  pono::MeshHandles mesh_h_;
+  pono::SystemHandles system_h_;
+  pono::PowerHandles power_h_;
+  std::vector<float> mesh_z_;      // flattened probed_matrix for the heatmap
   double move_step_ = 1.0;        // selected jog step (mm)
   std::vector<std::string> files_names_;  // index -> gcode filename for row taps
   PrintStatusPanel print_status_panel;

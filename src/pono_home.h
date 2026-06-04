@@ -106,7 +106,8 @@ void build_temps(lv_obj_t *parent, TempsHandles *h = nullptr);
 // restart) as tappable rows. The app wires each row to its action.
 struct MoreHandles {
   lv_obj_t *back = nullptr;
-  lv_obj_t *wifi = nullptr, *expert = nullptr, *restart = nullptr;
+  lv_obj_t *wifi = nullptr, *expert = nullptr, *mesh = nullptr, *led = nullptr,
+           *system = nullptr, *power = nullptr, *restart = nullptr;
 };
 void build_more(lv_obj_t *parent, MoreHandles *h = nullptr);
 
@@ -153,5 +154,31 @@ void build_settings(lv_obj_t *parent, SettingsHandles *h = nullptr);
 
 // Update the value text on a value pill (the app reflects applied tunes).
 void pill_set(lv_obj_t *pill, const char *txt);
+
+// Bed mesh heatmap: a colored grid of the probed Z deviation. The app feeds
+// the live probed_matrix from Moonraker; the sim shows a demo surface.
+struct MeshHandles {
+  lv_obj_t *back = nullptr;
+  lv_obj_t *grid = nullptr;     // heatmap cell container (app re-renders into it)
+  lv_obj_t *profile = nullptr;  // active profile name
+  lv_obj_t *range = nullptr;    // "min .. max mm" spread
+};
+void build_mesh(lv_obj_t *parent, MeshHandles *h = nullptr);
+
+// System info screen: firmware version, network, uptime (app fills the values).
+struct SystemHandles {
+  lv_obj_t *back = nullptr, *version = nullptr, *ip = nullptr, *host = nullptr, *uptime = nullptr, *mcu = nullptr;
+};
+void build_system(lv_obj_t *parent, SystemHandles *h = nullptr);
+
+// Power screen: restart Klipper, restart firmware, reboot, shutdown.
+struct PowerHandles {
+  lv_obj_t *back = nullptr, *restart_klipper = nullptr, *restart_fw = nullptr, *reboot = nullptr, *shutdown = nullptr;
+};
+void build_power(lv_obj_t *parent, PowerHandles *h = nullptr);
+
+// Re-render the heatmap from a row-major z matrix (rows x cols, mm), color-
+// mapped across [zmin,zmax]. Front row drawn at the bottom. Safe to call live.
+void mesh_render(lv_obj_t *grid, const float *z, int rows, int cols, float zmin, float zmax);
 
 } // namespace pono

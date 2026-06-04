@@ -3,6 +3,8 @@
 #include "lvgl/lvgl.h"
 #include "logger.h"
 #include "pono_theme.h"  // Phase A.4: surface + accent tokens for tab UI
+#include "utils.h"       // KUtils::interface_ip for the System screen
+#include <fstream>       // /etc/pono-version, /proc/uptime for the System screen
 
 #include <string>
 #include <cstdint>
@@ -109,6 +111,7 @@ void MainPanel::init(json &j) {
   }
   auto fans = State::get_instance()->get_display_fans();
   print_status_panel.init(fans);
+  { auto bm = j[json::json_pointer("/result/status/bed_mesh")]; if (!bm.is_null()) render_bed_mesh(bm); }  // initial heatmap
 }
 
 void MainPanel::consume(json &j) {  
@@ -196,6 +199,7 @@ void MainPanel::consume(json &j) {
       set_temp_lbl(temp_h_.nz_tgt, home_nozzle_set_ > 0 ? fmt::format("set {}", home_nozzle_set_) : std::string("off"), 76);
       set_temp_lbl(temp_h_.bd_cur, fmt::format("{}", home_bed_), 28);
       set_temp_lbl(temp_h_.bd_tgt, home_bed_set_ > 0 ? fmt::format("set {}", home_bed_set_) : std::string("off"), 76);
+      { auto bm = V("/params/0/bed_mesh"); if (!bm.is_null()) render_bed_mesh(bm); }  // heatmap on mesh change
       if (printing) {  // progress + layer + ETA only while a job runs
         int pct = (int)(home_progress_ * 100.0 + 0.5);
         lv_arc_set_value(home_h.arc, pct);
@@ -326,6 +330,9 @@ void MainPanel::create_pono_screens() {
   tune_scr_  = make(); pono::build_tune(tune_scr_, &tune_h_);
   more_scr_  = make(); pono::build_more(more_scr_, &more_h_);
   settings_scr_ = make(); pono::build_settings(settings_scr_, &settings_h_);
+  mesh_scr_   = make(); pono::build_mesh(mesh_scr_, &mesh_h_);
+  system_scr_ = make(); pono::build_system(system_scr_, &system_h_);
+  power_scr_  = make(); pono::build_power(power_scr_, &power_h_);
 
   lv_obj_t *taps[] = {
     move_h_.back, move_h_.xplus, move_h_.xminus, move_h_.yplus, move_h_.yminus,
@@ -341,7 +348,9 @@ void MainPanel::create_pono_screens() {
     files_h_.back,
     tune_h_.back, tune_h_.standard, tune_h_.omega,
     tune_h_.cals[0], tune_h_.cals[1], tune_h_.cals[2], tune_h_.cals[3], tune_h_.cals[4],
-    more_h_.back, more_h_.wifi, more_h_.expert, more_h_.restart,
+    more_h_.back, more_h_.wifi, more_h_.expert, more_h_.mesh, more_h_.system, more_h_.power,
+    mesh_h_.back, system_h_.back,
+    power_h_.back, power_h_.restart_klipper, power_h_.restart_fw, power_h_.reboot, power_h_.shutdown,
     settings_h_.back, settings_h_.speed, settings_h_.flow, settings_h_.zoff, settings_h_.pa, settings_h_.fan,
     settings_h_.speed_p[0], settings_h_.speed_p[1], settings_h_.speed_p[2],
     settings_h_.flow_p[0], settings_h_.flow_p[1], settings_h_.flow_p[2],
@@ -354,16 +363,67 @@ void MainPanel::create_pono_screens() {
 }
 
 void MainPanel::show_pono(lv_obj_t *scr) {
-  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_};
+  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_, mesh_scr_, system_scr_, power_scr_};
   for (lv_obj_t *s : all) if (s) lv_obj_add_flag(s, LV_OBJ_FLAG_HIDDEN);
   if (home_scr) lv_obj_add_flag(home_scr, LV_OBJ_FLAG_HIDDEN);
   if (scr) { lv_obj_clear_flag(scr, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(scr); }
 }
 
 void MainPanel::back_to_home() {
-  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_};
+  lv_obj_t *all[] = {move_scr_, fil_scr_, temp_scr_, fan_scr_, files_scr_, tune_scr_, more_scr_, settings_scr_, mesh_scr_, system_scr_, power_scr_};
   for (lv_obj_t *s : all) if (s) lv_obj_add_flag(s, LV_OBJ_FLAG_HIDDEN);
   show_home();
+}
+
+void MainPanel::render_bed_mesh(const json &bm) {
+  auto pm = bm[json::json_pointer("/probed_matrix")];
+  if (pm.is_array() && pm.size() > 0 && pm[0].is_array()) {
+    int rows = (int)pm.size(), cols = (int)pm[0].size();
+    mesh_z_.clear();
+    float zmin = 1e9f, zmax = -1e9f;
+    for (auto &rowj : pm)
+      for (auto &cj : rowj) {
+        float z = (float)cj.template get<double>();
+        mesh_z_.push_back(z);
+        if (z < zmin) zmin = z;
+        if (z > zmax) zmax = z;
+      }
+    if (mesh_h_.grid && (int)mesh_z_.size() == rows * cols) {
+      pono::mesh_render(mesh_h_.grid, mesh_z_.data(), rows, cols, zmin, zmax);
+      if (mesh_h_.range)
+        lv_label_set_text(mesh_h_.range, fmt::format("Range: {:.2f} .. {:.2f} mm", zmin, zmax).c_str());
+    }
+  }
+  auto pn = bm[json::json_pointer("/profile_name")];
+  if (!pn.is_null() && mesh_h_.profile)
+    lv_label_set_text(mesh_h_.profile, fmt::format("Profile: {}", pn.template get<std::string>()).c_str());
+}
+
+void MainPanel::populate_system() {
+  std::string ver = "unknown";
+  { std::ifstream f("/etc/pono-version"); std::string line;
+    while (std::getline(f, line)) {
+      const std::string key = "DISTRO_VERSION=";
+      if (line.rfind(key, 0) == 0) {
+        ver = line.substr(key.size());
+        if (!ver.empty() && ver.front() == '"') ver.erase(0, 1);
+        if (!ver.empty() && ver.back() == '"') ver.pop_back();
+        break;
+      }
+    }
+  }
+  if (system_h_.version) lv_label_set_text(system_h_.version, ver.c_str());
+
+  std::string host = "pono-print";
+  { std::ifstream f("/proc/sys/kernel/hostname"); std::getline(f, host); }
+  if (system_h_.host) lv_label_set_text(system_h_.host, host.c_str());
+
+  std::string ip = KUtils::interface_ip(KUtils::get_wifi_interface());
+  if (system_h_.ip) lv_label_set_text(system_h_.ip, ip.empty() ? "--" : ip.c_str());
+
+  { std::ifstream f("/proc/uptime"); double up = 0; f >> up;
+    int hh = (int)up / 3600, mm = ((int)up % 3600) / 60;
+    if (system_h_.uptime) lv_label_set_text(system_h_.uptime, fmt::format("{}h {}m", hh, mm).c_str()); }
 }
 
 void MainPanel::_sub_tap(lv_event_t *e) {
@@ -377,7 +437,8 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // back chips
   if (t == mv.back || t == fl.back || t == tp.back || t == fn.back ||
       t == s->files_h_.back || t == tu.back ||
-      t == s->more_h_.back || t == s->settings_h_.back) { s->back_to_home(); return; }
+      t == s->more_h_.back || t == s->settings_h_.back ||
+      t == s->mesh_h_.back || t == s->system_h_.back || t == s->power_h_.back) { s->back_to_home(); return; }
   // Move jog (relative)
   double st = s->move_step_;
   if (t == mv.xplus)  { s->ws.gcode_script(fmt::format("G91\nG1 X{} F6000\nG90", st)); return; }
@@ -441,7 +502,14 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // More menu rows
   if (t == s->more_h_.wifi)    { s->setting_panel.show_wifi(); return; }       // reuse the wpa scan/connect panel
   if (t == s->more_h_.expert)  { s->show_pono(s->settings_scr_); return; }     // Expert Tune surface
-  if (t == s->more_h_.restart) { s->ws.gcode_script("FIRMWARE_RESTART"); return; }
+  if (t == s->more_h_.mesh)    { s->show_pono(s->mesh_scr_); return; }         // Bed mesh heatmap
+  if (t == s->more_h_.system)  { s->populate_system(); s->show_pono(s->system_scr_); return; }
+  if (t == s->more_h_.power)   { s->show_pono(s->power_scr_); return; }
+  // Power actions
+  if (t == s->power_h_.restart_klipper) { s->ws.gcode_script("RESTART"); return; }
+  if (t == s->power_h_.restart_fw)      { s->ws.gcode_script("FIRMWARE_RESTART"); return; }
+  if (t == s->power_h_.reboot)          { s->ws.send_jsonrpc("machine.reboot"); return; }
+  if (t == s->power_h_.shutdown)        { s->ws.send_jsonrpc("machine.shutdown"); return; }
   // Expert Tune (live): value pills open the keypad, presets apply directly,
   // z-offset uses live babystep. Every control writes straight to Klipper and
   // updates its pill so the change is visible immediately.
