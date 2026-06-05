@@ -180,6 +180,15 @@ int KWebSocketClient::gcode_script(const std::string &gcode) {
   return send_jsonrpc("printer.gcode.script", cmd);
 }
 
+// Variant that routes the gcode.script RPC response to cb. Klipper replies when
+// the gcode finishes executing, so cb fires on completion (e.g. homing done).
+// cb runs on the websocket thread; UI work inside it must hold the lv lock.
+int KWebSocketClient::gcode_script(const std::string &gcode, std::function<void(json&)> cb) {
+  json cmd = {{ "script", gcode }};
+  LOG_TRACE("{}", gcode);
+  return send_jsonrpc("printer.gcode.script", cmd, cb);
+}
+
 void KWebSocketClient::register_method_callback(std::string resp_method,
 						std::string handler_name,
 						std::function<void(json&)> cb) {

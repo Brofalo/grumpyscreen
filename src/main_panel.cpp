@@ -3,6 +3,7 @@
 #include "lvgl/lvgl.h"
 #include "logger.h"
 #include "pono_theme.h"  // Phase A.4: surface + accent tokens for tab UI
+#include "pono_anim.h"   // busy_show/busy_hide working overlay for blocking waits
 #include "utils.h"       // KUtils::interface_ip for the System screen
 #include <fstream>       // /etc/pono-version, /proc/uptime for the System screen
 
@@ -503,8 +504,8 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == mv.yminus) { s->ws.gcode_script(fmt::format("G91\nG1 Y-{} F6000\nG90", st)); return; }
   if (t == mv.zplus)  { s->ws.gcode_script(fmt::format("G91\nG1 Z{} F600\nG90", st)); return; }
   if (t == mv.zminus) { s->ws.gcode_script(fmt::format("G91\nG1 Z-{} F600\nG90", st)); return; }
-  if (t == mv.home_xy)    { s->ws.gcode_script("G28 X Y"); return; }
-  if (t == mv.home_all)   { s->ws.gcode_script("G28"); return; }
+  if (t == mv.home_xy)    { pono::busy_show("Homing X / Y"); s->ws.gcode_script("G28 X Y", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); pono::busy_hide(); }); return; }
+  if (t == mv.home_all)   { pono::busy_show("Homing all axes"); s->ws.gcode_script("G28", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); pono::busy_hide(); }); return; }
   if (t == mv.motors_off) { s->ws.gcode_script("M84"); return; }
   for (int i = 0; i < 4; i++) if (t == mv.step[i]) {
     static const double vals[4] = {0.1, 1.0, 10.0, 100.0};
@@ -519,8 +520,8 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     return;
   }
   // Filament
-  if (t == fl.load)    { s->ws.gcode_script("LOAD_FILAMENT"); return; }
-  if (t == fl.unload)  { s->ws.gcode_script("UNLOAD_FILAMENT"); return; }
+  if (t == fl.load)    { pono::busy_show("Loading filament"); s->ws.gcode_script("LOAD_FILAMENT", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); pono::busy_hide(); }); return; }
+  if (t == fl.unload)  { pono::busy_show("Unloading filament"); s->ws.gcode_script("UNLOAD_FILAMENT", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); pono::busy_hide(); }); return; }
   if (t == fl.extrude) { s->ws.gcode_script("M83\nG1 E25 F300"); return; }
   if (t == fl.retract) { s->ws.gcode_script("M83\nG1 E-25 F1800"); return; }
   if (t == fl.preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=220"); return; }

@@ -26,5 +26,12 @@ namespace pono {
 // positions it. period_ms is the time for one full revolution (1000 = 1s).
 lv_obj_t *spinner_create(lv_obj_t *parent, uint16_t period_ms = 1000);
 
+// Full-screen "working" overlay: a scrim + the comet spinner + a status line,
+// built once on lv_layer_top and reused. Throw it up at the start of any
+// blocking wait (homing, filament load, heating) and drop it when done. The
+// spinner anim is stopped while hidden, so an idle overlay costs nothing.
+void busy_show(const char *text);
+void busy_hide();
+
 }  // namespace pono
 #endif

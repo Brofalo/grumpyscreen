@@ -203,6 +203,10 @@ int main(int argc, char **argv) {
     lv_obj_set_style_text_font(sub, pono::font_caption, 0);
     lv_label_set_text(sub, "248 / 250");
     lv_obj_align(sub, LV_ALIGN_CENTER, 0, 72);
+  } else if (screen == "busy") {
+    // Working overlay demo: scrim + comet spinner + status over the idle home.
+    pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
+    pono::busy_show("Homing all axes");
   } else {
     pono::build_home(lv_scr_act(), pono::demo_home_model());
   }
