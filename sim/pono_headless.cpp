@@ -16,6 +16,7 @@
 #include "lvgl.h"
 #include "pono_theme.h"
 #include "pono_home.h"
+#include "pono_anim.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -114,6 +115,11 @@ int main(int argc, char **argv) {
     lv_obj_set_style_pad_all(scr, 0, 0);
     pono::ocean_tide_init(scr);
 
+    // Canned comet spinner: the "still working" hero cue (replaces the old
+    // sliding loading bar). Pure bitmap blits -> smooth + near-zero CPU.
+    lv_obj_t *spin = pono::spinner_create(scr, 1000);
+    lv_obj_align(spin, LV_ALIGN_TOP_MID, 0, 24);
+
     lv_obj_t *joke = lv_label_create(scr);
     lv_obj_set_width(joke, lv_pct(78));
     lv_obj_set_height(joke, LV_SIZE_CONTENT);
@@ -127,28 +133,13 @@ int main(int argc, char **argv) {
     lv_obj_set_style_radius(joke, 8, 0);
     lv_label_set_text(joke,
         "First layer is like a good poke bowl: get the base right or the whole thing falls apart.");
-    lv_obj_align(joke, LV_ALIGN_CENTER, 0, -10);
+    lv_obj_align_to(joke, spin, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
 
     lv_obj_t *st = lv_label_create(scr);
     lv_obj_set_style_text_color(st, pono::color_text_secondary, 0);
     lv_obj_set_style_text_font(st, pono::font_micro, 0);
     lv_label_set_text(st, "Waiting for Klipper to start...");
     lv_obj_align_to(st, joke, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
-
-    lv_obj_t *bt = lv_obj_create(scr);
-    lv_obj_remove_style_all(bt);
-    lv_obj_set_size(bt, 220, 6);
-    lv_obj_align_to(bt, st, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
-    lv_obj_set_style_bg_color(bt, pono::color_surface_raised, 0);
-    lv_obj_set_style_bg_opa(bt, LV_OPA_70, 0);
-    lv_obj_set_style_radius(bt, 3, 0);
-    lv_obj_t *sg = lv_obj_create(bt);
-    lv_obj_remove_style_all(sg);
-    lv_obj_set_size(sg, 64, 6);
-    lv_obj_set_x(sg, 96);
-    lv_obj_set_style_bg_color(sg, pono::color_accent_primary, 0);
-    lv_obj_set_style_bg_opa(sg, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(sg, 3, 0);
 
     // Dedication pill, pinned to the bottom (mirrors init_panel).
     lv_obj_t *ded = lv_label_create(scr);
@@ -195,6 +186,23 @@ int main(int argc, char **argv) {
     lv_obj_clear_flag(ch.card, LV_OBJ_FLAG_HIDDEN);
   } else if (screen == "idle") {
     pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
+  } else if (screen == "spinner") {
+    // Canned-animation demo: a baked comet spinner over a heating wait state.
+    lv_obj_t *scr = lv_scr_act();
+    lv_obj_set_style_bg_color(scr, pono::color_surface_base, 0);
+    lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+    lv_obj_t *sp = pono::spinner_create(scr, 1000);
+    lv_obj_align(sp, LV_ALIGN_CENTER, 0, -18);
+    lv_obj_t *lbl = lv_label_create(scr);
+    lv_obj_set_style_text_color(lbl, pono::color_text_primary, 0);
+    lv_obj_set_style_text_font(lbl, pono::font_body, 0);
+    lv_label_set_text(lbl, "Heating nozzle");
+    lv_obj_align(lbl, LV_ALIGN_CENTER, 0, 52);
+    lv_obj_t *sub = lv_label_create(scr);
+    lv_obj_set_style_text_color(sub, pono::color_text_secondary, 0);
+    lv_obj_set_style_text_font(sub, pono::font_caption, 0);
+    lv_label_set_text(sub, "248 / 250");
+    lv_obj_align(sub, LV_ALIGN_CENTER, 0, 72);
   } else {
     pono::build_home(lv_scr_act(), pono::demo_home_model());
   }

@@ -4,6 +4,7 @@
 #include "config.h"
 #include "logger.h"
 #include "pono_theme.h"  // Phase A.4: surface_raised token
+#include "pono_anim.h"   // canned comet spinner (replaces the loading bar)
 
 #include <algorithm>
 #include <cstdio>
@@ -27,7 +28,7 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   : cont(lv_obj_create(lv_scr_act()))
   , label(lv_label_create(cont))
   , joke_label(lv_label_create(cont))
-  , bar_seg(nullptr)
+  , spinner(nullptr)
   , main_panel(mp)
   , lv_lock(l)
 {
@@ -40,6 +41,12 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   lv_obj_set_style_radius(cont, 0, 0);
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
   pono::ocean_tide_init(cont);
+
+  // Canned comet spinner: the "still working" hero cue, replacing the old
+  // sliding loading bar. Pre-baked frames -> playback is bitmap blits, smooth
+  // and near-zero CPU on the A7. Sits at the top; the joke/status flow under it.
+  spinner = pono::spinner_create(cont, 1000);
+  lv_obj_align(spinner, LV_ALIGN_TOP_MID, 0, 24);
 
   // Hawaii boot joke: the delight. Deliberately small (a caption, not a
   // banner) so it never shouts over the tide; the readable pill keeps it
@@ -61,7 +68,7 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   } else {
     lv_obj_add_flag(joke_label, LV_OBJ_FLAG_HIDDEN);
   }
-  lv_obj_align(joke_label, LV_ALIGN_CENTER, 0, -10);
+  lv_obj_align_to(joke_label, spinner, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
 
   // Connection status line: small + secondary, tucked under the joke. This is
   // what set_message() updates as we wait for / reconnect to Klipper.
@@ -75,26 +82,11 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   if (!joke.empty()) {
     lv_obj_align_to(label, joke_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
   } else {
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align_to(label, spinner, LV_ALIGN_OUT_BOTTOM_MID, 0, 12);
   }
 
-  // Animated loading sweep bar under the status: a cyan segment glides back
-  // and forth in a slim track, a clear "still working" cue over the tide.
-  lv_obj_t *bar_track = lv_obj_create(cont);
-  lv_obj_remove_style_all(bar_track);
-  lv_obj_set_size(bar_track, 220, 6);
-  lv_obj_align_to(bar_track, label, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
-  lv_obj_set_style_bg_color(bar_track, pono::color_surface_raised, 0);
-  lv_obj_set_style_bg_opa(bar_track, LV_OPA_70, 0);
-  lv_obj_set_style_radius(bar_track, 3, 0);
-  lv_obj_clear_flag(bar_track, LV_OBJ_FLAG_SCROLLABLE);
-  bar_seg = lv_obj_create(bar_track);
-  lv_obj_remove_style_all(bar_seg);
-  lv_obj_set_size(bar_seg, 64, 6);
-  lv_obj_set_style_bg_color(bar_seg, pono::color_accent_primary, 0);
-  lv_obj_set_style_bg_opa(bar_seg, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(bar_seg, 3, 0);
-  arm_bar_sweep();  // start the sweep (also re-armed on reconnect)
+  // (The "still working" cue is the comet spinner created above; spinner_create
+  // already started its loop, so there is nothing to arm here.)
 
   // Dedication: a small warm line on its own pill, pinned to the bottom so it
   // reads over the tide and stays for the whole boot wait. For Ellio and Io,
@@ -127,21 +119,12 @@ InitPanel::~InitPanel() {
   pono::ocean_tide_teardown();  // cont's delete freed the canvas; drop the cached pointer
 }
 
-// (Re)start the loading-bar sweep on bar_seg. Called from the constructor and
-// again on reconnect (connected() deletes the anim, disconnected() re-arms it).
-void InitPanel::arm_bar_sweep() {
-  if (bar_seg == NULL) return;
-  lv_anim_del(bar_seg, NULL);  // idempotent: clear any existing sweep first
-  lv_anim_t la;
-  lv_anim_init(&la);
-  lv_anim_set_var(&la, bar_seg);
-  lv_anim_set_exec_cb(&la, [](void *o, int32_t v) { lv_obj_set_x((lv_obj_t *)o, v); });
-  lv_anim_set_values(&la, 0, 220 - 64);
-  lv_anim_set_time(&la, 850);
-  lv_anim_set_playback_time(&la, 850);
-  lv_anim_set_repeat_count(&la, LV_ANIM_REPEAT_INFINITE);
-  lv_anim_set_path_cb(&la, lv_anim_path_ease_in_out);
-  lv_anim_start(&la);
+// (Re)start the comet spinner. Called on reconnect: connected() deletes the
+// anim to drop it to zero cost when the live dashboard takes over, and
+// disconnected() re-arms it while we wait for Klipper again.
+void InitPanel::arm_spinner() {
+  if (spinner == NULL) return;
+  lv_animimg_start(spinner);
 }
 
 void InitPanel::connected(KWebSocketClient &ws) {
@@ -205,7 +188,7 @@ void InitPanel::connected(KWebSocketClient &ws) {
         lv_obj_add_flag(this->cont, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_background(this->cont);
         pono::ocean_tide_stop(this->cont);  // dashboard is up; stop the boot tide
-        if (this->bar_seg) lv_anim_del(this->bar_seg, NULL);  // Pono: stop the infinite loading-bar sweep (child of bar_track, not cont, so ocean_tide_stop misses it)
+        if (this->spinner) lv_anim_del(this->spinner, NULL);  // Pono: stop the comet spinner (child of cont; ocean_tide_stop only handles the tide canvas)
         this->main_panel.show_home();  // Pono: bring the native cockpit forward over the tabview
       });
     }
@@ -219,7 +202,7 @@ void InitPanel::disconnected(KWebSocketClient &ws) {
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(cont);
   pono::ocean_tide_init(cont);  // re-arm the ocean scroll (idempotent: skips the re-bake, restarts the scroll)
-  arm_bar_sweep();              // re-arm the loading-bar sweep (connect() stopped both)
+  arm_spinner();                // re-arm the comet spinner (connect() stopped both)
 }
 
 void InitPanel::set_message(const char *message) {

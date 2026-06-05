@@ -59,6 +59,18 @@ foreach ($f in (Get-ChildItem "$root\assets\pono\fonts\*.c")) {
   $fontobj += $o
 }
 
+# 2b) Pono canned-animation frames (C, designated initializers -> gcc)
+Write-Host '[2b/3] Compiling Pono anim frames...'
+$animobj = @()
+if (Test-Path "$root\assets\pono\anim") {
+  foreach ($f in (Get-ChildItem "$root\assets\pono\anim\*.c" -ErrorAction SilentlyContinue)) {
+    $o = Join-Path $obj ("anim_" + $f.BaseName + ".o")
+    & $gcc -c @cflags @inc $f.FullName -o $o
+    if ($LASTEXITCODE -ne 0) { throw "anim $($f.Name) failed" }
+    $animobj += $o
+  }
+}
+
 # 3) builders + harness -> exe
 Write-Host '[3/3] Compiling + linking harness...'
 $exe = Join-Path $sim 'pono-headless.exe'
@@ -66,7 +78,8 @@ $exe = Join-Path $sim 'pono-headless.exe'
   (Join-Path $sim 'pono_headless.cpp') `
   (Join-Path $root 'src\pono_theme.cpp') `
   (Join-Path $root 'src\pono_home.cpp') `
-  $fontobj $lib -o $exe -lm
+  (Join-Path $root 'src\pono_anim.cpp') `
+  $fontobj $animobj $lib -o $exe -lm
 if ($LASTEXITCODE -ne 0) { throw "link failed ($LASTEXITCODE)" }
 Write-Host "      built $exe"
 
