@@ -197,8 +197,14 @@ void InitPanel::connected(KWebSocketClient &ws) {
 
 void InitPanel::disconnected(KWebSocketClient &ws) {
   LOG_DEBUG("init panel disconnected");
-  set_message("Waiting for Klipper to start...");
   std::lock_guard<std::mutex> lock(lv_lock);
+  // disconnected() runs on the websocket thread; every LVGL write here, set_message
+  // included, must hold lv_lock against the render loop (guppyscreen.cpp loop).
+  set_message("Waiting for Klipper to start...");
+  // A blocking-action overlay (homing / filament) waits on a gcode RPC response
+  // that will never arrive now the link is down. Clear it so it can't strand on
+  // the top layer over the reconnected dashboard.
+  pono::busy_hide();
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(cont);
   pono::ocean_tide_init(cont);  // re-arm the ocean scroll (idempotent: skips the re-bake, restarts the scroll)

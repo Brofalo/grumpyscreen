@@ -14,7 +14,11 @@ namespace pono {
 
 lv_obj_t *spinner_create(lv_obj_t *parent, uint16_t period_ms) {
   lv_obj_t *a = lv_animimg_create(parent);
-  lv_animimg_set_src(a, (const void **)pono_spinner_frames, pono_spinner_frame_count);
+  // lv_animimg stores the frame count in an int8_t (pic_count); clamp so a
+  // future frame-count bump past 127 can't wrap it negative and read OOB in the
+  // index modulo. At the current 24 frames this is a no-op.
+  uint8_t n = pono_spinner_frame_count > 127 ? 127 : pono_spinner_frame_count;
+  lv_animimg_set_src(a, (const void **)pono_spinner_frames, n);
   lv_animimg_set_duration(a, period_ms);
   lv_animimg_set_repeat_count(a, LV_ANIM_REPEAT_INFINITE);
   lv_animimg_start(a);
