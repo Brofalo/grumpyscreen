@@ -91,6 +91,9 @@ MainPanel::~MainPanel() {
 
 void MainPanel::subscribe() {
   LOG_TRACE("main panel subscribing");
+  // Runs on the websocket thread (init_panel::connected); print_panel.subscribe
+  // requires lv_lock held.
+  std::lock_guard<std::mutex> lock(lv_lock);
   print_panel.subscribe();
 }
 

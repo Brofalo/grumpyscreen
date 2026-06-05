@@ -99,11 +99,10 @@ void PrintPanel::handle_file_list_change(json &j) {
   }
 
   LOG_TRACE("file list change response {}", j.dump());
-  refresh_pending = true;
-  if (!visible) {
-    return;
-  }
-
+  // ws thread: hold lv_lock before subscribe(), which sets the refresh flags and
+  // touches LVGL (file_table / spinner). This call site raced the render loop on
+  // both. subscribe() does the refresh_pending + visible checks under the lock.
+  std::lock_guard<std::mutex> lock(lv_lock);
   subscribe();
 }
 
@@ -123,6 +122,11 @@ void PrintPanel::consume(json &j) {
   }
 }
 
+// Requires the caller to hold lv_lock: subscribe() touches LVGL (the spinner +
+// file_table flags) and the visible/refreshing_files/refresh_pending flags,
+// which are also read on the render thread. Callers: foreground() holds it via
+// the LVGL loop; handle_file_list_change and MainPanel::subscribe take it; the
+// recursive re-refresh below stays under the response handler's lock.
 void PrintPanel::subscribe() {
   refresh_pending = true;
   if (!visible || refreshing_files) {
@@ -169,8 +173,7 @@ void PrintPanel::subscribe() {
       return;
     }
 
-    lock.unlock();
-    subscribe();
+    subscribe();  // re-refresh under the lock the response handler already holds
   });
 }
 
