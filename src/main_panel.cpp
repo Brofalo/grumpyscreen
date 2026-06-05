@@ -159,6 +159,30 @@ void MainPanel::consume(json &j) {
     { auto v = V("/params/0/print_stats/info/total_layer");   if (!v.is_null()) home_layer_total_ = v.template get<int>(); }
     { auto v = V("/params/0/print_stats/filename");           if (!v.is_null()) home_job_         = v.template get<std::string>(); }
 
+    // Move screen: live toolhead position, each axis gated on homed_axes. Both
+    // arrive as Moonraker deltas (only on change), so cache them and reformat
+    // whenever either lands. Unhomed axes read "--" like the build_move default.
+    {
+      auto ha = V("/params/0/toolhead/homed_axes");
+      if (!ha.is_null()) move_homed_ = ha.template get<std::string>();
+      auto pp = V("/params/0/toolhead/position");
+      if (pp.is_array() && pp.size() >= 3) {
+        move_pos_[0] = pp[0].template get<double>();
+        move_pos_[1] = pp[1].template get<double>();
+        move_pos_[2] = pp[2].template get<double>();
+      }
+      if (move_h_.pos && (!ha.is_null() || pp.is_array())) {
+        auto axis = [&](char up, char lo, double v) {
+          return move_homed_.find(lo) != std::string::npos
+            ? fmt::format("{} {:.1f}", up, v) : fmt::format("{} --", up);
+        };
+        lv_label_set_text(move_h_.pos,
+          fmt::format("{}  {}  {}", axis('X', 'x', move_pos_[0]),
+                      axis('Y', 'y', move_pos_[1]), axis('Z', 'z', move_pos_[2])).c_str());
+        lv_obj_center(move_h_.pos);  // re-center as the text width changes
+      }
+    }
+
     bool printing = pstat_state.is_null() ? home_printing_
                   : (pstat_state.template get<std::string>() == "printing");
 

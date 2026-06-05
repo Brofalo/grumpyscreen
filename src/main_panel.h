@@ -133,6 +133,8 @@ class MainPanel : public NotifyConsumer {
   int home_layer_ = 0, home_layer_total_ = 0;
   std::string home_job_;          // current filename (stable storage for the rebuild model)
   std::string home_eta_;          // computed ETA string (stable storage for the rebuild model)
+  std::string move_homed_;        // cached toolhead.homed_axes for the Move position readout
+  double move_pos_[3] = {0, 0, 0};// cached toolhead X/Y/Z (survive Moonraker deltas)
   // ---- Pono native sub-screens ----
   lv_obj_t *move_scr_ = nullptr, *fil_scr_ = nullptr, *temp_scr_ = nullptr;
   lv_obj_t *fan_scr_ = nullptr, *files_scr_ = nullptr, *tune_scr_ = nullptr;
