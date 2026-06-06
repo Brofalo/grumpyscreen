@@ -186,6 +186,8 @@ int main(int argc, char **argv) {
     lv_obj_clear_flag(ch.card, LV_OBJ_FLAG_HIDDEN);
   } else if (screen == "idle") {
     pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
+  } else if (screen == "paused") {
+    pono::build_home(lv_scr_act(), pono::demo_home_paused_model());
   } else if (screen == "spinner") {
     // Canned-animation demo: a baked comet spinner over a heating wait state.
     lv_obj_t *scr = lv_scr_act();

@@ -11,11 +11,9 @@
 #include "extruder_panel.h"
 #include "fan_panel.h"
 #include "led_panel.h"
-#include "print_panel.h"
 #include "console_panel.h"
 #include "setting_panel.h"
 #include "sysinfo_panel.h"
-#include "print_status_panel.h"
 #include "spoolman_panel.h"
 #include "pono_home.h"
 #include "lvgl/lvgl.h"
@@ -125,6 +123,7 @@ class MainPanel : public NotifyConsumer {
   lv_obj_t *home_scr = nullptr;   // Pono native cockpit, full-screen over the tabview
   pono::HomeHandles home_h;       // live handles into the cockpit
   bool home_printing_ = false;    // last-known printing state (ETA + pulse gating)
+  bool home_paused_ = false;      // last-known paused state (Resume vs Pause button)
   bool home_pulsing_ = false;     // is the state-dot pulse currently running
   double home_progress_ = 0.0;    // last-seen virtual_sdcard progress (survives Moonraker deltas)
   double home_duration_ = 0.0;    // last-seen print_stats.print_duration (survives Moonraker deltas)
@@ -161,8 +160,6 @@ class MainPanel : public NotifyConsumer {
   double move_step_ = 1.0;        // selected jog step (mm)
   std::vector<std::string> files_names_;  // index -> gcode filename for row taps
   uint32_t files_gen_ = 0;                 // bumped on each Files rebuild; async metadata checks it before touching a row
-  PrintStatusPanel print_status_panel;
-  PrintPanel print_panel;
   Numpad numpad;
   ExtruderPanel extruder_panel;
   PromptPanel prompt_panel;

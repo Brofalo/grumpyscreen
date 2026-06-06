@@ -44,8 +44,6 @@ MainPanel::MainPanel(KWebSocketClient &websocket,
   , sysinfo_tab(lv_tabview_add_tab(tabview, INFO_SYMBOL))
   , sysinfo_panel(sysinfo_tab)
   , main_cont(lv_obj_create(main_tab))
-  , print_status_panel(websocket, lock, main_cont)
-  , print_panel(ws, lock, print_status_panel)
   , numpad(Numpad(lv_layer_top()))  // top layer: keypad overlays every screen incl. Pono sub-screens
   , extruder_panel(ws, lock, numpad, sm)
   , prompt_panel(websocket, lock, main_cont)
@@ -90,11 +88,9 @@ MainPanel::~MainPanel() {
 }
 
 void MainPanel::subscribe() {
-  LOG_TRACE("main panel subscribing");
-  // Runs on the websocket thread (init_panel::connected); print_panel.subscribe
-  // requires lv_lock held.
-  std::lock_guard<std::mutex> lock(lv_lock);
-  print_panel.subscribe();
+  // The native Files screen populates on open (populate_files); there is no
+  // standing file-list subscription to (re)establish. The legacy print_panel
+  // file-list subscribe - and its lv_lock flag-race - retired with the panel.
 }
 
 void MainPanel::init(json &j) {
@@ -113,8 +109,6 @@ void MainPanel::init(json &j) {
       el.second->update_value(value);
     }
   }
-  auto fans = State::get_instance()->get_display_fans();
-  print_status_panel.init(fans);
   { auto bm = j[json::json_pointer("/result/status/bed_mesh")]; if (!bm.is_null()) render_bed_mesh(bm); }  // initial heatmap
 }
 
@@ -186,12 +180,14 @@ void MainPanel::consume(json &j) {
       }
     }
 
-    bool printing = pstat_state.is_null() ? home_printing_
-                  : (pstat_state.template get<std::string>() == "printing");
+    std::string pst = pstat_state.is_null() ? std::string() : pstat_state.template get<std::string>();
+    bool printing = pstat_state.is_null() ? home_printing_ : (pst == "printing");
+    bool paused   = pstat_state.is_null() ? home_paused_   : (pst == "paused");
 
-    if (printing != home_printing_) {
+    if (printing != home_printing_ || paused != home_paused_) {
       home_printing_ = printing;
-      rebuild_home();                 // swap to the matching layout (Ready <-> printing)
+      home_paused_   = paused;
+      rebuild_home();                 // swap to the matching layout (Ready / printing / paused)
     } else {
       // temps update in both states: big number + heat color, target "/ N" or "off"
       if (home_h.nozzle) {
@@ -338,9 +334,13 @@ void MainPanel::_home_tap(lv_event_t *e) {
   auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
   lv_obj_t *t = lv_event_get_target(e);
   pono::HomeHandles &h = s->home_h;
-  if (t == h.btn_pausestop) {                           // primary: Pause while printing, else Print -> Files
-    if (s->home_printing_) s->ws.gcode_script("PAUSE");
+  if (t == h.btn_pausestop) {                           // Resume (paused) / Pause (printing) / Print->Files (idle)
+    if (s->home_paused_)        s->ws.gcode_script("RESUME");
+    else if (s->home_printing_) s->ws.gcode_script("PAUSE");
     else { s->populate_files(); s->show_pono(s->files_scr_); }
+  }
+  else if (t == h.btn_cancel) {                         // abort the running/paused job (confirmed)
+    s->confirm("Cancel this print?", [s]{ s->ws.gcode_script("CANCEL_PRINT"); });
   }
   else if (t == h.qa[0]) s->show_pono(s->move_scr_);    // Move
   else if (t == h.qa[1]) s->show_pono(s->fil_scr_);     // Filament
@@ -721,7 +721,7 @@ void MainPanel::populate_files() {
 }
 
 void MainPanel::attach_home_taps() {
-  lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.qa[0], home_h.qa[1],
+  lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.btn_cancel, home_h.qa[0], home_h.qa[1],
                        home_h.qa[2], home_h.qa[3], home_h.tile_nozzle, home_h.tile_bed,
                        home_h.tile_tune, home_h.tile_omega, home_h.tile_more };
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_home_tap, LV_EVENT_CLICKED, this);
@@ -734,7 +734,8 @@ void MainPanel::attach_home_taps() {
 void MainPanel::rebuild_home() {
   if (!home_scr) return;
   pono::HomeModel m{};
-  m.printing = home_printing_;
+  m.printing = home_printing_ || home_paused_;   // printing layout for both (frozen while paused)
+  m.paused = home_paused_;
   m.progress_pct = (int)(home_progress_ * 100.0 + 0.5);
   m.layer = home_layer_; m.layer_total = home_layer_total_;
   m.job_name = home_job_.c_str();
@@ -754,7 +755,7 @@ void MainPanel::rebuild_home() {
   lv_obj_clean(home_scr);                  // drop old children + their anims
   pono::build_home(home_scr, m, &home_h);  // repopulates home_h with fresh handles
   attach_home_taps();
-  home_pulsing_ = m.printing;              // build_home (re)starts/settles the pulse to match
+  home_pulsing_ = home_printing_ && !home_paused_;  // build_home pulses only while actively printing
 }
 
 void MainPanel::handle_homing_cb(lv_event_t *event) {
@@ -787,10 +788,9 @@ void MainPanel::handle_ledpanel_cb(lv_event_t *event) {
 }
 
 void MainPanel::handle_print_cb(lv_event_t *event) {
-  if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
-    LOG_TRACE("clicked print");
-    print_panel.foreground();
-  }
+  // Legacy tabview button (hidden under the Pono cockpit). The live print entry
+  // is the cockpit Files tile -> _file_row_cb -> printer.print.start.
+  (void)event;
 }
 
 void MainPanel::handle_emergency_cb(lv_event_t *event) {

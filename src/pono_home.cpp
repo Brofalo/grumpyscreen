@@ -157,6 +157,12 @@ HomeModel demo_home_model() {
   return m;
 }
 
+HomeModel demo_home_paused_model() {
+  HomeModel m = demo_home_model();
+  m.paused = true;
+  return m;
+}
+
 HomeModel demo_home_idle_model() {
   HomeModel m{};
   m.printing = false;
@@ -205,14 +211,15 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   // ===== TOP BAR: wordmark + one state chip + a hairline divider =====
   lbl(parent, "Pono Print", font_h2, color_text_primary, CX0, TOP_Y + 2);
   {
-    lv_color_t sc = pr ? color_accent_secondary : color_text_secondary;
+    lv_color_t sc = m.paused ? color_state_warning
+                  : pr       ? color_accent_secondary : color_text_secondary;
     lv_obj_t *pill = card(parent, CX1 - 104, TOP_Y, 104, TOP_H - 2, color_surface_elevated, 12);
     hairline(pill, sc, opa_border_strong);
     lv_obj_t *dot = card(pill, 0, 0, 8, 8, sc, 4);
     lv_obj_align(dot, LV_ALIGN_LEFT_MID, 11, 0);
-    lv_obj_t *prl = lbl(pill, pr ? "PRINTING" : "READY", font_micro, sc, 0, 0);
+    lv_obj_t *prl = lbl(pill, m.paused ? "PAUSED" : (pr ? "PRINTING" : "READY"), font_micro, sc, 0, 0);
     lv_obj_align(prl, LV_ALIGN_LEFT_MID, 25, 0);
-    if (pr) glow_pulse(dot, color_accent_secondary, 3, 11, 850);
+    if (pr && !m.paused) glow_pulse(dot, color_accent_secondary, 3, 11, 850);
     if (out) { out->state_pill = pill; out->state_dot = dot; }
   }
   card(parent, CX0, TOP_Y + TOP_H + 1, CX1 - CX0, 1, color_text_tertiary, 0, opa_border_subtle);
@@ -265,21 +272,39 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   temp_card(parent, RCOL_X, MAIN_Y + tH + 8, RCOL_W, tH, "Bed",
             m.bed, m.bed_set, &bdc, &bd_num, &bd_set);
 
-  // ---- action row: adaptive primary (Print/Pause) + Tune ----
+  // ---- action row: printing/paused -> [Pause|Resume] + Cancel + Tune; idle -> Print + Tune ----
   const int ay = MAIN_Y + 2 * (tH + 8);          // 144
   const int aH = MAIN_Y + MAIN_H - ay;           // 52
-  const int primW = 168;
-  lv_obj_t *prim = card(parent, RCOL_X, ay, primW, aH,
-                        pr ? color_state_error : color_accent_primary, 12);
-  if (pr) vgrad(prim, lv_color_hex(0xff5d77), lv_color_hex(0xe11d48));
-  else    vgrad(prim, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
-  soft_shadow(prim, pr ? color_state_error : color_accent_primary, 12, LV_OPA_40);
-  lv_obj_t *priml = lbl(prim, pr ? (LV_SYMBOL_PAUSE "  Pause") : (LV_SYMBOL_PLAY "  Print"),
-                        ms, pr ? color_text_primary : color_surface_base, 0, 0);
-  lv_obj_center(priml);
+  lv_obj_t *prim = nullptr, *cxl = nullptr;
+  int tnx, tnw;
+  if (pr) {
+    const int pw = 104, cw = 66, g = 6;
+    // primary: Resume (cyan, go) when paused, else Pause (amber, caution)
+    prim = card(parent, RCOL_X, ay, pw, aH, m.paused ? color_accent_primary : color_state_warning, 12);
+    if (m.paused) vgrad(prim, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
+    else          vgrad(prim, lv_color_hex(0xffb84d), lv_color_hex(0xe08600));
+    soft_shadow(prim, m.paused ? color_accent_primary : color_state_warning, 12, LV_OPA_40);
+    lv_obj_t *priml = lbl(prim, m.paused ? (LV_SYMBOL_PLAY "  Resume") : (LV_SYMBOL_PAUSE "  Pause"),
+                          ms, color_surface_base, 0, 0);
+    lv_obj_center(priml);
+    // cancel/abort (red); the app gates it behind a confirm dialog
+    cxl = card(parent, RCOL_X + pw + g, ay, cw, aH, color_state_error, 12);
+    vgrad(cxl, lv_color_hex(0xff5d77), lv_color_hex(0xe11d48));
+    soft_shadow(cxl, color_state_error, 12, LV_OPA_40);
+    lv_obj_center(lbl(cxl, LV_SYMBOL_STOP, ms, color_text_primary, 0, 0));
+    tnx = RCOL_X + pw + g + cw + g;   // 182
+    tnw = CX1 - tnx;                  // 88, to the content right edge
+  } else {
+    const int primW = 168;
+    prim = card(parent, RCOL_X, ay, primW, aH, color_accent_primary, 12);
+    vgrad(prim, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
+    soft_shadow(prim, color_accent_primary, 12, LV_OPA_40);
+    lv_obj_center(lbl(prim, LV_SYMBOL_PLAY "  Print", ms, color_surface_base, 0, 0));
+    tnx = RCOL_X + primW + GUT - 2;
+    tnw = RCOL_W - primW - GUT + 2;
+  }
 
-  lv_obj_t *tn = card(parent, RCOL_X + primW + GUT - 2, ay, RCOL_W - primW - GUT + 2, aH,
-                      color_surface_elevated, 12);
+  lv_obj_t *tn = card(parent, tnx, ay, tnw, aH, color_surface_elevated, 12);
   vgrad(tn, color_surface_elevated, color_surface_raised);
   hairline(tn, color_text_tertiary, opa_border_medium);
   lv_obj_t *tni = lbl(tn, LV_SYMBOL_SETTINGS, ms, color_accent_primary, 0, 0);
@@ -305,7 +330,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
     out->nozzle = nz_num; out->bed = bd_num;
     out->nozzle_set = nz_set; out->bed_set = bd_set;
     out->tile_nozzle = nzc; out->tile_bed = bdc;
-    out->tile_tune = tn; out->tile_omega = nullptr; out->btn_pausestop = prim;
+    out->tile_tune = tn; out->tile_omega = nullptr; out->btn_pausestop = prim; out->btn_cancel = cxl;
   }
   return arc;
 }

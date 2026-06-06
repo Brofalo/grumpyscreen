@@ -15,7 +15,8 @@ namespace pono {
 // Plain data the home renders. No LVGL, no app types: trivially constructed
 // by the sim and populated from Moonraker status in the real app.
 struct HomeModel {
-  bool printing;
+  bool printing;         // a job is loaded (printing OR paused) -> printing layout
+  bool paused;           // job paused: primary button shows Resume instead of Pause
   int  progress_pct;     // 0..100
   int  layer;
   int  layer_total;
@@ -33,6 +34,9 @@ HomeModel demo_home_model();
 
 // Idle-state values (no print running) - the state the printer sits in most.
 HomeModel demo_home_idle_model();
+
+// Paused-state values (job loaded, paused) - Resume + Cancel layout.
+HomeModel demo_home_paused_model();
 
 // Live handles into a built home. The app keeps these to update values in
 // place (no rebuild) and to attach tap callbacks. NULL-safe: every field may
@@ -56,7 +60,8 @@ struct HomeHandles {
   lv_obj_t *tile_omega = nullptr;
   lv_obj_t *tile_nozzle = nullptr;
   lv_obj_t *tile_bed = nullptr;
-  lv_obj_t *btn_pausestop = nullptr;
+  lv_obj_t *btn_pausestop = nullptr;  // Pause (printing) / Resume (paused) / Print (idle)
+  lv_obj_t *btn_cancel = nullptr;     // printing/paused layout: abort the job (app confirms)
   lv_obj_t *qa[4] = {nullptr, nullptr, nullptr, nullptr}; // Move/Filament/Files/Fans
   lv_obj_t *tile_more = nullptr;  // 5th nav tile -> More menu
 };
