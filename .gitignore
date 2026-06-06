@@ -6,3 +6,10 @@ build/
 /.idea
 debug/
 .target.cfg
+
+# sim scratch: framebuffer captures (cat /dev/fb0) + generated demo loops
+sim/*.raw
+sim/*.gif
+# python bytecode
+__pycache__/
+*.pyc
