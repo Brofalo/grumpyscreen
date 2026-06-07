@@ -92,10 +92,10 @@ def render_wave(reach, intensity):
     # Foam occupies the sand band from the waterline (d=0) up to `reach`, with a
     # frothy leading lip near `reach` and thinning toward the trailing edge.
     onsand = d_sand > -1.0
-    lead = np.clip(1.0 - np.abs(d_sand - reach) / (8.5 + 4.0 * froth), 0.0, 1.0)   # bright lip
-    body = np.clip((reach - d_sand) / max(reach, 1.0), 0.0, 1.0) ** 1.3            # wash behind the lip
-    a = np.maximum(lead, body * 0.62)
-    a = a * (0.52 + 0.48 * froth)                # frothy breakup (kept visible, not washed out)
+    lead = np.clip(1.0 - np.abs(d_sand - reach) / (10.0 + 5.0 * froth), 0.0, 1.0)  # bright frothy lip
+    body = np.clip((reach - d_sand) / max(reach, 1.0), 0.0, 1.0) ** 1.15           # wash sheet behind the lip
+    a = np.maximum(lead, body * 0.85)            # opaque enough to read as water sweeping up the sand
+    a = a * (0.70 + 0.30 * froth)                # frothy breakup, but stays clearly visible
     a = a * (d_sand > 0.0) * onsand              # only on the sand side
     a = np.clip(a * intensity, 0.0, 1.0)
     rgba[..., 0] = FOAM[0]; rgba[..., 1] = FOAM[1]; rgba[..., 2] = FOAM[2]
@@ -105,7 +105,8 @@ def render_wave(reach, intensity):
 
 # Wash-up variants: (max reach px, frame count). A wash advances to max reach
 # then recedes; intensity eases in then fades out so it dissolves, not cuts.
-VARIANTS = [(54.0, 9), (34.0, 8)]
+# Three reaches (big surge / medium / small lap) give the random sequence variety.
+VARIANTS = [(78.0, 11), (52.0, 9), (32.0, 8)]
 
 
 def build_variants():
