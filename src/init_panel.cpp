@@ -41,6 +41,7 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   lv_obj_set_style_radius(cont, 0, 0);
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
   pono::ocean_tide_init(cont);
+  pono::beach_init(cont);  // static beach + random wash-up waves in the bottom-left
 
   // Canned comet spinner: the "still working" hero cue, replacing the old
   // sliding loading bar. Pre-baked frames -> playback is bitmap blits, smooth
@@ -117,6 +118,7 @@ InitPanel::~InitPanel() {
     cont = NULL;
   }
   pono::ocean_tide_teardown();  // cont's delete freed the canvas; drop the cached pointer
+  pono::beach_teardown();       // same: cont's delete freed the beach + wave imgs
 }
 
 // (Re)start the comet spinner. Called on reconnect: connected() deletes the
@@ -188,6 +190,7 @@ void InitPanel::connected(KWebSocketClient &ws) {
         lv_obj_add_flag(this->cont, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_background(this->cont);
         pono::ocean_tide_stop(this->cont);  // dashboard is up; stop the boot tide
+        pono::beach_stop();                 // and stop the beach wash sequence
         if (this->spinner) lv_anim_del(this->spinner, NULL);  // Pono: stop the comet spinner (child of cont; ocean_tide_stop only handles the tide canvas)
         this->main_panel.show_home();  // Pono: bring the native cockpit forward over the tabview
       });
@@ -208,6 +211,7 @@ void InitPanel::disconnected(KWebSocketClient &ws) {
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(cont);
   pono::ocean_tide_init(cont);  // re-arm the ocean scroll (idempotent: skips the re-bake, restarts the scroll)
+  pono::beach_init(cont);       // re-arm the beach wash sequence (idempotent)
   arm_spinner();                // re-arm the comet spinner (connect() stopped both)
 }
 

@@ -55,4 +55,69 @@ void busy_hide() {
   lv_obj_add_flag(g_busy, LV_OBJ_FLAG_HIDDEN);
 }
 
+// ---- Boot beach + random wash-up waves ----
+namespace {
+lv_obj_t  *s_beach = nullptr;       // static sand wedge
+lv_obj_t  *s_wave = nullptr;        // foam flipbook (one wash at a time)
+lv_timer_t *s_wave_timer = nullptr; // schedules the next random wash
+uint32_t   s_wave_seed = 0x9e3779b9u;
+
+uint32_t wave_rand() {
+  s_wave_seed = s_wave_seed * 1103515245u + 12345u;  // tiny LCG; no libc rand dep
+  return (s_wave_seed >> 16) & 0x7fffu;
+}
+
+// Runs on the LVGL thread (lv_timer_handler holds lv_lock): pick a random
+// wash-up variant, play it once, then reschedule after a random gap. Sequence
+// of pre-canned washes -> reads as a naturally random tide lapping the sand.
+void wave_tick(lv_timer_t *t) {
+  if (s_wave == nullptr || pono_wave_variant_count == 0) return;
+  uint8_t v = (uint8_t)(wave_rand() % pono_wave_variant_count);
+  lv_animimg_set_src(s_wave, (const void **)pono_wave_variants[v], pono_wave_variant_frames[v]);
+  lv_animimg_set_duration(s_wave, 850 + (wave_rand() % 600));   // ~0.85-1.45s wash
+  lv_animimg_set_repeat_count(s_wave, 1);                       // one wash, not a loop
+  lv_animimg_start(s_wave);
+  lv_timer_set_period(t, 1500 + (wave_rand() % 2800));          // random gap to the next
+}
+}  // namespace
+
+void beach_init(lv_obj_t *parent) {
+  if (parent == nullptr) return;
+  const int y = 272 - (int)pono_beach_h;  // bottom-left corner of the 480x272 panel
+  // z-order falls out of creation order: ocean (move_background) < beach <
+  // wave < the spinner/joke/labels the boot panel creates after this. So no
+  // foregrounding here, or a re-arm would shove the sand over the status text.
+  if (s_beach == nullptr) {
+    s_beach = lv_img_create(parent);
+    lv_img_set_src(s_beach, &pono_beach);
+    lv_obj_set_pos(s_beach, 0, y);
+    lv_obj_clear_flag(s_beach, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_clear_flag(s_beach, LV_OBJ_FLAG_SCROLLABLE);
+  }
+  if (s_wave == nullptr) {
+    s_wave = lv_animimg_create(parent);
+    lv_obj_set_pos(s_wave, 0, y);
+    lv_obj_set_size(s_wave, pono_beach_w, pono_beach_h);
+    lv_animimg_set_src(s_wave, (const void **)pono_wave_variants[0], pono_wave_variant_frames[0]);
+    lv_animimg_set_duration(s_wave, 1000);
+    lv_animimg_set_repeat_count(s_wave, 1);
+    lv_obj_clear_flag(s_wave, LV_OBJ_FLAG_CLICKABLE);
+  }
+  if (s_wave_timer == nullptr) {
+    s_wave_timer = lv_timer_create(wave_tick, 400, nullptr);  // first wash shortly after boot
+  } else {
+    lv_timer_resume(s_wave_timer);
+  }
+}
+
+void beach_stop() {
+  if (s_wave_timer) lv_timer_pause(s_wave_timer);
+  if (s_wave) lv_anim_del(s_wave, nullptr);  // halt any in-flight wash -> zero cost
+}
+
+void beach_teardown() {
+  if (s_wave_timer) { lv_timer_del(s_wave_timer); s_wave_timer = nullptr; }
+  s_beach = nullptr; s_wave = nullptr;  // children freed with the boot panel's container
+}
+
 }  // namespace pono

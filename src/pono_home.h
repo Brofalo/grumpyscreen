@@ -119,8 +119,11 @@ void build_more(lv_obj_t *parent, MoreHandles *h = nullptr);
 
 struct FansHandles {
   lv_obj_t *back = nullptr;
-  lv_obj_t *part_val = nullptr, *part_slider = nullptr, *aux_val = nullptr;
-  lv_obj_t *off = nullptr, *p50 = nullptr, *full = nullptr;
+  // One row per fan the Centauri exposes. Index: 0 part-cooling (fan),
+  // 1 model fan, 2 box fan (all user-settable -> slider); 3 mainboard temp
+  // fan, 4 hotend heat-break fan (Klipper-managed -> AUTO pill, no slider).
+  lv_obj_t *val[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};     // live % label
+  lv_obj_t *slider[5] = {nullptr, nullptr, nullptr, nullptr, nullptr};  // null for the auto fans
 };
 void build_fans(lv_obj_t *parent, FansHandles *h = nullptr);
 

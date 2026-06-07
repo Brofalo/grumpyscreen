@@ -952,41 +952,39 @@ void build_fans(lv_obj_t *parent, FansHandles *h) {
   lv_obj_t *back = screen_header(parent, "Fans");
   if (h) h->back = back;
 
-  lv_obj_t *c = card(parent, 12, 56, 456, 108, color_surface_raised, 14);
-  vgrad(c, color_surface_elevated, color_surface_raised);
-  hairline(c, color_text_tertiary, opa_border_subtle);
-  lv_obj_t *nm = lbl(c, "Part cooling fan", font_caption, color_text_secondary, 0, 0);
-  lv_obj_align(nm, LV_ALIGN_TOP_LEFT, 16, 14);
-  lv_obj_t *pv = lbl(c, "--%", font_num_large, color_accent_primary, 0, 0);
-  lv_obj_align(pv, LV_ALIGN_TOP_RIGHT, -16, 8);
-  if (h) h->part_val = pv;
-  lv_obj_t *sl = lv_slider_create(c);
-  lv_obj_align(sl, LV_ALIGN_BOTTOM_MID, 0, -16);
-  lv_obj_set_size(sl, 420, 10);
-  lv_slider_set_range(sl, 0, 100);
-  lv_slider_set_value(sl, 0, LV_ANIM_OFF);
-  lv_obj_set_style_bg_color(sl, color_surface_base, LV_PART_MAIN);
-  lv_obj_set_style_radius(sl, 5, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
-  lv_obj_set_style_radius(sl, 5, LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
-  if (h) h->part_slider = sl;
-
-  // Uniform momentary buttons - the slider above is the source of truth for
-  // the live fan speed. (Full used to be hard-painted cyan, which read as a
-  // permanent "active" state even with the fan off.)
-  lv_obj_t *off = tap_btn(parent, 12, 176, 148, 44, "Off", font_body, color_text_secondary);
-  lv_obj_t *h50 = tap_btn(parent, 166, 176, 148, 44, "50%", font_body, color_text_primary);
-  lv_obj_t *full = tap_btn(parent, 320, 176, 148, 44, "Full", font_body, color_text_primary);
-  if (h) { h->off = off; h->p50 = h50; h->full = full; }
-
-  lv_obj_t *ac = card(parent, 12, 230, 456, 32, color_surface_elevated, 8);
-  hairline(ac, color_text_tertiary, opa_border_subtle);
-  lv_obj_t *an = lbl(ac, "Other fans", font_micro, color_text_secondary, 0, 0);
-  lv_obj_align(an, LV_ALIGN_LEFT_MID, 16, 0);
-  lv_obj_t *av = lbl(ac, "auto", font_caption, color_text_secondary, 0, 0);
-  lv_obj_align(av, LV_ALIGN_RIGHT_MID, -16, 0);
-  if (h) h->aux_val = av;
+  // One row per fan. The three user-settable fans get a live slider (drag to 0
+  // = off); the two Klipper-managed fans show an AUTO pill + live %.
+  static const char *names[5]    = {"Part cooling", "Model fan", "Box fan", "Mainboard", "Hotend"};
+  static const bool  settable[5] = {true, true, true, false, false};
+  const int X = 12, W = 456, RH = 38, Y0 = 60, GAP = 4;
+  for (int i = 0; i < 5; i++) {
+    int y = Y0 + i * (RH + GAP);
+    lv_obj_t *c = card(parent, X, y, W, RH, color_surface_raised, 10);
+    hairline(c, color_text_tertiary, opa_border_subtle);
+    lv_obj_t *nm = lbl(c, names[i], font_caption, color_text_secondary, 0, 0);
+    lv_obj_align(nm, LV_ALIGN_LEFT_MID, 14, 0);
+    lv_obj_t *pv = lbl(c, "--%", font_body, color_accent_primary, 0, 0);
+    lv_obj_align(pv, LV_ALIGN_RIGHT_MID, -14, 0);
+    if (h) h->val[i] = pv;
+    if (settable[i]) {
+      lv_obj_t *sl = lv_slider_create(c);
+      lv_obj_set_size(sl, 188, 8);
+      lv_obj_align(sl, LV_ALIGN_CENTER, 30, 0);
+      lv_slider_set_range(sl, 0, 100);
+      lv_slider_set_value(sl, 0, LV_ANIM_OFF);
+      lv_obj_set_style_bg_color(sl, color_surface_base, LV_PART_MAIN);
+      lv_obj_set_style_radius(sl, 4, LV_PART_MAIN);
+      lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
+      lv_obj_set_style_radius(sl, 4, LV_PART_INDICATOR);
+      lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
+      if (h) h->slider[i] = sl;
+    } else {
+      lv_obj_t *pill = card(c, 0, 0, 50, 22, color_surface_elevated, 11);
+      hairline(pill, color_accent_secondary, opa_border_strong);
+      lv_obj_align(pill, LV_ALIGN_CENTER, 30, 0);
+      lv_obj_center(lbl(pill, "AUTO", font_micro, color_accent_secondary, 0, 0));
+    }
+  }
 }
 
 // Append one file row to the Files list (public: the app populates real files).

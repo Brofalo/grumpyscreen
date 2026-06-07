@@ -229,12 +229,23 @@ void MainPanel::consume(json &j) {
           home_nozzle_set_ > 0 ? std::to_string(home_nozzle_set_) : std::string("off")).c_str());
         lv_obj_align(fil_h_.temp, LV_ALIGN_RIGHT_MID, -14, 0);
       }
-      // mirror part-cooling fan speed onto the Fans screen value + slider
-      { auto v = V("/params/0/fan/speed"); if (!v.is_null()) {
-          int fpct = (int)(v.template get<double>() * 100.0 + 0.5);
-          if (fan_h_.part_val)    lv_label_set_text(fan_h_.part_val, fmt::format("{}%", fpct).c_str());
-          if (fan_h_.part_slider) lv_slider_set_value(fan_h_.part_slider, fpct, LV_ANIM_OFF);
-      } }
+      // live fan speeds onto the Fans screen (5 fans; auto fans update the % only)
+      {
+        static const char *fp[5] = {
+          "/params/0/fan/speed",
+          "/params/0/fan_generic model_helper_fan/speed",
+          "/params/0/fan_generic box_fan/speed",
+          "/params/0/temperature_fan mainboard/speed",
+          "/params/0/heater_fan extruder/speed",
+        };
+        for (int i = 0; i < 5; i++) {
+          auto fv = V(fp[i]);
+          if (fv.is_null()) continue;
+          int fpct = (int)(fv.template get<double>() * 100.0 + 0.5);
+          if (fan_h_.val[i])    lv_label_set_text(fan_h_.val[i], fmt::format("{}%", fpct).c_str());
+          if (fan_h_.slider[i]) lv_slider_set_value(fan_h_.slider[i], fpct, LV_ANIM_OFF);
+        }
+      }
       { auto bm = V("/params/0/bed_mesh"); if (!bm.is_null()) render_bed_mesh(bm); }  // heatmap on mesh change
       if (printing) {  // progress + layer + ETA only while a job runs
         lv_disp_trig_activity(NULL);  // keep the dashboard awake while printing (no blank mid-print)
@@ -386,7 +397,7 @@ void MainPanel::create_pono_screens() {
     temp_h_.bd_preset[0], temp_h_.bd_preset[1], temp_h_.bd_preset[2], temp_h_.bd_off,
     temp_h_.nz_minus, temp_h_.nz_plus, temp_h_.bd_minus, temp_h_.bd_plus,
     temp_h_.nz_cur, temp_h_.bd_cur,
-    fan_h_.back, fan_h_.off, fan_h_.p50, fan_h_.full,
+    fan_h_.back,
     files_h_.back,
     tune_h_.back, tune_h_.standard, tune_h_.omega,
     tune_h_.cals[0], tune_h_.cals[1], tune_h_.cals[2], tune_h_.cals[3], tune_h_.cals[4],
@@ -402,7 +413,8 @@ void MainPanel::create_pono_screens() {
     settings_h_.zoff_minus, settings_h_.zoff_plus,
   };
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_sub_tap, LV_EVENT_CLICKED, this);
-  if (fan_h_.part_slider) lv_obj_add_event_cb(fan_h_.part_slider, &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
+  for (int i = 0; i < 3; i++)
+    if (fan_h_.slider[i]) lv_obj_add_event_cb(fan_h_.slider[i], &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
   if (tune_h_.speed)      lv_obj_add_event_cb(tune_h_.speed, &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
 
   // Modal confirm dialog on the top layer (above every sub-screen).
@@ -576,9 +588,6 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == tp.nz_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>330?330:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  n)); }); s->numpad.foreground_reset(); return; }
   if (t == tp.bd_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>120?120:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", n)); }); s->numpad.foreground_reset(); return; }
   // Fans (quick)
-  if (t == fn.off)  { s->ws.gcode_script("M106 S0"); return; }
-  if (t == fn.p50)  { s->ws.gcode_script("M106 S128"); return; }
-  if (t == fn.full) { s->ws.gcode_script("M106 S255"); return; }
   // Tune
   if (t == tu.standard) { s->ws.gcode_script("PONO_CAL_STANDARD"); return; }
   if (t == tu.omega)    { s->ws.gcode_script("PONO_CAL_OMEGA"); return; }
@@ -638,13 +647,19 @@ void MainPanel::_fan_slider_cb(lv_event_t *e) {
   auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
   lv_obj_t *t = lv_event_get_target(e);
   int v = lv_slider_get_value(t);
-  if (t == s->fan_h_.part_slider) {
-    s->ws.gcode_script(fmt::format("M106 S{}", (int)(v * 255 / 100)));
-    if (s->fan_h_.part_val) lv_label_set_text(s->fan_h_.part_val, fmt::format("{}%", v).c_str());
-  } else if (t == s->tune_h_.speed) {
+  if (t == s->tune_h_.speed) {                 // Expert Tune feedrate (M220), not a fan
     s->ws.gcode_script(fmt::format("M220 S{}", v));
     if (s->tune_h_.speed_val) lv_label_set_text(s->tune_h_.speed_val, fmt::format("{}%", v).c_str());
+    return;
   }
+  // Per-fan sliders: 0 part-cooling (M106), 1 model fan, 2 box fan (generics).
+  if (t == s->fan_h_.slider[0])       s->ws.gcode_script(fmt::format("M106 S{}", (int)(v * 255 / 100)));
+  else if (t == s->fan_h_.slider[1])  s->ws.gcode_script(fmt::format("SET_FAN_SPEED FAN=model_helper_fan SPEED={:.2f}", v / 100.0));
+  else if (t == s->fan_h_.slider[2])  s->ws.gcode_script(fmt::format("SET_FAN_SPEED FAN=box_fan SPEED={:.2f}", v / 100.0));
+  else return;
+  for (int i = 0; i < 3; i++)
+    if (t == s->fan_h_.slider[i] && s->fan_h_.val[i])
+      lv_label_set_text(s->fan_h_.val[i], fmt::format("{}%", v).c_str());
 }
 
 void MainPanel::_file_row_cb(lv_event_t *e) {

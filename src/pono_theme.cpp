@@ -278,7 +278,14 @@ void ocean_tide_init(lv_obj_t *parent) {
 
     // Slow continuous left-scroll, looping seamlessly at one texture period.
     // Linear path so the loop reset is invisible (no ease stutter at the seam).
-    lv_anim_del(s_ocean_canvas, ocean_scroll_cb);
+    //
+    // Only start it if it is NOT already running. disconnected() re-calls
+    // ocean_tide_init() on every connect/disconnect blip while Klipper comes
+    // up; deleting + restarting the anim snapped the drift back to v=0 - the
+    // visible "tide reset ~1/3 through boot". Leaving a live anim alone keeps
+    // the drift continuous across re-arms; a real stop (ocean_tide_stop on the
+    // dashboard handoff) clears it, so a later re-arm correctly restarts.
+    if (lv_anim_get(s_ocean_canvas, ocean_scroll_cb) != nullptr) return;
     lv_anim_t a;
     lv_anim_init(&a);
     lv_anim_set_var(&a, s_ocean_canvas);

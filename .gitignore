@@ -15,3 +15,5 @@ sim/dev_*
 # python bytecode
 __pycache__/
 *.pyc
+tools/beach_preview.png
+tools/beach_wave_preview.png

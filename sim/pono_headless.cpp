@@ -114,6 +114,7 @@ int main(int argc, char **argv) {
     lv_obj_t *scr = lv_scr_act();
     lv_obj_set_style_pad_all(scr, 0, 0);
     pono::ocean_tide_init(scr);
+    pono::beach_init(scr);  // static beach + random wash-up waves, bottom-left
 
     // Canned comet spinner: the "still working" hero cue (replaces the old
     // sliding loading bar). Pure bitmap blits -> smooth + near-zero CPU.
@@ -161,7 +162,14 @@ int main(int argc, char **argv) {
   } else if (screen == "temps" || screen == "temp") {
     pono::build_temps(lv_scr_act());
   } else if (screen == "fans") {
-    pono::build_fans(lv_scr_act());
+    static pono::FansHandles fh;
+    pono::build_fans(lv_scr_act(), &fh);
+    int demo[5] = {65, 100, 40, 38, 100};
+    for (int i = 0; i < 5; i++) {
+      char b[8]; snprintf(b, sizeof b, "%d%%", demo[i]);
+      if (fh.val[i]) lv_label_set_text(fh.val[i], b);
+      if (fh.slider[i]) lv_slider_set_value(fh.slider[i], demo[i], LV_ANIM_OFF);
+    }
   } else if (screen == "files") {
     pono::build_files(lv_scr_act());
   } else if (screen == "tune") {
