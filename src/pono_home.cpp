@@ -963,7 +963,10 @@ void build_fans(lv_obj_t *parent, FansHandles *h) {
     hairline(c, color_text_tertiary, opa_border_subtle);
     lv_obj_t *nm = lbl(c, names[i], font_caption, color_text_secondary, 0, 0);
     lv_obj_align(nm, LV_ALIGN_LEFT_MID, 14, 0);
-    lv_obj_t *pv = lbl(c, "--%", font_body, color_accent_primary, 0, 0);
+    // Fans read 0 at boot (Klipper zeroes every fan on restart, which is when
+    // build_fans runs) and the consume() loop only updates a fan on a non-null
+    // speed delta -- an idle fan never sends one, so seed 0% not "--%".
+    lv_obj_t *pv = lbl(c, "0%", font_body, color_accent_primary, 0, 0);
     lv_obj_align(pv, LV_ALIGN_RIGHT_MID, -14, 0);
     if (h) h->val[i] = pv;
     if (settable[i]) {
