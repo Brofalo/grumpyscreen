@@ -110,6 +110,40 @@ void MainPanel::init(json &j) {
     }
   }
   { auto bm = j[json::json_pointer("/result/status/bed_mesh")]; if (!bm.is_null()) render_bed_mesh(bm); }  // initial heatmap
+
+  // Seed the Pono cockpit + Move screen from the initial full state. consume()
+  // reads these same fields from /params/0 deltas; the subscribe reply nests them
+  // under /result/status. Moonraker only sends a field in a delta when it CHANGES,
+  // so without this a connect to an already-printing (or already-homed) machine
+  // shows the idle layout, 0% progress, and "--" position until state next moves.
+  if (home_h.arc) {
+    auto V = [&](const char *p) { return j[json::json_pointer(p)]; };
+    { auto v = V("/result/status/virtual_sdcard/progress");        if (!v.is_null()) home_progress_    = v.template get<double>(); }
+    { auto v = V("/result/status/print_stats/print_duration");     if (!v.is_null()) home_duration_    = v.template get<double>(); }
+    { auto v = V("/result/status/extruder/temperature");           if (!v.is_null()) home_nozzle_      = (int)v.template get<double>(); }
+    { auto v = V("/result/status/extruder/target");                if (!v.is_null()) home_nozzle_set_  = (int)v.template get<double>(); }
+    { auto v = V("/result/status/heater_bed/temperature");         if (!v.is_null()) home_bed_         = (int)v.template get<double>(); }
+    { auto v = V("/result/status/heater_bed/target");              if (!v.is_null()) home_bed_set_     = (int)v.template get<double>(); }
+    { auto v = V("/result/status/print_stats/info/current_layer"); if (!v.is_null()) home_layer_       = v.template get<int>(); }
+    { auto v = V("/result/status/print_stats/info/total_layer");   if (!v.is_null()) home_layer_total_ = v.template get<int>(); }
+    { auto v = V("/result/status/print_stats/filename");           if (!v.is_null()) home_job_         = v.template get<std::string>(); }
+    { auto v = V("/result/status/toolhead/homed_axes");            if (!v.is_null()) move_homed_       = v.template get<std::string>(); }
+    { auto v = V("/result/status/toolhead/position");
+      if (v.is_array() && v.size() >= 3) { move_pos_[0]=v[0].template get<double>(); move_pos_[1]=v[1].template get<double>(); move_pos_[2]=v[2].template get<double>(); } }
+    { auto v = V("/result/status/print_stats/state");
+      if (!v.is_null()) { std::string s = v.template get<std::string>(); home_printing_ = (s == "printing"); home_paused_ = (s == "paused"); } }
+    rebuild_home();   // reflect actual state (layout + seeded temps/progress/job) immediately
+
+    if (move_h_.pos) {  // same seed for the Move screen position (else "--" until first jog)
+      auto axis = [&](char up, char lo, double v) {
+        return move_homed_.find(lo) != std::string::npos
+          ? fmt::format("{} {:.1f}", up, v) : fmt::format("{} --", up);
+      };
+      lv_label_set_text(move_h_.pos, fmt::format("{}  {}  {}",
+        axis('X','x',move_pos_[0]), axis('Y','y',move_pos_[1]), axis('Z','z',move_pos_[2])).c_str());
+      lv_obj_center(move_h_.pos);
+    }
+  }
 }
 
 void MainPanel::consume(json &j) {  
