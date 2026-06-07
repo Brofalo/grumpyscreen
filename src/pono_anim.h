@@ -48,6 +48,10 @@ void beach_teardown();
 // built once on lv_layer_top and reused. Throw it up at the start of any
 // blocking wait (homing, filament load, heating) and drop it when done. The
 // spinner anim is stopped while hidden, so an idle overlay costs nothing.
+//
+// CONTRACT: both touch LVGL objects and do NOT self-lock. The caller must hold
+// GuppyScreen::lv_lock. Tap/timer handlers already run under it; a ws-thread
+// callback (e.g. a gcode_script completion) must take the lock first.
 void busy_show(const char *text);
 void busy_hide();
 

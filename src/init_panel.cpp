@@ -215,6 +215,9 @@ void InitPanel::disconnected(KWebSocketClient &ws) {
   arm_spinner();                // re-arm the comet spinner (connect() stopped both)
 }
 
+// CONTRACT: writes the LVGL status label without self-locking. The caller must
+// hold GuppyScreen::lv_lock. disconnected() runs on the ws thread and takes the
+// lock before calling this (the alpha.147 fix was reordering that very lock).
 void InitPanel::set_message(const char *message) {
 	lv_label_set_text(label, message);
 }
