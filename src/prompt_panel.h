@@ -33,6 +33,7 @@ class PromptPanel : public NotifyConsumer {
 
         void foreground();
         void background();
+        bool is_showing() const { return showing_; }  // a prompt is up -> cockpit cal overlay must yield
 
     private:
 
@@ -45,6 +46,7 @@ class PromptPanel : public NotifyConsumer {
         lv_obj_t *header;
         lv_obj_t *button_group_cont;
         lv_obj_t *footer_cont;
+        bool showing_ = false;   // set on action:prompt_show, cleared on prompt_end (both under lv_lock)
 
 };
 

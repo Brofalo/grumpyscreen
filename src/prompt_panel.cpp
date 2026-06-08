@@ -3,6 +3,7 @@
 #include "utils.h"
 #include "logger.h"
 #include "pono_theme.h"  // Phase A.4 pass 4: Westworld Dark semantic tokens
+#include "pono_anim.h"   // busy_hide: a prompt must not sit behind the cal/busy overlay
 
 // uncomment for helper boxes
 // #define DEBUG_LINES
@@ -369,9 +370,12 @@ void PromptPanel::handle_macro_response(json &j) {
         LOG_DEBUG("PROMPT_SHOW");
         check_height();
         foreground();
+        showing_ = true;
+        pono::busy_hide();  // prompt and the cal/busy overlay both live on lv_layer_top; drop the scrim so the dialog is visible/tappable (consume() also gates on is_showing() to not re-show it)
       } else if (command.find("prompt_end") == 0) {
         LOG_DEBUG("PROMPT_END");
         background();
+        showing_ = false;
 
         // remove buttons
         lv_obj_clean(footer_cont);

@@ -327,7 +327,7 @@ void MainPanel::consume(json &j) {
       auto dv = V("/params/0/display_status/message");
       if (!dv.is_null()) cal_msg_ = dv.template get<std::string>();
     }
-    bool cal_active = busy_ && !printing && cal_msg_.rfind("Calibrating", 0) == 0;
+    bool cal_active = busy_ && !printing && cal_msg_.rfind("Calibrating", 0) == 0 && !prompt_panel.is_showing();
     if (cal_active) {
       if (!cal_overlay_ || cal_msg_ != cal_overlay_text_) {
         pono::busy_show(cal_msg_.c_str());
