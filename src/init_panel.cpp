@@ -41,13 +41,13 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   pono::build_boot(cont, &boot_);
 
   // Cycling island jokes: read the device joke book, seed the start from the
-  // boot-picked line, and rotate every few seconds while we wait.
+  // boot-picked line, and rotate slowly while we wait.
   load_jokes();
   if (boot_.joke && !jokes_.empty())
     lv_label_set_text(boot_.joke, jokes_[joke_idx_].c_str());
   joke_timer_ = lv_timer_create(
       [](lv_timer_t *t) { static_cast<InitPanel *>(t->user_data)->cycle_joke(); },
-      4500, this);
+      9000, this);   // 9s/joke; 4500 cycled faster than the line could be read
 
   pono::boot_set_progress(&boot_, 4, "Waiting for Klipper to start...");
 }
