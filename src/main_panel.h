@@ -125,6 +125,7 @@ class MainPanel : public NotifyConsumer {
   bool home_printing_ = false;    // last-known printing state (ETA + pulse gating)
   bool home_paused_ = false;      // last-known paused state (Resume vs Pause button)
   bool home_pulsing_ = false;     // is the state-dot pulse currently running
+  bool busy_ = false;             // idle_timeout.state=="Printing" (print OR cal) -> keep panel awake
   double home_progress_ = 0.0;    // last-seen virtual_sdcard progress (survives Moonraker deltas)
   double home_duration_ = 0.0;    // last-seen print_stats.print_duration (survives Moonraker deltas)
   int home_nozzle_ = 0, home_nozzle_set_ = 0;   // cached temps (survive deltas; feed the rebuild model)

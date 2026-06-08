@@ -189,6 +189,7 @@ void MainPanel::consume(json &j) {
     { auto v = V("/params/0/print_stats/info/current_layer"); if (!v.is_null()) home_layer_       = v.template get<int>(); }
     { auto v = V("/params/0/print_stats/info/total_layer");   if (!v.is_null()) home_layer_total_ = v.template get<int>(); }
     { auto v = V("/params/0/print_stats/filename");           if (!v.is_null()) home_job_         = v.template get<std::string>(); }
+    { auto v = V("/params/0/idle_timeout/state");             if (!v.is_null()) busy_             = (v.template get<std::string>() == "Printing"); }  // print OR cal
 
     // Move screen: live toolhead position, each axis gated on homed_axes. Both
     // arrive as Moonraker deltas (only on change), so cache them and reformat
@@ -281,8 +282,12 @@ void MainPanel::consume(json &j) {
         }
       }
       { auto bm = V("/params/0/bed_mesh"); if (!bm.is_null()) render_bed_mesh(bm); }  // heatmap on mesh change
+      // Keep the panel awake during ANY active operation. print_stats.state is
+      // "printing" only for real jobs; idle_timeout.state ("Printing") covers any
+      // gcode incl. PID/mesh/shaper cal -- gating only on the former blanked the
+      // screen mid-calibration (display_sleep_sec=600). Root cause of the cal blank.
+      if (printing || busy_) lv_disp_trig_activity(NULL);
       if (printing) {  // progress + layer + ETA only while a job runs
-        lv_disp_trig_activity(NULL);  // keep the dashboard awake while printing (no blank mid-print)
         int pct = (int)(home_progress_ * 100.0 + 0.5);
         lv_arc_set_value(home_h.arc, pct);
         if (home_h.pct) {

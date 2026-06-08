@@ -278,6 +278,7 @@ void PromptPanel::handle_macro_response(json &j) {
         button_group_cont = NULL;
       } else if (command.find("prompt_footer_button") == 0 || command.find("prompt_button") == 0) {
         int index_label = command.find("button", 0) + strlen("button");
+        while (index_label < (int)command.size() && command[index_label] == ' ') index_label++;  // skip the space after "button" so the parsed label has no leading space
         int index_first = command.find("|", index_label);
         int index_second = command.find("|", index_first + 1);
         LOG_DEBUG("indexes: {} {} {}", index_label, index_first, index_second);
