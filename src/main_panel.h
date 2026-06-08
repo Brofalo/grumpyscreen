@@ -126,6 +126,9 @@ class MainPanel : public NotifyConsumer {
   bool home_paused_ = false;      // last-known paused state (Resume vs Pause button)
   bool home_pulsing_ = false;     // is the state-dot pulse currently running
   bool busy_ = false;             // idle_timeout.state=="Printing" (print OR cal) -> keep panel awake
+  std::string cal_msg_;           // display_status.message (cal step text via SET_DISPLAY_TEXT)
+  std::string cal_overlay_text_;  // text currently on the cal overlay (skip redundant redraws)
+  bool cal_overlay_ = false;      // is the cal progress overlay currently shown
   double home_progress_ = 0.0;    // last-seen virtual_sdcard progress (survives Moonraker deltas)
   double home_duration_ = 0.0;    // last-seen print_stats.print_duration (survives Moonraker deltas)
   int home_nozzle_ = 0, home_nozzle_set_ = 0;   // cached temps (survive deltas; feed the rebuild model)

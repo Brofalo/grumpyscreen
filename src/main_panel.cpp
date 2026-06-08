@@ -309,6 +309,31 @@ void MainPanel::consume(json &j) {
         }
       }
     }
+
+    // --- Calibration progress overlay -------------------------------------
+    // A cal (PID/mesh/shaper) runs as idle_timeout="Printing" while print_stats
+    // stays "standby", so the cockpit shows its idle "Ready" layout and tuning
+    // looks dead ("no UI showing progress, just the dashboard"). The cal macros
+    // announce each step via SET_DISPLAY_TEXT (display_status.message); surface
+    // it on the existing busy overlay so the operator sees progress. Gate on the
+    // "Calibrating" prefix so a manual home/jog (also idle=Printing, not a real
+    // print) never trips it.
+    {
+      auto dv = V("/params/0/display_status/message");
+      if (!dv.is_null()) cal_msg_ = dv.template get<std::string>();
+    }
+    bool cal_active = busy_ && !printing && cal_msg_.rfind("Calibrating", 0) == 0;
+    if (cal_active) {
+      if (!cal_overlay_ || cal_msg_ != cal_overlay_text_) {
+        pono::busy_show(cal_msg_.c_str());
+        cal_overlay_ = true;
+        cal_overlay_text_ = cal_msg_;
+      }
+    } else if (cal_overlay_) {
+      pono::busy_hide();
+      cal_overlay_ = false;
+      cal_overlay_text_.clear();
+    }
   }
 }
 
