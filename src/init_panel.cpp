@@ -4,6 +4,7 @@
 #include "config.h"
 #include "logger.h"
 #include "pono_home.h"   // build_boot / boot_set_progress (the shared boot layout)
+#include "pono_anim.h"   // pono::busy_hide() (clear a stranded blocking overlay on disconnect)
 
 #include <algorithm>
 #include <cstdio>
