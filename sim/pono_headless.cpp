@@ -109,52 +109,15 @@ int main(int argc, char **argv) {
   pono::theme_init(disp);
 
   if (screen == "boot") {
-    // Mirror init_panel: ocean tide + small joke pill + tiny status line, so
-    // the boot joke size and the tide flex can be eyeballed before flashing.
+    // The real connecting screen (build_boot, shared with init_panel). Drive it
+    // to a mid-load stage so the bar + status read as they will on the device.
     lv_obj_t *scr = lv_scr_act();
     lv_obj_set_style_pad_all(scr, 0, 0);
-    pono::ocean_tide_init(scr);
-    pono::beach_init(scr);  // static beach + random wash-up waves, bottom-left
-
-    // Canned comet spinner: the "still working" hero cue (replaces the old
-    // sliding loading bar). Pure bitmap blits -> smooth + near-zero CPU.
-    lv_obj_t *spin = pono::spinner_create(scr, 1000);
-    lv_obj_align(spin, LV_ALIGN_TOP_MID, 0, 24);
-
-    lv_obj_t *joke = lv_label_create(scr);
-    lv_obj_set_width(joke, lv_pct(78));
-    lv_obj_set_height(joke, LV_SIZE_CONTENT);
-    lv_label_set_long_mode(joke, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(joke, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(joke, pono::color_text_primary, 0);
-    lv_obj_set_style_text_font(joke, pono::font_caption, 0);
-    lv_obj_set_style_bg_color(joke, pono::color_surface_raised, 0);
-    lv_obj_set_style_bg_opa(joke, LV_OPA_80, 0);
-    lv_obj_set_style_pad_all(joke, 8, 0);
-    lv_obj_set_style_radius(joke, 8, 0);
-    lv_label_set_text(joke,
+    static pono::BootHandles bh;
+    pono::build_boot(scr, &bh);
+    lv_label_set_text(bh.joke,
         "First layer is like a good poke bowl: get the base right or the whole thing falls apart.");
-    lv_obj_align_to(joke, spin, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
-
-    lv_obj_t *st = lv_label_create(scr);
-    lv_obj_set_style_text_color(st, pono::color_text_secondary, 0);
-    lv_obj_set_style_text_font(st, pono::font_micro, 0);
-    lv_label_set_text(st, "Waiting for Klipper to start...");
-    lv_obj_align_to(st, joke, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
-
-    // Dedication pill, pinned to the bottom (mirrors init_panel).
-    lv_obj_t *ded = lv_label_create(scr);
-    lv_obj_set_width(ded, LV_SIZE_CONTENT);
-    lv_obj_set_height(ded, LV_SIZE_CONTENT);
-    lv_obj_set_style_text_align(ded, LV_TEXT_ALIGN_CENTER, 0);
-    lv_obj_set_style_text_color(ded, pono::color_accent_primary, 0);
-    lv_obj_set_style_text_font(ded, pono::font_caption, 0);
-    lv_obj_set_style_bg_color(ded, pono::color_surface_raised, 0);
-    lv_obj_set_style_bg_opa(ded, LV_OPA_80, 0);
-    lv_obj_set_style_pad_all(ded, 8, 0);
-    lv_obj_set_style_radius(ded, 8, 0);
-    lv_label_set_text(ded, "Dedicated to Elio and Io\nmy little cousins");
-    lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -10);
+    pono::boot_set_progress(&bh, 45, "Reading printer objects...");
   } else if (screen == "move") {
     pono::build_move(lv_scr_act());
   } else if (screen == "filament") {

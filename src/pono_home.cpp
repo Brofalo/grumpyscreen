@@ -14,6 +14,7 @@
 
 #include "pono_home.h"
 #include "pono_theme.h"
+#include "pono_anim.h"   // Hawaii flag asset + comet spinner for the boot screen
 
 #include <cstdio>
 
@@ -1059,6 +1060,89 @@ void build_files(lv_obj_t *parent, FilesHandles *h) {
   files_add_row(list, "benchy_0.25.gcode", "1h 12m  .  PA-CF");
   files_add_row(list, "bracket_v3.gcode", "42m  .  PLA");
   files_add_row(list, "phone_stand.gcode", "2h 04m  .  PETG");
+}
+
+// ---- boot / connecting screen ----------------------------------------------
+// Static Hawaii flag hero + "Pono Print" wordmark + a cycling island joke + a
+// real progress bar the app drives from the live connect stages. No ocean
+// animation: a static hero cannot jank, and the honest progress is the motion.
+void build_boot(lv_obj_t *parent, BootHandles *h) {
+  lv_obj_set_style_bg_color(parent, color_surface_base, 0);
+  lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
+
+  // Hawaii flag hero, framed, top-centre.
+  const int fw = pono_flag_w, fh = pono_flag_h;          // 192 x 96
+  const int fx = (480 - fw) / 2, fy = 12;
+  lv_obj_t *frame = card(parent, fx - 2, fy - 2, fw + 4, fh + 4, color_surface_elevated, 6);
+  hairline(frame, color_text_tertiary, opa_border_medium);
+  lv_obj_t *flag = lv_img_create(parent);
+  lv_img_set_src(flag, &pono_flag);
+  lv_obj_set_pos(flag, fx, fy);
+  if (h) h->flag = flag;
+
+  // "Pono Print" wordmark under the flag.
+  lv_obj_t *wm = lbl(parent, "Pono Print", font_h1, color_text_primary, 0, 0);
+  lv_obj_align(wm, LV_ALIGN_TOP_MID, 0, fy + fh + 8);     // ~116
+  if (h) h->wordmark = wm;
+
+  // Cycling island joke (the app rotates the text via the joke timer).
+  lv_obj_t *joke = lv_label_create(parent);
+  lv_obj_set_width(joke, lv_pct(84));
+  lv_obj_set_height(joke, LV_SIZE_CONTENT);
+  lv_label_set_long_mode(joke, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_align(joke, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_set_style_text_color(joke, color_text_secondary, 0);
+  lv_obj_set_style_text_font(joke, font_caption, 0);
+  lv_label_set_text(joke, "Warming up the trade winds...");
+  lv_obj_align(joke, LV_ALIGN_TOP_MID, 0, 150);
+  if (h) h->joke = joke;
+
+  // Loading widget: a styled box (brand-cyan edge) holding the comet spinner on
+  // the left and a real status line over a progress bar. The app feeds both
+  // from the live connect stages, so the bar actually means something.
+  const int bx = 60, by = 192, bw = 360, bh = 56;
+  lv_obj_t *box = card(parent, bx, by, bw, bh, color_surface_raised, 12);
+  vgrad(box, color_surface_elevated, color_surface_raised);
+  lv_obj_set_style_border_color(box, color_accent_primary, 0);
+  lv_obj_set_style_border_width(box, 1, 0);
+  lv_obj_set_style_border_opa(box, LV_OPA_50, 0);
+
+  // Comet spinner: the "still working" circle Jack wants kept. The shared asset
+  // is 88px (the busy overlay's hero size); zoom this instance to ~44px so it
+  // fits the widget. align_to the box: the 88px object box centres the ~44px
+  // visual at box-left + 30.
+  lv_obj_t *spin = spinner_create(parent, 1000);
+  lv_img_set_zoom(spin, 128);                            // 88px -> 44px visual
+  lv_obj_align_to(spin, box, LV_ALIGN_LEFT_MID, -14, 0);
+  if (h) h->spinner = spin;
+
+  lv_obj_t *st = lbl(box, "Waiting for Klipper to start...", font_caption, color_text_primary, 0, 0);
+  lv_obj_align(st, LV_ALIGN_TOP_LEFT, 56, 10);
+  if (h) h->status = st;
+
+  lv_obj_t *bar = lv_bar_create(box);
+  lv_obj_set_size(bar, bw - 56 - 20, 8);
+  lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, 56, -12);
+  lv_bar_set_range(bar, 0, 100);
+  lv_bar_set_value(bar, 4, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(bar, color_surface_base, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_radius(bar, 4, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(bar, color_accent_primary, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(bar, 4, LV_PART_INDICATOR);
+  if (h) h->bar = bar;
+
+  // Dedication, pinned bottom (kept from the old boot screen).
+  lv_obj_t *ded = lbl(parent, "For Elio and Io", font_micro, color_accent_primary, 0, 0);
+  lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -8);
+}
+
+void boot_set_progress(BootHandles *h, int pct, const char *stage) {
+  if (!h) return;
+  if (pct < 0) pct = 0;
+  if (pct > 100) pct = 100;
+  if (h->bar) lv_bar_set_value(h->bar, pct, LV_ANIM_ON);
+  if (h->status && stage) lv_label_set_text(h->status, stage);
 }
 
 } // namespace pono

@@ -3,8 +3,7 @@
 #include "state.h"
 #include "config.h"
 #include "logger.h"
-#include "pono_theme.h"  // Phase A.4: surface_raised token
-#include "pono_anim.h"   // canned comet spinner (replaces the loading bar)
+#include "pono_home.h"   // build_boot / boot_set_progress (the shared boot layout)
 
 #include <algorithm>
 #include <cstdio>
@@ -12,9 +11,9 @@
 #include <string>
 
 namespace {
-// The boot joke is written to /run/pono-print-joke at boot by the
-// pono-print-boot-joke init script. Read the single line; empty if absent
-// (e.g. on a dev box or before the init script runs).
+// The boot init script (pono-print-boot-joke) urandom-picks one line into
+// /run/pono-print-joke for the login banner. We reuse it as the cycle's start
+// index so each boot opens on a different joke, then rotate through the book.
 std::string read_boot_joke() {
   std::ifstream f("/run/pono-print-joke");
   if (!f.is_open()) return std::string();
@@ -26,107 +25,80 @@ std::string read_boot_joke() {
 
 InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   : cont(lv_obj_create(lv_scr_act()))
-  , label(lv_label_create(cont))
-  , joke_label(lv_label_create(cont))
-  , spinner(nullptr)
   , main_panel(mp)
   , lv_lock(l)
 {
-  // Full-screen Hawaii ocean boot backdrop. It is visible only while waiting
-  // for Klipper to come up; connected() calls ocean_tide_stop() so the tide
-  // animation costs nothing once the live dashboard takes over.
+  // Full-screen boot container. The Hawaii flag hero + "Pono Print" wordmark +
+  // a real progress bar live here (build_boot); it is shown only while we wait
+  // for Klipper, then hidden when the live cockpit takes over.
   lv_obj_set_size(cont, LV_PCT(100), LV_PCT(100));
   lv_obj_set_style_pad_all(cont, 0, 0);
   lv_obj_set_style_border_width(cont, 0, 0);
   lv_obj_set_style_radius(cont, 0, 0);
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_SCROLLABLE);
-  pono::ocean_tide_init(cont);
-  pono::beach_init(cont);  // static beach + random wash-up waves in the bottom-left
 
-  // Canned comet spinner: the "still working" hero cue, replacing the old
-  // sliding loading bar. Pre-baked frames -> playback is bitmap blits, smooth
-  // and near-zero CPU on the A7. Sits at the top; the joke/status flow under it.
-  spinner = pono::spinner_create(cont, 1000);
-  lv_obj_align(spinner, LV_ALIGN_TOP_MID, 0, 24);
+  pono::build_boot(cont, &boot_);
 
-  // Hawaii boot joke: the delight. Deliberately small (a caption, not a
-  // banner) so it never shouts over the tide; the readable pill keeps it
-  // legible while the swells drift behind it. It persists for the whole wait
-  // because set_message() only touches the status line below.
-  std::string joke = read_boot_joke();
-  lv_obj_set_width(joke_label, lv_pct(78));   // explicit width = reliable wrap
-  lv_obj_set_height(joke_label, LV_SIZE_CONTENT);
-  lv_label_set_long_mode(joke_label, LV_LABEL_LONG_WRAP);
-  lv_obj_set_style_text_align(joke_label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(joke_label, pono::color_text_primary, 0);
-  lv_obj_set_style_text_font(joke_label, pono::font_caption, 0);
-  lv_obj_set_style_bg_color(joke_label, pono::color_surface_raised, 0);
-  lv_obj_set_style_bg_opa(joke_label, LV_OPA_80, 0);
-  lv_obj_set_style_pad_all(joke_label, pono::space_sm, 0);
-  lv_obj_set_style_radius(joke_label, pono::radius_md, 0);
-  if (!joke.empty()) {
-    lv_label_set_text(joke_label, joke.c_str());
-  } else {
-    lv_obj_add_flag(joke_label, LV_OBJ_FLAG_HIDDEN);
-  }
-  lv_obj_align_to(joke_label, spinner, LV_ALIGN_OUT_BOTTOM_MID, 0, 16);
+  // Cycling island jokes: read the device joke book, seed the start from the
+  // boot-picked line, and rotate every few seconds while we wait.
+  load_jokes();
+  if (boot_.joke && !jokes_.empty())
+    lv_label_set_text(boot_.joke, jokes_[joke_idx_].c_str());
+  joke_timer_ = lv_timer_create(
+      [](lv_timer_t *t) { static_cast<InitPanel *>(t->user_data)->cycle_joke(); },
+      4500, this);
 
-  // Connection status line: small + secondary, tucked under the joke. This is
-  // what set_message() updates as we wait for / reconnect to Klipper.
-  lv_obj_set_width(label, lv_pct(82));
-  lv_obj_set_height(label, LV_SIZE_CONTENT);
-  lv_label_set_long_mode(label, LV_LABEL_LONG_WRAP);
-  lv_obj_set_style_text_align(label, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(label, pono::color_text_secondary, 0);
-  lv_obj_set_style_text_font(label, pono::font_micro, 0);
-  lv_label_set_text(label, "Waiting for Klipper to start...");
-  if (!joke.empty()) {
-    lv_obj_align_to(label, joke_label, LV_ALIGN_OUT_BOTTOM_MID, 0, 10);
-  } else {
-    lv_obj_align_to(label, spinner, LV_ALIGN_OUT_BOTTOM_MID, 0, 12);
-  }
-
-  // (The "still working" cue is the comet spinner created above; spinner_create
-  // already started its loop, so there is nothing to arm here.)
-
-  // Dedication: a small warm line on its own pill, pinned to the bottom so it
-  // reads over the tide and stays for the whole boot wait. For Ellio and Io,
-  // Jack's little cousins.
-  lv_obj_t *dedication = lv_label_create(cont);
-  lv_obj_set_width(dedication, LV_SIZE_CONTENT);
-  lv_obj_set_height(dedication, LV_SIZE_CONTENT);
-  lv_obj_set_style_text_align(dedication, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(dedication, pono::color_accent_primary, 0);
-  lv_obj_set_style_text_font(dedication, pono::font_caption, 0);
-  lv_obj_set_style_bg_color(dedication, pono::color_surface_raised, 0);
-  lv_obj_set_style_bg_opa(dedication, LV_OPA_80, 0);
-  lv_obj_set_style_pad_all(dedication, pono::space_sm, 0);
-  lv_obj_set_style_radius(dedication, pono::radius_md, 0);
-  lv_label_set_text(dedication, "Dedicated to Elio and Io\nmy little cousins");
-  lv_obj_align(dedication, LV_ALIGN_BOTTOM_MID, 0, -10);
-
-  lv_obj_move_foreground(joke_label);
-  lv_obj_move_foreground(label);
-  lv_obj_move_foreground(dedication);
-  pono::panel_open(joke_label);  // silky fade-in
-  pono::panel_open(dedication);
+  pono::boot_set_progress(&boot_, 4, "Waiting for Klipper to start...");
 }
 
 InitPanel::~InitPanel() {
+  if (joke_timer_) { lv_timer_del(joke_timer_); joke_timer_ = nullptr; }
   if (cont != NULL) {
-    lv_obj_del(cont);
+    lv_obj_del(cont);   // frees the flag/wordmark/joke/bar/spinner children too
     cont = NULL;
   }
-  pono::ocean_tide_teardown();  // cont's delete freed the canvas; drop the cached pointer
-  pono::beach_teardown();       // same: cont's delete freed the beach + wave imgs
 }
 
-// (Re)start the comet spinner. Called on reconnect: connected() deletes the
-// anim to drop it to zero cost when the live dashboard takes over, and
+void InitPanel::load_jokes() {
+  std::ifstream f("/usr/share/pono-print/jokes.txt");
+  std::string line;
+  while (std::getline(f, line)) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();   // strip CR
+    if (!line.empty()) jokes_.push_back(line);
+  }
+  if (jokes_.empty()) {
+    std::string j = read_boot_joke();
+    if (!j.empty()) jokes_.push_back(j);
+  }
+  if (jokes_.empty())
+    jokes_.push_back("Pono means doing it right. Step one: level the bed.");
+
+  std::string seed = read_boot_joke();
+  if (!seed.empty()) {
+    for (size_t i = 0; i < jokes_.size(); i++)
+      if (jokes_[i] == seed) { joke_idx_ = i; break; }
+  }
+}
+
+// Timer callback: runs under lv_lock (lv_timer_handler holds it), so the label
+// write is safe against the render loop.
+void InitPanel::cycle_joke() {
+  if (jokes_.empty() || !boot_.joke) return;
+  joke_idx_ = (joke_idx_ + 1) % jokes_.size();
+  lv_label_set_text(boot_.joke, jokes_[joke_idx_].c_str());
+}
+
+// Advance the boot progress bar + status from a websocket-thread callback. Takes
+// lv_lock itself (the connect callbacks below do not hold it).
+void InitPanel::set_stage(int pct, const char *msg) {
+  std::lock_guard<std::mutex> lock(lv_lock);
+  pono::boot_set_progress(&boot_, pct, msg);
+}
+
+// (Re)start the comet spinner. connected() stops it (cont hidden = zero cost);
 // disconnected() re-arms it while we wait for Klipper again.
 void InitPanel::arm_spinner() {
-  if (spinner == NULL) return;
-  lv_animimg_start(spinner);
+  if (boot_.spinner) lv_animimg_start(boot_.spinner);
 }
 
 void InitPanel::connected(KWebSocketClient &ws) {
@@ -134,9 +106,13 @@ void InitPanel::connected(KWebSocketClient &ws) {
   State *state = State::get_instance();
   state->reset();
 
+  set_stage(22, "Connecting to Moonraker...");
+
   ws.send_jsonrpc("printer.objects.list", [this, &ws](json& d) {
     State *state = State::get_instance();
 	  state->set_data("printer_objs", d, "/result");
+
+    this->set_stage(55, "Loading printer state...");
 
 	  ws.send_jsonrpc("server.files.roots",
 			[](json& j) { State::get_instance()->set_data("roots", j, "/result"); });
@@ -180,6 +156,8 @@ void InitPanel::connected(KWebSocketClient &ws) {
         }
       }
 
+      this->set_stage(78, "Subscribing to printer...");
+
       json subs = {{ "objects", sub_objs }};
       LOG_DEBUG("subscribing to {}", subs.dump());
       ws.send_jsonrpc("printer.objects.subscribe", subs, [this](json &data) {
@@ -187,12 +165,12 @@ void InitPanel::connected(KWebSocketClient &ws) {
         this->main_panel.init(data);
         LOG_DEBUG("done init");
         std::lock_guard<std::mutex> lock(this->lv_lock);
+        pono::boot_set_progress(&boot_, 100, "Ready");
+        if (joke_timer_) lv_timer_pause(joke_timer_);       // cont about to hide
         lv_obj_add_flag(this->cont, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_background(this->cont);
-        pono::ocean_tide_stop(this->cont);  // dashboard is up; stop the boot tide
-        pono::beach_stop();                 // and stop the beach wash sequence
-        if (this->spinner) lv_anim_del(this->spinner, NULL);  // Pono: stop the comet spinner (child of cont; ocean_tide_stop only handles the tide canvas)
-        this->main_panel.show_home();  // Pono: bring the native cockpit forward over the tabview
+        if (boot_.spinner) lv_anim_del(boot_.spinner, NULL);  // stop the comet (cont hidden)
+        this->main_panel.show_home();  // bring the native cockpit forward
       });
     }
   });
@@ -201,23 +179,22 @@ void InitPanel::connected(KWebSocketClient &ws) {
 void InitPanel::disconnected(KWebSocketClient &ws) {
   LOG_DEBUG("init panel disconnected");
   std::lock_guard<std::mutex> lock(lv_lock);
-  // disconnected() runs on the websocket thread; every LVGL write here, set_message
-  // included, must hold lv_lock against the render loop (guppyscreen.cpp loop).
-  set_message("Waiting for Klipper to start...");
+  // disconnected() runs on the websocket thread; every LVGL write here must hold
+  // lv_lock against the render loop (guppyscreen.cpp loop).
+  pono::boot_set_progress(&boot_, 4, "Waiting for Klipper to start...");
   // A blocking-action overlay (homing / filament) waits on a gcode RPC response
   // that will never arrive now the link is down. Clear it so it can't strand on
   // the top layer over the reconnected dashboard.
   pono::busy_hide();
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(cont);
-  pono::ocean_tide_init(cont);  // re-arm the ocean scroll (idempotent: skips the re-bake, restarts the scroll)
-  pono::beach_init(cont);       // re-arm the beach wash sequence (idempotent)
-  arm_spinner();                // re-arm the comet spinner (connect() stopped both)
+  if (joke_timer_) lv_timer_resume(joke_timer_);   // back to waiting: rotate jokes again
+  arm_spinner();                                    // re-arm the comet (connect stopped it)
 }
 
 // CONTRACT: writes the LVGL status label without self-locking. The caller must
 // hold GuppyScreen::lv_lock. disconnected() runs on the ws thread and takes the
 // lock before calling this (the alpha.147 fix was reordering that very lock).
 void InitPanel::set_message(const char *message) {
-	lv_label_set_text(label, message);
+  if (boot_.status) lv_label_set_text(boot_.status, message);
 }

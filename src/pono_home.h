@@ -38,6 +38,26 @@ HomeModel demo_home_idle_model();
 // Paused-state values (job loaded, paused) - Resume + Cancel layout.
 HomeModel demo_home_paused_model();
 
+// ---- boot / connecting screen ----------------------------------------------
+// The screen shown while grumpyscreen waits for Klipper + loads printer state.
+// Hawaii state flag hero, "Pono Print" wordmark, a cycling island joke, and a
+// real progress bar + status line the app drives from the live connect stages
+// (NOT a decorative fake). Pure layout + theme, so it links into the sim too;
+// the app (init_panel) owns the joke-cycle timer and calls boot_set_progress().
+struct BootHandles {
+  lv_obj_t *flag = nullptr;     // static Hawaii flag image
+  lv_obj_t *wordmark = nullptr; // "Pono Print"
+  lv_obj_t *joke = nullptr;     // cycling island joke (app rotates the text)
+  lv_obj_t *status = nullptr;   // stage line ("Connecting to Moonraker...")
+  lv_obj_t *bar = nullptr;      // legit progress bar (0..100, app-driven)
+  lv_obj_t *spinner = nullptr;  // comet circle: the "still working" cue
+};
+void build_boot(lv_obj_t *parent, BootHandles *h = nullptr);
+
+// Set the boot progress bar + status line together (one honest stage update).
+// pct 0..100; stage is the short status text. NULL-safe on every handle.
+void boot_set_progress(BootHandles *h, int pct, const char *stage);
+
 // Live handles into a built home. The app keeps these to update values in
 // place (no rebuild) and to attach tap callbacks. NULL-safe: every field may
 // be null, callers must guard. The sim ignores it (passes nullptr).
