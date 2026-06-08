@@ -189,7 +189,12 @@ void MainPanel::consume(json &j) {
     { auto v = V("/params/0/print_stats/info/current_layer"); if (!v.is_null()) home_layer_       = v.template get<int>(); }
     { auto v = V("/params/0/print_stats/info/total_layer");   if (!v.is_null()) home_layer_total_ = v.template get<int>(); }
     { auto v = V("/params/0/print_stats/filename");           if (!v.is_null()) home_job_         = v.template get<std::string>(); }
-    { auto v = V("/params/0/idle_timeout/state");             if (!v.is_null()) busy_             = (v.template get<std::string>() == "Printing"); }  // print OR cal
+    { auto v = V("/params/0/idle_timeout/state");
+      if (!v.is_null()) {
+        bool nb = (v.template get<std::string>() == "Printing");
+        if (busy_ && !nb) cal_msg_.clear();  // leaving an active op: drop stale cal step text so the overlay can't re-show on a later manual home
+        busy_ = nb;  // print OR cal
+      } }
 
     // Move screen: live toolhead position, each axis gated on homed_axes. Both
     // arrive as Moonraker deltas (only on change), so cache them and reformat

@@ -101,8 +101,8 @@ void ConsolePanel::handle_macro_response(json &j) {
     for (auto &l : j["params"]) {
       std::string v = l.template get<std::string>() + "\n";
       if (klipper_is_temp_report(v.c_str())) {
-          // Ignore TEMPERATURE_WAIT spam
-          return;
+          // Ignore TEMPERATURE_WAIT spam (skip this line only, not the rest of the batch)
+          continue;
       }
       ta_add_text_limit_lines(output, v);
     }
