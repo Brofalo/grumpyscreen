@@ -33,6 +33,7 @@ class PromptPanel : public NotifyConsumer {
 
         void foreground();
         void background();
+        void reset();   // link-loss: force the dialog down + clear showing_ (caller holds lv_lock)
         bool is_showing() const { return showing_; }  // a prompt is up -> cockpit cal overlay must yield
 
     private:

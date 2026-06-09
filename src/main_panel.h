@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <climits>      // INT_MIN: render-shadow sentinels (rend_* members below)
 
 class MainPanel : public NotifyConsumer {
  public:
@@ -142,6 +143,14 @@ class MainPanel : public NotifyConsumer {
   std::string home_eta_;          // computed ETA string (stable storage for the rebuild model)
   std::string move_homed_;        // cached toolhead.homed_axes for the Move position readout
   double move_pos_[3] = {0, 0, 0};// cached toolhead X/Y/Z (survive Moonraker deltas)
+  // Per-tick render shadows: consume() fires on every Moonraker delta, so the
+  // cockpit/temp/fan labels were re-set + re-aligned several times a second even
+  // when unchanged -- wasted redraws competing with the 60fps anims on this
+  // software-rendered SoC. Repaint only when the value actually moves.
+  int rend_nozzle_ = INT_MIN, rend_nozzle_set_ = INT_MIN;
+  int rend_bed_ = INT_MIN, rend_bed_set_ = INT_MIN;
+  int rend_fan_[5] = { INT_MIN, INT_MIN, INT_MIN, INT_MIN, INT_MIN };
+  const void *rend_led_img_ = nullptr;
   // ---- Pono native sub-screens ----
   lv_obj_t *move_scr_ = nullptr, *fil_scr_ = nullptr, *temp_scr_ = nullptr;
   lv_obj_t *fan_scr_ = nullptr, *files_scr_ = nullptr, *tune_scr_ = nullptr;

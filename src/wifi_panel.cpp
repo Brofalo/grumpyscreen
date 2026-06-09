@@ -358,6 +358,7 @@ void WifiPanel::handle_wpa_event(const std::string &event) {
       lv_obj_clear_flag(wifi_table, LV_OBJ_FLAG_HIDDEN);
       lv_obj_add_flag(spinner, LV_OBJ_FLAG_HIDDEN);
     } else {
+      std::lock_guard<std::mutex> lock(lv_lock);  // wpa thread: lock like every sibling branch before touching the label
       lv_label_set_text(wifi_label, "");
     }
   } else if (event.find("CTRL-EVENT-SSID-TEMP-DISABLED") != std::string::npos ||

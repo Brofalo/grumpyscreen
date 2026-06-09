@@ -174,7 +174,10 @@ void MainPanel::consume(json &j) {
     }
   }
 
-  led_btn.set_image(led_panel.get_main_button_image());
+  // Legacy tabview LED button (sits behind the cockpit). Was re-set every ws
+  // tick; skip the imgbtn redraw unless the icon actually changed.
+  { const void *li = led_panel.get_main_button_image();
+    if (li != rend_led_img_) { led_btn.set_image(li); rend_led_img_ = li; } }
 
   // --- Pono cockpit: cache live values, rebuild on the idle<->printing flip
   // (build_home is sim-verified for both states), update in place otherwise. ---
@@ -230,44 +233,52 @@ void MainPanel::consume(json &j) {
       rebuild_home();                 // swap to the matching layout (Ready / printing / paused)
     } else {
       // temps update in both states: big number + heat color, target "/ N" or "off"
-      if (home_h.nozzle) {
-        lv_label_set_text(home_h.nozzle, fmt::format("{}", home_nozzle_).c_str());
-        lv_obj_set_style_text_color(home_h.nozzle,
-          home_nozzle_ >= 240 ? pono::color_state_error :
-          home_nozzle_ >= 45  ? pono::color_state_warning : pono::color_text_primary, 0);
-      }
-      if (home_h.nozzle_set) {
-        lv_label_set_text(home_h.nozzle_set,
-          home_nozzle_set_ > 0 ? fmt::format("/ {}", home_nozzle_set_).c_str() : "off");
-        lv_obj_align(home_h.nozzle_set, LV_ALIGN_RIGHT_MID, -14, 0);
-      }
-      if (home_h.bed) {
-        lv_label_set_text(home_h.bed, fmt::format("{}", home_bed_).c_str());
-        lv_obj_set_style_text_color(home_h.bed,
-          home_bed_ >= 100 ? pono::color_state_error :
-          home_bed_ >= 45  ? pono::color_state_warning : pono::color_text_primary, 0);
-      }
-      if (home_h.bed_set) {
-        lv_label_set_text(home_h.bed_set,
-          home_bed_set_ > 0 ? fmt::format("/ {}", home_bed_set_).c_str() : "off");
-        lv_obj_align(home_h.bed_set, LV_ALIGN_RIGHT_MID, -14, 0);
-      }
-      // mirror live temps onto the Temperature sub-screen (current + target);
-      // re-align after set_text so the centered values stay centered as they grow
-      auto set_temp_lbl = [](lv_obj_t *o, const std::string &txt, lv_coord_t dy) {
-        if (!o) return;
-        lv_label_set_text(o, txt.c_str());
-        lv_obj_align(o, LV_ALIGN_TOP_MID, 0, dy);
-      };
-      set_temp_lbl(temp_h_.nz_cur, fmt::format("{}", home_nozzle_), 28);
-      set_temp_lbl(temp_h_.nz_tgt, home_nozzle_set_ > 0 ? fmt::format("set {}", home_nozzle_set_) : std::string("off"), 76);
-      set_temp_lbl(temp_h_.bd_cur, fmt::format("{}", home_bed_), 28);
-      set_temp_lbl(temp_h_.bd_tgt, home_bed_set_ > 0 ? fmt::format("set {}", home_bed_set_) : std::string("off"), 76);
-      // mirror nozzle onto the Filament screen banner (was a static "-- / --")
-      if (fil_h_.temp) {
-        lv_label_set_text(fil_h_.temp, fmt::format("{} / {}", home_nozzle_,
-          home_nozzle_set_ > 0 ? std::to_string(home_nozzle_set_) : std::string("off")).c_str());
-        lv_obj_align(fil_h_.temp, LV_ALIGN_RIGHT_MID, -14, 0);
+      // Repaint temps only when a value actually changed (see render shadows):
+      // consume() runs every ws tick, so the unconditional set_text + re-align
+      // here was thrashing redraws on the main screen with identical values.
+      if (home_nozzle_ != rend_nozzle_ || home_nozzle_set_ != rend_nozzle_set_ ||
+          home_bed_ != rend_bed_ || home_bed_set_ != rend_bed_set_) {
+        if (home_h.nozzle) {
+          lv_label_set_text(home_h.nozzle, fmt::format("{}", home_nozzle_).c_str());
+          lv_obj_set_style_text_color(home_h.nozzle,
+            home_nozzle_ >= 240 ? pono::color_state_error :
+            home_nozzle_ >= 45  ? pono::color_state_warning : pono::color_text_primary, 0);
+        }
+        if (home_h.nozzle_set) {
+          lv_label_set_text(home_h.nozzle_set,
+            home_nozzle_set_ > 0 ? fmt::format("/ {}", home_nozzle_set_).c_str() : "off");
+          lv_obj_align(home_h.nozzle_set, LV_ALIGN_RIGHT_MID, -14, 0);
+        }
+        if (home_h.bed) {
+          lv_label_set_text(home_h.bed, fmt::format("{}", home_bed_).c_str());
+          lv_obj_set_style_text_color(home_h.bed,
+            home_bed_ >= 100 ? pono::color_state_error :
+            home_bed_ >= 45  ? pono::color_state_warning : pono::color_text_primary, 0);
+        }
+        if (home_h.bed_set) {
+          lv_label_set_text(home_h.bed_set,
+            home_bed_set_ > 0 ? fmt::format("/ {}", home_bed_set_).c_str() : "off");
+          lv_obj_align(home_h.bed_set, LV_ALIGN_RIGHT_MID, -14, 0);
+        }
+        // mirror live temps onto the Temperature sub-screen (current + target);
+        // re-align after set_text so the centered values stay centered as they grow
+        auto set_temp_lbl = [](lv_obj_t *o, const std::string &txt, lv_coord_t dy) {
+          if (!o) return;
+          lv_label_set_text(o, txt.c_str());
+          lv_obj_align(o, LV_ALIGN_TOP_MID, 0, dy);
+        };
+        set_temp_lbl(temp_h_.nz_cur, fmt::format("{}", home_nozzle_), 28);
+        set_temp_lbl(temp_h_.nz_tgt, home_nozzle_set_ > 0 ? fmt::format("set {}", home_nozzle_set_) : std::string("off"), 76);
+        set_temp_lbl(temp_h_.bd_cur, fmt::format("{}", home_bed_), 28);
+        set_temp_lbl(temp_h_.bd_tgt, home_bed_set_ > 0 ? fmt::format("set {}", home_bed_set_) : std::string("off"), 76);
+        // mirror nozzle onto the Filament screen banner (was a static "-- / --")
+        if (fil_h_.temp) {
+          lv_label_set_text(fil_h_.temp, fmt::format("{} / {}", home_nozzle_,
+            home_nozzle_set_ > 0 ? std::to_string(home_nozzle_set_) : std::string("off")).c_str());
+          lv_obj_align(fil_h_.temp, LV_ALIGN_RIGHT_MID, -14, 0);
+        }
+        rend_nozzle_ = home_nozzle_; rend_nozzle_set_ = home_nozzle_set_;
+        rend_bed_ = home_bed_; rend_bed_set_ = home_bed_set_;
       }
       // live fan speeds onto the Fans screen (5 fans; auto fans update the % only)
       {
@@ -282,6 +293,8 @@ void MainPanel::consume(json &j) {
           auto fv = V(fp[i]);
           if (fv.is_null()) continue;
           int fpct = (int)(fv.template get<double>() * 100.0 + 0.5);
+          if (fpct == rend_fan_[i]) continue;   // unchanged -> no repaint this tick
+          rend_fan_[i] = fpct;
           if (fan_h_.val[i])    lv_label_set_text(fan_h_.val[i], fmt::format("{}%", fpct).c_str());
           // don't fight a finger mid-drag: skip the programmatic set while the slider is held
           if (fan_h_.slider[i] && !lv_obj_has_state(fan_h_.slider[i], LV_STATE_PRESSED))
@@ -449,6 +462,7 @@ void MainPanel::reset_overlay_state() {
   pono::omega_status_hide();  // a link drop mid-OMEGA-print must not strand the banner
   omega_banner_ = false;
   omega_banner_text_.clear();
+  prompt_panel.reset();       // a prompt up at link-loss never gets prompt_end -> showing_ would stay true and suppress the cal overlay all session
   busy_ = false;
 }
 
@@ -885,6 +899,9 @@ void MainPanel::rebuild_home() {
   pono::build_home(home_scr, m, &home_h);  // repopulates home_h with fresh handles
   attach_home_taps();
   home_pulsing_ = home_printing_ && !home_paused_;  // build_home pulses only while actively printing
+  // fresh label handles -> force the next consume() to repaint temps/fans into them
+  rend_nozzle_ = rend_nozzle_set_ = rend_bed_ = rend_bed_set_ = INT_MIN;
+  for (int i = 0; i < 5; i++) rend_fan_[i] = INT_MIN;
 }
 
 void MainPanel::handle_homing_cb(lv_event_t *event) {

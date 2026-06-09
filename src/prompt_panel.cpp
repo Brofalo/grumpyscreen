@@ -155,6 +155,16 @@ void PromptPanel::background() {
   lv_obj_move_background(prompt_cont);
 }
 
+// A prompt that was up when the link dropped never receives prompt_end, so
+// showing_ would stay true and consume()'s gate (is_showing()) would suppress
+// the calibration overlay for the rest of the session. Force the dialog down,
+// clear the flag, and drop stale header text. Caller holds lv_lock.
+void PromptPanel::reset() {
+  background();
+  showing_ = false;
+  lv_label_set_text(header, "");
+}
+
 void PromptPanel::handle_callback(lv_event_t *event) {
   lv_obj_t *btn = lv_event_get_current_target(event);
 
@@ -377,6 +387,7 @@ void PromptPanel::handle_macro_response(json &j) {
         LOG_DEBUG("PROMPT_END");
         background();
         showing_ = false;
+        lv_label_set_text(header, "");  // drop header so a later prompt_show without prompt_begin can't flash stale text
 
         // remove buttons
         lv_obj_clean(footer_cont);
