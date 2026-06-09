@@ -39,6 +39,7 @@ class MainPanel : public NotifyConsumer {
   
   void create_panel();
   void show_home();                      // Pono: bring the native cockpit to front (on connect)
+  void reset_overlay_state();            // Pono: clear busy/cal overlay tracking on link loss (InitPanel::disconnected)
   static void _home_tap(lv_event_t *e);  // Pono: cockpit tile -> existing control panels
   void create_sensors(json &temp_sensors);
   void create_fans(json &temp_fans);
@@ -98,6 +99,7 @@ class MainPanel : public NotifyConsumer {
   void create_pono_screens();             // build Move/Filament/Temps/Fans/Files/Tune into hidden overlays
   void show_pono(lv_obj_t *scr);          // hide cockpit + others, reveal scr
   void back_to_home();                    // hide all sub-screens, show the cockpit
+  void hide_busy_overlay();               // Pono: drop the shared busy/cal overlay + clear cal_overlay_ (so consume() can re-show cal after a manual action)
   void populate_system();                 // fill the System screen (version/ip/uptime)
   void confirm(const char *msg, std::function<void()> action);  // modal confirm before destructive actions
   static void _confirm_tap(lv_event_t *e);

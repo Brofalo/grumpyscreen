@@ -163,7 +163,7 @@ void MainPanel::consume(json &j) {
     }
   }
 
-  json &pstat_state = j["/params/0/print_stats/state"_json_pointer];
+  json pstat_state = j.value("/params/0/print_stats/state"_json_pointer, json());  // value(): read without INSERTing a null node on the hot path (non-const operator[] mutates the delta every time this key is absent, i.e. most deltas)
   if (!pstat_state.is_null()) {
     if (pstat_state.template get<std::string>() != "printing") {
       homing_btn.enable();
@@ -283,7 +283,9 @@ void MainPanel::consume(json &j) {
           if (fv.is_null()) continue;
           int fpct = (int)(fv.template get<double>() * 100.0 + 0.5);
           if (fan_h_.val[i])    lv_label_set_text(fan_h_.val[i], fmt::format("{}%", fpct).c_str());
-          if (fan_h_.slider[i]) lv_slider_set_value(fan_h_.slider[i], fpct, LV_ANIM_OFF);
+          // don't fight a finger mid-drag: skip the programmatic set while the slider is held
+          if (fan_h_.slider[i] && !lv_obj_has_state(fan_h_.slider[i], LV_STATE_PRESSED))
+            lv_slider_set_value(fan_h_.slider[i], fpct, LV_ANIM_OFF);
         }
       }
       { auto bm = V("/params/0/bed_mesh"); if (!bm.is_null()) render_bed_mesh(bm); }  // heatmap on mesh change
@@ -405,6 +407,26 @@ void MainPanel::show_home() {
   if (!home_scr) return;
   lv_obj_clear_flag(home_scr, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(home_scr);
+}
+
+// The per-action blocking overlay (home/load/unload) and the cal-progress
+// overlay drive the SAME g_busy singleton. When an action's gcode completes it
+// must clear cal_overlay_ too, or consume()'s redundant-redraw guard would
+// never re-show the cal overlay and cal progress goes invisible for the rest of
+// the run. Caller holds lv_lock.
+void MainPanel::hide_busy_overlay() {
+  pono::busy_hide();
+  cal_overlay_ = false;
+  cal_overlay_text_.clear();
+}
+
+// Reset overlay tracking on a link loss. InitPanel::disconnected() (ws thread,
+// holding lv_lock) calls this so a Klipper restart / network flap mid-cal can't
+// strand the overlay: busy_ is recomputed from the next idle_timeout delta and
+// the cal overlay re-shows on reconnect if the cal is still running.
+void MainPanel::reset_overlay_state() {
+  hide_busy_overlay();
+  busy_ = false;
 }
 
 // Cockpit tile taps route to the existing (proven) control panels, which
@@ -612,8 +634,8 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == mv.yminus) { s->ws.gcode_script(fmt::format("G91\nG1 Y-{} F6000\nG90", st)); return; }
   if (t == mv.zplus)  { s->ws.gcode_script(fmt::format("G91\nG1 Z{} F600\nG90", st)); return; }
   if (t == mv.zminus) { s->ws.gcode_script(fmt::format("G91\nG1 Z-{} F600\nG90", st)); return; }
-  if (t == mv.home_xy)    { pono::busy_show("Homing X / Y"); s->ws.gcode_script("G28 X Y", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); pono::busy_hide(); }); return; }
-  if (t == mv.home_all)   { pono::busy_show("Homing all axes"); s->ws.gcode_script("G28", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); pono::busy_hide(); }); return; }
+  if (t == mv.home_xy)    { pono::busy_show("Homing X / Y"); s->ws.gcode_script("G28 X Y", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
+  if (t == mv.home_all)   { pono::busy_show("Homing all axes"); s->ws.gcode_script("G28", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
   if (t == mv.motors_off) { s->ws.gcode_script("M84"); return; }
   for (int i = 0; i < 4; i++) if (t == mv.step[i]) {
     static const double vals[4] = {0.1, 1.0, 10.0, 100.0};
@@ -628,8 +650,8 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     return;
   }
   // Filament
-  if (t == fl.load)    { pono::busy_show("Loading filament"); s->ws.gcode_script("LOAD_FILAMENT", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); pono::busy_hide(); }); return; }
-  if (t == fl.unload)  { pono::busy_show("Unloading filament"); s->ws.gcode_script("UNLOAD_FILAMENT", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); pono::busy_hide(); }); return; }
+  if (t == fl.load)    { pono::busy_show("Loading filament"); s->ws.gcode_script("LOAD_FILAMENT", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
+  if (t == fl.unload)  { pono::busy_show("Unloading filament"); s->ws.gcode_script("UNLOAD_FILAMENT", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
   if (t == fl.extrude) { s->ws.gcode_script("M83\nG1 E25 F300"); return; }
   if (t == fl.retract) { s->ws.gcode_script("M83\nG1 E-25 F1800"); return; }
   if (t == fl.preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=220"); return; }
@@ -929,13 +951,13 @@ void MainPanel::create_sensors(json &temp_sensors) {
   sensors.clear();
   for (auto &sensor : temp_sensors.items()) {
     std::string key = sensor.key();
-    bool controllable = sensor.value()["controllable"].template get<bool>();
+    bool controllable = sensor.value().value("controllable", false);  // absent -> false, never throw out of the ws connect path
 
     // Temp-sensor accent color path. String-keyed presets map to fixed Pono
     // tokens; numeric int config falls through to color_for_palette() with
     // NONE sentinel + out-of-range safe default in the getter.
     lv_color_t color_code = pono::color_state_warning;  // default
-    if (!sensor.value()["color"].is_number()) {
+    if (sensor.value().value("color", json()).is_string()) {
       std::string color = sensor.value()["color"].template get<std::string>();
       if (color == "red") {
 	      color_code = pono::color_state_error;
@@ -944,11 +966,11 @@ void MainPanel::create_sensors(json &temp_sensors) {
       } else if (color == "blue") {
 	      color_code = pono::color_accent_primary;
       }
-    } else {
-      color_code = pono::color_for_palette((lv_palette_t)sensor.value()["color"].template get<int>());
-    }
+    } else if (sensor.value().value("color", json()).is_number()) {
+      color_code = pono::color_for_palette((lv_palette_t)sensor.value().value("color", json()).template get<int>());
+    }  // absent/unexpected color type -> keep the default (no throw)
 
-    std::string display_name = sensor.value()["display_name"].template get<std::string>();
+    std::string display_name = sensor.value().value("display_name", key);  // absent -> key, never throw
 
     const void* sensor_img = &heater;
     if (key == "extruder") {

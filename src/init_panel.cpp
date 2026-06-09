@@ -151,6 +151,7 @@ void InitPanel::connected(KWebSocketClient &ws) {
     if (!objs.is_null()) {
       json sub_objs;
       for (auto &obj : objs) {
+        if (!obj.is_string()) continue;  // skip a non-string entry rather than throw out of the connect callback
         std::string obj_name = obj.template get<std::string>();
         if (obj_name.rfind("gcode_macro ", 0 ) != 0) {
           sub_objs[obj_name] = nullptr;
@@ -183,10 +184,11 @@ void InitPanel::disconnected(KWebSocketClient &ws) {
   // disconnected() runs on the websocket thread; every LVGL write here must hold
   // lv_lock against the render loop (guppyscreen.cpp loop).
   pono::boot_set_progress(&boot_, 4, "Waiting for Klipper to start...");
-  // A blocking-action overlay (homing / filament) waits on a gcode RPC response
-  // that will never arrive now the link is down. Clear it so it can't strand on
-  // the top layer over the reconnected dashboard.
-  pono::busy_hide();
+  // A blocking-action or calibration overlay waits on a gcode RPC / display
+  // update that will never arrive now the link is down. Reset all overlay
+  // tracking so it can't strand on the top layer, and so the cal overlay
+  // re-shows after reconnect if the cal is still running.
+  main_panel.reset_overlay_state();
   lv_obj_clear_flag(cont, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(cont);
   if (joke_timer_) lv_timer_resume(joke_timer_);   // back to waiting: rotate jokes again

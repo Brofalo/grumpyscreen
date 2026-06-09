@@ -281,6 +281,7 @@ void PromptPanel::handle_macro_response(json &j) {
         int index_label = command.find("button", 0) + strlen("button");
         while (index_label < (int)command.size() && command[index_label] == ' ') index_label++;  // skip the space after "button" so the parsed label has no leading space
         int index_first = command.find("|", index_label);
+        if (index_first < 0) { LOG_DEBUG("malformed prompt_button, no '|': {}", command); return; }  // no delimiter: skip rather than slice/substr on npos(-1)
         int index_second = command.find("|", index_first + 1);
         LOG_DEBUG("indexes: {} {} {}", index_label, index_first, index_second);
         std::string prompt_footer_button = command.substr(index_label, index_first - index_label);
