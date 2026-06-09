@@ -719,7 +719,29 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // Tune
   if (t == tu.standard) { s->ws.gcode_script("PONO_CAL_STANDARD"); return; }
   if (t == tu.omega)    { s->ws.gcode_script("PONO_CAL_OMEGA"); return; }
-  for (int i = 0; i < 5; i++) if (t == tu.cals[i]) { s->ws.gcode_script("PONO_CAL_STANDARD"); return; }  // individual cals -> guided standard (placeholder)
+  // Individual calibrations (tiles: Bed Mesh, Pressure Adv, Flow, Input Shaper,
+  // Z-Offset). Mesh + shaper are real one-shot machine cals: run the proven
+  // CALIBRATE_ALL fragments inline, reusing the firmware's GUI safety net
+  // (_SHAPER_CAL_GUI_RESTORE) + save prompt (_SAVE_CONFIG_PROMPT). Pressure
+  // advance, flow and z-offset have no standalone machine cal on this load-cell
+  // printer (PA/flow are vision-graded by OMEGA; z-offset rides the load-cell
+  // probe), so those tiles open the live Expert Tune surface that adjusts those
+  // exact values -- a real destination, replacing the old placeholder where all
+  // five tiles silently ran the full standard cal.
+  if (t == tu.cals[0]) {  // Bed Mesh
+    s->confirm("Calibrate bed mesh? Heats the bed to 60C and probes the surface.", [s]{
+      s->ws.gcode_script("SET_DISPLAY_TEXT MSG=\"Calibrating Bed Mesh\"\nG28\nG90\nG1 X128 Y128 F6000\nBED_MESH_CALIBRATE_WITH_WIPE BED_TEMP=60\n_SAVE_CONFIG_PROMPT"); });
+    return;
+  }
+  if (t == tu.cals[3]) {  // Input Shaper
+    s->confirm("Calibrate input shaper? The screen pauses while it measures resonance.", [s]{
+      s->ws.gcode_script("SET_DISPLAY_TEXT MSG=\"Calibrating Input Shaper - screen pauses briefly\"\nG4 P1500\nUPDATE_DELAYED_GCODE ID=_SHAPER_CAL_GUI_RESTORE DURATION=180\nRUN_SHELL_COMMAND CMD=CAMERA_STOP\nRUN_SHELL_COMMAND CMD=GUI_STOP\nG28\nM400\nSHAPER_CALIBRATE AXIS=X\nG4 P1000\nSHAPER_CALIBRATE AXIS=Y\nG4 P1000\nUPDATE_DELAYED_GCODE ID=_SHAPER_CAL_GUI_RESTORE DURATION=0\nRUN_SHELL_COMMAND CMD=CAMERA_START\nRUN_SHELL_COMMAND CMD=GUI_START\n_SAVE_CONFIG_PROMPT"); });
+    return;
+  }
+  if (t == tu.cals[1] || t == tu.cals[2] || t == tu.cals[4]) {  // Pressure Adv / Flow / Z-Offset -> live Expert Tune
+    s->show_pono(s->settings_scr_);
+    return;
+  }
   // More menu rows
   if (t == s->more_h_.wifi)    { s->setting_panel.show_wifi(); return; }       // reuse the wpa scan/connect panel
   if (t == s->more_h_.expert)  { s->show_pono(s->settings_scr_); return; }     // Expert Tune surface
