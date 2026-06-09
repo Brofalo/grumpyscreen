@@ -131,6 +131,8 @@ class MainPanel : public NotifyConsumer {
   std::string cal_msg_;           // display_status.message (cal step text via SET_DISPLAY_TEXT)
   std::string cal_overlay_text_;  // text currently on the cal overlay (skip redundant redraws)
   bool cal_overlay_ = false;      // is the cal progress overlay currently shown
+  bool omega_banner_ = false;     // is the OMEGA print banner currently shown (Phase B/C prints)
+  std::string omega_banner_text_; // text currently on the OMEGA banner (skip redundant redraws)
   double home_progress_ = 0.0;    // last-seen virtual_sdcard progress (survives Moonraker deltas)
   double home_duration_ = 0.0;    // last-seen print_stats.print_duration (survives Moonraker deltas)
   int home_nozzle_ = 0, home_nozzle_set_ = 0;   // cached temps (survive deltas; feed the rebuild model)

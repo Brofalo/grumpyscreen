@@ -55,6 +55,39 @@ void busy_hide() {
   lv_obj_add_flag(g_busy, LV_OBJ_FLAG_HIDDEN);
 }
 
+namespace {
+// Singleton OMEGA status banner, lazily built on lv_layer_top.
+lv_obj_t *g_omega = nullptr;
+lv_obj_t *g_omega_label = nullptr;
+}  // namespace
+
+void omega_status_show(const char *text) {
+  if (g_omega == nullptr) {
+    g_omega = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(g_omega);
+    lv_obj_set_size(g_omega, LV_PCT(100), 30);
+    lv_obj_set_pos(g_omega, 0, 0);  // top strip over the wordmark row
+    lv_obj_set_style_bg_color(g_omega, color_state_warning, 0);  // OMEGA amber
+    lv_obj_set_style_bg_opa(g_omega, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(g_omega, LV_OBJ_FLAG_SCROLLABLE);
+    g_omega_label = lv_label_create(g_omega);
+    lv_obj_set_style_text_color(g_omega_label, color_surface_base, 0);  // dark on amber
+    lv_obj_set_style_text_font(g_omega_label, font_body, 0);
+    lv_obj_set_style_text_align(g_omega_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_label_set_long_mode(g_omega_label, LV_LABEL_LONG_DOT);  // ellipsize a long step
+    lv_obj_set_width(g_omega_label, 456);
+    lv_obj_align(g_omega_label, LV_ALIGN_CENTER, 0, 0);
+  }
+  lv_label_set_text(g_omega_label, text != nullptr ? text : "OMEGA");
+  lv_obj_clear_flag(g_omega, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_foreground(g_omega);
+}
+
+void omega_status_hide() {
+  if (g_omega == nullptr) return;
+  lv_obj_add_flag(g_omega, LV_OBJ_FLAG_HIDDEN);
+}
+
 // ---- Boot beach + random wash-up waves ----
 namespace {
 lv_obj_t  *s_beach = nullptr;       // static sand wedge

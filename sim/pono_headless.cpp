@@ -176,6 +176,12 @@ int main(int argc, char **argv) {
     lv_obj_set_style_text_font(sub, pono::font_caption, 0);
     lv_label_set_text(sub, "248 / 250");
     lv_obj_align(sub, LV_ALIGN_CENTER, 0, 72);
+  } else if (screen == "omega") {
+    // OMEGA print banner demo: the thin amber status strip carrying the live
+    // step + running grade over a running print (the Phase B/C case the cal
+    // overlay can't cover because it is gated to !printing).
+    pono::build_home(lv_scr_act(), pono::demo_home_model());
+    pono::omega_status_show("OMEGA 8/29: Bridging -> OK (8 OK)");
   } else if (screen == "busy") {
     // Working overlay demo: scrim + comet spinner + status over the idle home.
     pono::build_home(lv_scr_act(), pono::demo_home_idle_model());

@@ -341,6 +341,26 @@ void MainPanel::consume(json &j) {
       cal_overlay_ = false;
       cal_overlay_text_.clear();
     }
+
+    // --- OMEGA print banner ----------------------------------------------
+    // The cal overlay above is gated to !printing, so during Phase B/C test
+    // prints (print_stats=="printing") every OMEGA cue would vanish. Carry the
+    // live step + running grade on a thin top banner through each print so the
+    // operator watches the run without a laptop on the runner.
+    bool omega_printing = printing && cal_msg_.rfind("Calibrating OMEGA", 0) == 0;
+    if (omega_printing) {
+      std::string otxt = cal_msg_.compare(0, 12, "Calibrating ") == 0
+                           ? cal_msg_.substr(12) : cal_msg_;  // drop the gate prefix
+      if (!omega_banner_ || otxt != omega_banner_text_) {
+        pono::omega_status_show(otxt.c_str());
+        omega_banner_ = true;
+        omega_banner_text_ = otxt;
+      }
+    } else if (omega_banner_) {
+      pono::omega_status_hide();
+      omega_banner_ = false;
+      omega_banner_text_.clear();
+    }
   }
 }
 
@@ -426,6 +446,9 @@ void MainPanel::hide_busy_overlay() {
 // the cal overlay re-shows on reconnect if the cal is still running.
 void MainPanel::reset_overlay_state() {
   hide_busy_overlay();
+  pono::omega_status_hide();  // a link drop mid-OMEGA-print must not strand the banner
+  omega_banner_ = false;
+  omega_banner_text_.clear();
   busy_ = false;
 }
 

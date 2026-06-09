@@ -61,5 +61,14 @@ void beach_teardown();
 void busy_show(const char *text);
 void busy_hide();
 
+// Thin non-modal OMEGA status banner across the top of the cockpit. Unlike the
+// busy overlay this is NOT a scrim: it carries the live OMEGA step + grade
+// while a test print runs, since the cal overlay is gated to !printing and
+// would otherwise hide all OMEGA feedback through Phase B/C. Built once on
+// lv_layer_top, shown only during an OMEGA print. Same lv_lock contract as
+// busy_show: the caller must hold GuppyScreen::lv_lock.
+void omega_status_show(const char *text);
+void omega_status_hide();
+
 }  // namespace pono
 #endif
