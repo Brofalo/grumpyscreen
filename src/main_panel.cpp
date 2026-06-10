@@ -717,8 +717,11 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == tp.bd_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>120?120:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", n)); }); s->numpad.foreground_reset(); return; }
   // Fans (quick)
   // Tune
-  if (t == tu.standard) { s->ws.gcode_script("PONO_CAL_STANDARD"); return; }
-  if (t == tu.omega)    { s->ws.gcode_script("PONO_CAL_OMEGA"); return; }
+  // Fire-and-navigate: a run parks the operator on the cockpit, where the cal
+  // overlay / OMEGA banner carry progress. Staying on this selector reads as
+  // "nothing happened" for the minutes before the runner's first announce.
+  if (t == tu.standard) { s->ws.gcode_script("PONO_CAL_STANDARD"); s->back_to_home(); return; }
+  if (t == tu.omega)    { s->ws.gcode_script("PONO_CAL_OMEGA"); s->back_to_home(); return; }
   // Individual calibrations (tiles: Bed Mesh, Pressure Adv, Flow, Input Shaper,
   // Z-Offset). Mesh + shaper are real one-shot machine cals: run the proven
   // CALIBRATE_ALL fragments inline, reusing the firmware's GUI safety net

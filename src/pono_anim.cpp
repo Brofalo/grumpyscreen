@@ -2,6 +2,7 @@
 // pono_anim.cpp - canned animation helpers. See pono_anim.h.
 #include "pono_anim.h"
 #include "pono_theme.h"
+#include <cstdio>  // sscanf: parse "OMEGA X/N" for the banner progress strip
 
 namespace {
 // Singleton "working" overlay, lazily built on lv_layer_top.
@@ -59,6 +60,7 @@ namespace {
 // Singleton OMEGA status banner, lazily built on lv_layer_top.
 lv_obj_t *g_omega = nullptr;
 lv_obj_t *g_omega_label = nullptr;
+lv_obj_t *g_omega_bar = nullptr;  // campaign progress strip along the banner's bottom edge
 }  // namespace
 
 void omega_status_show(const char *text) {
@@ -76,9 +78,26 @@ void omega_status_show(const char *text) {
     lv_obj_set_style_text_align(g_omega_label, LV_TEXT_ALIGN_CENTER, 0);
     lv_label_set_long_mode(g_omega_label, LV_LABEL_LONG_DOT);  // ellipsize a long step
     lv_obj_set_width(g_omega_label, 456);
-    lv_obj_align(g_omega_label, LV_ALIGN_CENTER, 0, 0);
+    lv_obj_align(g_omega_label, LV_ALIGN_CENTER, 0, -2);  // clear the bar strip below
+    g_omega_bar = lv_obj_create(g_omega);
+    lv_obj_remove_style_all(g_omega_bar);
+    lv_obj_set_style_bg_color(g_omega_bar, color_surface_base, 0);  // dark on amber, like the text
+    lv_obj_set_style_bg_opa(g_omega_bar, LV_OPA_COVER, 0);
+    lv_obj_set_pos(g_omega_bar, 0, 26);
+    lv_obj_set_size(g_omega_bar, 0, 4);
+    lv_obj_add_flag(g_omega_bar, LV_OBJ_FLAG_HIDDEN);
   }
   lv_label_set_text(g_omega_label, text != nullptr ? text : "OMEGA");
+  // "OMEGA X/N: ..." carries the campaign position; render it as a width.
+  int done = 0, total = 0;
+  if (text != nullptr && std::sscanf(text, "OMEGA %d/%d", &done, &total) == 2 && total > 0) {
+    if (done < 0) done = 0;
+    if (done > total) done = total;
+    lv_obj_set_size(g_omega_bar, (lv_coord_t)((480 * done) / total), 4);
+    lv_obj_clear_flag(g_omega_bar, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_obj_add_flag(g_omega_bar, LV_OBJ_FLAG_HIDDEN);  // no count, no fake bar
+  }
   lv_obj_clear_flag(g_omega, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(g_omega);
 }
