@@ -164,6 +164,8 @@ class MainPanel : public NotifyConsumer {
   pono::MoreHandles more_h_;
   pono::SettingsHandles settings_h_;
   double tune_zoff_ = 0.0;         // tracked Z babystep offset (Expert Tune pill)
+  int fil_mat_ = 2;                // selected material segment (0 PLA / 1 PETG / 2 PA-CF)
+  int fil_len_ = 200;              // load purge length in mm (slider, used by Load)
   lv_obj_t *mesh_scr_ = nullptr, *system_scr_ = nullptr, *power_scr_ = nullptr, *lights_scr_ = nullptr;
   pono::MeshHandles mesh_h_;
   pono::SystemHandles system_h_;

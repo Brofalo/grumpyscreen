@@ -46,7 +46,7 @@ HomeModel demo_home_paused_model();
 // the app (init_panel) owns the joke-cycle timer and calls boot_set_progress().
 struct BootHandles {
   lv_obj_t *flag = nullptr;     // static Hawaii flag image
-  lv_obj_t *wordmark = nullptr; // "Pono Print"
+  lv_obj_t *wordmark = nullptr; // retired 2026-06-10 (flag-only boot); stays null
   lv_obj_t *joke = nullptr;     // cycling island joke (app rotates the text)
   lv_obj_t *status = nullptr;   // stage line ("Connecting to Moonraker...")
   lv_obj_t *bar = nullptr;      // legit progress bar (0..100, app-driven)
@@ -112,8 +112,9 @@ void build_move(lv_obj_t *parent, MoveHandles *h = nullptr);
 struct FilamentHandles {
   lv_obj_t *back = nullptr, *temp = nullptr;
   lv_obj_t *load = nullptr, *unload = nullptr, *extrude = nullptr, *retract = nullptr;
-  lv_obj_t *preset[3] = {nullptr, nullptr, nullptr};  // PLA / PETG / PA-CF preheat
-  lv_obj_t *cooldown = nullptr;
+  lv_obj_t *preset[3] = {nullptr, nullptr, nullptr};  // PLA / PETG / PA-CF: material select + preheat
+  lv_obj_t *cooldown = nullptr;                       // "Off" segment: heaters off
+  lv_obj_t *len_slider = nullptr, *len_val = nullptr; // load length slider + live "N mm" readout
 };
 void build_filament(lv_obj_t *parent, FilamentHandles *h = nullptr);
 

@@ -544,6 +544,9 @@ void MainPanel::create_pono_screens() {
   for (int i = 0; i < 3; i++)
     if (fan_h_.slider[i]) lv_obj_add_event_cb(fan_h_.slider[i], &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
   if (tune_h_.speed)      lv_obj_add_event_cb(tune_h_.speed, &MainPanel::_fan_slider_cb, LV_EVENT_RELEASED, this);
+  // Load-length slider: VALUE_CHANGED so the mm readout tracks the finger live.
+  if (fil_h_.len_slider)  lv_obj_add_event_cb(fil_h_.len_slider, &MainPanel::_fan_slider_cb, LV_EVENT_VALUE_CHANGED, this);
+  pono::seg_highlight(fil_h_.preset, 3, fil_mat_);  // PA-CF preselected: this is a PA printer
 
   // Modal confirm dialog on the top layer (above every sub-screen).
   pono::build_confirm(lv_layer_top(), &confirm_h_);
@@ -687,13 +690,22 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     return;
   }
   // Filament
-  if (t == fl.load)    { pono::busy_show("Loading filament"); s->ws.gcode_script("LOAD_FILAMENT", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
-  if (t == fl.unload)  { pono::busy_show("Unloading filament"); s->ws.gcode_script("UNLOAD_FILAMENT", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
+  // Load/Unload run at the selected material's temp; Load also carries the
+  // slider's purge length (LOAD_FILAMENT chunks it under the 120mm/move cap).
+  static const int kFilTemp[3] = {220, 240, 260};  // PLA / PETG / PA-CF
+  if (t == fl.load)    { pono::busy_show(fmt::format("Loading {}mm at {}C", s->fil_len_, kFilTemp[s->fil_mat_]).c_str()); s->ws.gcode_script(fmt::format("LOAD_FILAMENT EXTRUDER_TEMP={} LENGTH={}", kFilTemp[s->fil_mat_], s->fil_len_), [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
+  if (t == fl.unload)  { pono::busy_show(fmt::format("Unloading at {}C", kFilTemp[s->fil_mat_]).c_str()); s->ws.gcode_script(fmt::format("UNLOAD_FILAMENT EXTRUDER_TEMP={}", kFilTemp[s->fil_mat_]), [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
   if (t == fl.extrude) { s->ws.gcode_script("M83\nG1 E25 F300"); return; }
   if (t == fl.retract) { s->ws.gcode_script("M83\nG1 E-25 F1800"); return; }
-  if (t == fl.preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=220"); return; }
-  if (t == fl.preset[1]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=240"); return; }
-  if (t == fl.preset[2]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=260"); return; }
+  // Material segments: select (drives Load/Unload temps) + preheat in one tap.
+  for (int i = 0; i < 3; i++) {
+    if (t == fl.preset[i]) {
+      s->fil_mat_ = i;
+      pono::seg_highlight(fl.preset, 3, i);
+      s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}", kFilTemp[i]));
+      return;
+    }
+  }
   if (t == fl.cooldown)  { s->ws.gcode_script("TURN_OFF_HEATERS"); return; }
   // Temps
   if (t == tp.nz_preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=220"); return; }
@@ -800,6 +812,11 @@ void MainPanel::_fan_slider_cb(lv_event_t *e) {
   auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
   lv_obj_t *t = lv_event_get_target(e);
   int v = lv_slider_get_value(t);
+  if (t == s->fil_h_.len_slider) {             // load length: state + readout only, no gcode
+    s->fil_len_ = v;
+    if (s->fil_h_.len_val) lv_label_set_text(s->fil_h_.len_val, fmt::format("{} mm", v).c_str());
+    return;
+  }
   if (t == s->tune_h_.speed) {                 // Expert Tune feedrate (M220), not a fan
     s->ws.gcode_script(fmt::format("M220 S{}", v));
     if (s->tune_h_.speed_val) lv_label_set_text(s->tune_h_.speed_val, fmt::format("{}%", v).c_str());

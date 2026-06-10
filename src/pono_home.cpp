@@ -615,38 +615,63 @@ void build_filament(lv_obj_t *parent, FilamentHandles *h) {
   lv_obj_t *back = screen_header(parent, "Filament");
   if (h) h->back = back;
 
-  // nozzle temp banner (live)
-  lv_obj_t *tc = card(parent, 12, 52, 456, 40, color_surface_elevated, 10);
-  vgrad(tc, color_surface_elevated, color_surface_raised);
-  hairline(tc, color_text_tertiary, opa_border_subtle);
-  lv_obj_t *tn = lbl(tc, "Nozzle", font_caption, color_text_secondary, 0, 0);
-  lv_obj_align(tn, LV_ALIGN_LEFT_MID, 14, 0);
+  // Live nozzle temp rides the header line (right side) - frees a full row so
+  // material select, load length, and the action pairs all keep 44pt targets.
+  lv_obj_t *tc = lv_obj_create(parent);
+  lv_obj_remove_style_all(tc);
+  lv_obj_set_pos(tc, 250, 6);
+  lv_obj_set_size(tc, 218, 34);
+  lv_obj_clear_flag(tc, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *tn = lbl(tc, "nozzle", font_micro, color_text_tertiary, 0, 0);
+  lv_obj_align(tn, LV_ALIGN_LEFT_MID, 60, 0);
   lv_obj_t *tv = lbl(tc, "-- / --", font_num_small, color_text_primary, 0, 0);
   lv_obj_align(tv, LV_ALIGN_RIGHT_MID, -14, 0);
   if (h) h->temp = tv;
 
+  // Material select (doubles as preheat): the picked tier is the temp Load /
+  // Unload run at. seg_highlight marks the active material; Off cools down.
+  const char *pn[3] = {"PLA", "PETG", "PA-CF"};
+  for (int i = 0; i < 3; i++) {
+    lv_obj_t *pb = tap_btn(parent, 12 + i * 116, 52, 108, 44, pn[i], font_caption, color_text_secondary);
+    if (h) h->preset[i] = pb;
+  }
+  lv_obj_t *cd = tap_btn(parent, 360, 52, 108, 44, "Off", font_caption, color_text_secondary);
+  if (h) h->cooldown = cd;
+
+  // Load length: slider + live mm readout (used by Load; Extrude/Retract keep
+  // their fixed 25mm purge).
+  lbl(parent, "LOAD LENGTH", font_micro, color_text_secondary, 12, 106);
+  lv_obj_t *lval = lbl(parent, "200 mm", font_num_small, color_accent_primary, 0, 0);
+  lv_obj_align(lval, LV_ALIGN_TOP_RIGHT, -14, 104);
+  lv_obj_t *sl = lv_slider_create(parent);
+  lv_obj_set_pos(sl, 12, 128);
+  lv_obj_set_size(sl, 456, 10);
+  lv_slider_set_range(sl, 50, 300);
+  lv_slider_set_value(sl, 200, LV_ANIM_OFF);
+  lv_obj_set_style_bg_color(sl, color_surface_elevated, LV_PART_MAIN);
+  lv_obj_set_style_bg_opa(sl, LV_OPA_COVER, LV_PART_MAIN);
+  lv_obj_set_style_radius(sl, 5, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(sl, 5, LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
+  lv_obj_set_style_shadow_color(sl, color_accent_primary, LV_PART_KNOB);
+  lv_obj_set_style_shadow_width(sl, 12, LV_PART_KNOB);
+  lv_obj_set_style_shadow_opa(sl, LV_OPA_50, LV_PART_KNOB);
+  lv_obj_set_ext_click_area(sl, 16);  // thin track, fat finger
+  if (h) { h->len_slider = sl; h->len_val = lval; }
+
   // load / unload (primary)
-  lv_obj_t *ld = card(parent, 12, 100, 224, 50, color_accent_primary, 10);
+  lv_obj_t *ld = card(parent, 12, 152, 224, 52, color_accent_primary, 10);
   vgrad(ld, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
   lv_obj_t *ldl = lbl(ld, LV_SYMBOL_DOWN "  Load", ms, color_surface_base, 0, 0);
   lv_obj_center(ldl);
-  lv_obj_t *ul = tap_btn(parent, 244, 100, 224, 50, LV_SYMBOL_UP "  Unload", ms, color_text_primary);
+  lv_obj_t *ul = tap_btn(parent, 244, 152, 224, 52, LV_SYMBOL_UP "  Unload", ms, color_text_primary);
   if (h) { h->load = ld; h->unload = ul; }
 
   // extrude / retract
-  lv_obj_t *ex = tap_btn(parent, 12, 158, 224, 44, "Extrude 25", font_body, color_text_primary);
-  lv_obj_t *rt = tap_btn(parent, 244, 158, 224, 44, "Retract 25", font_body, color_text_primary);
+  lv_obj_t *ex = tap_btn(parent, 12, 212, 224, 44, "Extrude 25", font_body, color_text_primary);
+  lv_obj_t *rt = tap_btn(parent, 244, 212, 224, 44, "Retract 25", font_body, color_text_primary);
   if (h) { h->extrude = ex; h->retract = rt; }
-
-  // preheat presets + cooldown
-  lbl(parent, "preheat", font_micro, color_text_tertiary, 12, 210);
-  const char *pn[3] = {"PLA", "PETG", "PA-CF"};
-  for (int i = 0; i < 3; i++) {
-    lv_obj_t *pb = tap_btn(parent, 12 + i * 100, 224, 92, 36, pn[i], font_caption, color_accent_primary);
-    if (h) h->preset[i] = pb;
-  }
-  lv_obj_t *cd = tap_btn(parent, 312, 224, 156, 36, "Cooldown", font_caption, color_text_secondary);
-  if (h) h->cooldown = cd;
 }
 
 // one temperature column (nozzle or bed): current, target, 3 presets, Off.
@@ -1063,27 +1088,25 @@ void build_files(lv_obj_t *parent, FilesHandles *h) {
 }
 
 // ---- boot / connecting screen ----------------------------------------------
-// Static Hawaii flag hero + "Pono Print" wordmark + a cycling island joke + a
-// real progress bar the app drives from the live connect stages. No ocean
-// animation: a static hero cannot jank, and the honest progress is the motion.
+// Static Hawaii flag hero + a cycling island joke + a real progress bar the
+// app drives from the live connect stages. No ocean animation: a static hero
+// cannot jank, and the honest progress is the motion. The "Pono Print"
+// wordmark came off 2026-06-10 (Jack: "I just want the HI flag") - the flag
+// IS the identity mark.
 void build_boot(lv_obj_t *parent, BootHandles *h) {
   lv_obj_set_style_bg_color(parent, color_surface_base, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-  // Hawaii flag hero, framed, top-centre.
+  // Hawaii flag hero, framed, top-centre (dropped a little lower now that it
+  // carries the top half alone).
   const int fw = pono_flag_w, fh = pono_flag_h;          // 192 x 96
-  const int fx = (480 - fw) / 2, fy = 12;
+  const int fx = (480 - fw) / 2, fy = 28;
   lv_obj_t *frame = card(parent, fx - 2, fy - 2, fw + 4, fh + 4, color_surface_elevated, 6);
   hairline(frame, color_text_tertiary, opa_border_medium);
   lv_obj_t *flag = lv_img_create(parent);
   lv_img_set_src(flag, &pono_flag);
   lv_obj_set_pos(flag, fx, fy);
   if (h) h->flag = flag;
-
-  // "Pono Print" wordmark under the flag.
-  lv_obj_t *wm = lbl(parent, "Pono Print", font_h1, color_text_primary, 0, 0);
-  lv_obj_align(wm, LV_ALIGN_TOP_MID, 0, fy + fh + 8);     // ~116
-  if (h) h->wordmark = wm;
 
   // Cycling island joke (the app rotates the text via the joke timer).
   lv_obj_t *joke = lv_label_create(parent);
@@ -1094,7 +1117,7 @@ void build_boot(lv_obj_t *parent, BootHandles *h) {
   lv_obj_set_style_text_color(joke, color_text_secondary, 0);
   lv_obj_set_style_text_font(joke, font_caption, 0);
   lv_label_set_text(joke, "Warming up the trade winds...");
-  lv_obj_align(joke, LV_ALIGN_TOP_MID, 0, 150);
+  lv_obj_align(joke, LV_ALIGN_TOP_MID, 0, 152);
   if (h) h->joke = joke;
 
   // Loading widget: a styled box (brand-cyan edge) holding the comet spinner on
