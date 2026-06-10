@@ -2,7 +2,7 @@
 // pono_anim.cpp - canned animation helpers. See pono_anim.h.
 #include "pono_anim.h"
 #include "pono_theme.h"
-#include <cstdio>  // sscanf: parse "OMEGA X/N" for the banner progress strip
+#include <cstdio>  // sscanf: parse "Full Cal X/N" for the banner progress strip
 
 namespace {
 // Singleton "working" overlay, lazily built on lv_layer_top.
@@ -87,10 +87,10 @@ void omega_status_show(const char *text) {
     lv_obj_set_size(g_omega_bar, 0, 4);
     lv_obj_add_flag(g_omega_bar, LV_OBJ_FLAG_HIDDEN);
   }
-  lv_label_set_text(g_omega_label, text != nullptr ? text : "OMEGA");
-  // "OMEGA X/N: ..." carries the campaign position; render it as a width.
+  lv_label_set_text(g_omega_label, text != nullptr ? text : "Full Cal");
+  // "Full Cal X/N: ..." carries the campaign position; render it as a width.
   int done = 0, total = 0;
-  if (text != nullptr && std::sscanf(text, "OMEGA %d/%d", &done, &total) == 2 && total > 0) {
+  if (text != nullptr && std::sscanf(text, "Full Cal %d/%d", &done, &total) == 2 && total > 0) {
     if (done < 0) done = 0;
     if (done > total) done = total;
     lv_obj_set_size(g_omega_bar, (lv_coord_t)((480 * done) / total), 4);

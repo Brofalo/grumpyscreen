@@ -351,7 +351,7 @@ void build_tune(lv_obj_t *parent, TuneHandles *h) {
   hairline(st, color_text_tertiary, opa_border_medium);
   lv_obj_t *stt = lbl(st, "Standard", font_body, color_text_primary, 0, 0);
   lv_obj_align(stt, LV_ALIGN_TOP_LEFT, 14, 8);
-  lv_obj_t *sts = lbl(st, "full auto-calibrate", font_micro, color_text_secondary, 0, 0);
+  lv_obj_t *sts = lbl(st, "machine auto-cals", font_micro, color_text_secondary, 0, 0);
   lv_obj_align(sts, LV_ALIGN_BOTTOM_LEFT, 14, -8);
   if (h) h->standard = st;
 
@@ -361,9 +361,9 @@ void build_tune(lv_obj_t *parent, TuneHandles *h) {
   lv_obj_set_style_border_width(om, 2, 0);
   lv_obj_set_style_border_opa(om, LV_OPA_COVER, 0);
   soft_shadow(om, color_accent_primary, 10, LV_OPA_40);
-  lv_obj_t *omt = lbl(om, "OMEGA  1000%", font_body, color_accent_primary, 0, 0);
+  lv_obj_t *omt = lbl(om, "Full Calibration", font_body, color_accent_primary, 0, 0);
   lv_obj_align(omt, LV_ALIGN_TOP_LEFT, 14, 8);
-  lv_obj_t *oms = lbl(om, "enhanced suite", font_micro, color_text_secondary, 0, 0);
+  lv_obj_t *oms = lbl(om, "complete tuning suite", font_micro, color_text_secondary, 0, 0);
   lv_obj_align(oms, LV_ALIGN_BOTTOM_LEFT, 14, -8);
   if (h) h->omega = om;
 
