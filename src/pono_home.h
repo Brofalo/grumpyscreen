@@ -77,7 +77,6 @@ struct HomeHandles {
   lv_obj_t *state_dot = nullptr;   // pulsing beat inside the pill (anim gated to printing)
   // tappable launchers (app attaches event cbs)
   lv_obj_t *tile_tune = nullptr;
-  lv_obj_t *tile_omega = nullptr;
   lv_obj_t *tile_nozzle = nullptr;
   lv_obj_t *tile_bed = nullptr;
   lv_obj_t *btn_pausestop = nullptr;  // Pause (printing) / Resume (paused) / Print (idle)

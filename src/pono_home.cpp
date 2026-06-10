@@ -209,8 +209,16 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-  // ===== TOP BAR: wordmark + one state chip + a hairline divider =====
-  lbl(parent, "Pono Print", font_h2, color_text_primary, CX0, TOP_Y + 2);
+  // ===== TOP BAR: the flag mark + one state chip + a hairline divider =====
+  // The Hawaii flag is the identity mark (boot screen set the precedent);
+  // 192x96 asset zoomed to 48x24 around a top-left pivot.
+  {
+    lv_obj_t *fl = lv_img_create(parent);
+    lv_img_set_src(fl, &pono_flag);
+    lv_img_set_pivot(fl, 0, 0);
+    lv_img_set_zoom(fl, 64);
+    lv_obj_set_pos(fl, CX0, TOP_Y + 1);
+  }
   {
     lv_color_t sc = m.paused ? color_state_warning
                   : pr       ? color_accent_secondary : color_text_secondary;
@@ -331,7 +339,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
     out->nozzle = nz_num; out->bed = bd_num;
     out->nozzle_set = nz_set; out->bed_set = bd_set;
     out->tile_nozzle = nzc; out->tile_bed = bdc;
-    out->tile_tune = tn; out->tile_omega = nullptr; out->btn_pausestop = prim; out->btn_cancel = cxl;
+    out->tile_tune = tn; out->btn_pausestop = prim; out->btn_cancel = cxl;
   }
   return arc;
 }

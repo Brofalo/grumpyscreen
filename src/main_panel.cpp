@@ -906,7 +906,7 @@ void MainPanel::populate_files() {
 void MainPanel::attach_home_taps() {
   lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.btn_cancel, home_h.qa[0], home_h.qa[1],
                        home_h.qa[2], home_h.qa[3], home_h.tile_nozzle, home_h.tile_bed,
-                       home_h.tile_tune, home_h.tile_omega, home_h.tile_more };
+                       home_h.tile_tune, home_h.tile_more };
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_home_tap, LV_EVENT_CLICKED, this);
 }
 
