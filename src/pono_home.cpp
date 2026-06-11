@@ -304,6 +304,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
 
   lv_obj_t *arc = nullptr;
   lv_obj_t *pl = nullptr, *lyl = nullptr, *eta_l = nullptr;
+  lv_obj_t *gl_def = nullptr, *gl_pos = nullptr, *gl_cnt = nullptr;
   if (pr) {
     // ---- printing hero: the progress ring ----
     const int ringD = 104, ringX = HERO_X + (HERO_W - ringD) / 2, ringY = MAIN_Y + 14;
@@ -344,20 +345,18 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
     lv_obj_t *word = lbl(hero, "pono", font_serif_display, color_text_primary, 0, 0);
     lv_obj_align(word, LV_ALIGN_TOP_MID, 0, 4);
 
-    lv_obj_t *def = lbl(hero, gloss_text(ix), font_serif_italic, color_text_secondary, 0, 0);
-    lv_obj_set_width(def, HERO_W - 24);
-    lv_label_set_long_mode(def, LV_LABEL_LONG_WRAP);
-    lv_obj_set_style_text_align(def, LV_TEXT_ALIGN_CENTER, 0);
+    gl_def = lbl(hero, gloss_text(ix), font_serif_italic, color_text_secondary, 0, 0);
+    lv_obj_set_width(gl_def, HERO_W - 24);
+    lv_label_set_long_mode(gl_def, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(gl_def, LV_TEXT_ALIGN_CENTER, 0);
     lv_obj_align(word, LV_ALIGN_TOP_MID, 0, 4);
-    lv_obj_align(def, LV_ALIGN_TOP_MID, 0, 60);
+    lv_obj_align(gl_def, LV_ALIGN_TOP_MID, 0, 60);
 
-    lv_obj_t *pos = tag(hero, gloss_pos(ix), color_text_tertiary, 0, 0);
-    lv_obj_align(pos, LV_ALIGN_BOTTOM_LEFT, 12, -8);
+    gl_pos = tag(hero, gloss_pos(ix), color_text_tertiary, 0, 0);
+    lv_obj_align(gl_pos, LV_ALIGN_BOTTOM_LEFT, 12, -8);
     char cb[12]; snprintf(cb, sizeof cb, "%02d / 43", ix + 1);
-    lv_obj_t *cnt = lbl(hero, cb, font_micro, color_accent_secondary, 0, 0);
-    lv_obj_align(cnt, LV_ALIGN_BOTTOM_RIGHT, -12, -8);
-
-    if (out) { out->hero = hero; out->def = def; out->defpos = pos; out->defn = cnt; }
+    gl_cnt = lbl(hero, cb, font_micro, color_accent_secondary, 0, 0);
+    lv_obj_align(gl_cnt, LV_ALIGN_BOTTOM_RIGHT, -12, -8);
   }
 
   // ---- right column: two temp readouts ----
@@ -417,6 +416,15 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
     out->nozzle_set = nz_set; out->bed_set = bd_set;
     out->tile_nozzle = nzc; out->tile_bed = bdc;
     out->tile_tune = tn; out->btn_pausestop = prim; out->btn_cancel = cxl;
+    // The idle-only quartet is assigned HERE, not in the idle branch, so a
+    // printing build nulls it. The caller's HomeHandles persists across
+    // rebuild_home(); leaving these untouched on the idle->printing flip kept
+    // a pointer into the hero lv_obj_clean() had just freed, and
+    // attach_home_taps() then wired a tap callback onto freed memory
+    // (use-after-free, instant segfault on the first print of the Kukui
+    // cockpit). Every handle gets exactly one assignment site: this block.
+    out->hero = pr ? nullptr : hero;
+    out->def = gl_def; out->defpos = gl_pos; out->defn = gl_cnt;
   }
   return arc ? arc : hero;
 }
