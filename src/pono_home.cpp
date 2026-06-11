@@ -1,15 +1,19 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // pono_home.cpp - Pono Print home cockpit builder (see pono_home.h)
 //
-// Pure LVGL v8 + pono_theme tokens, designed natively for the printer's real
-// 480x272 (no 800px scaling baggage). Laid out on ONE grid: 12px outer margin,
-// a top bar, a two-column main zone (hero + readouts/actions), and a bottom
-// nav bar. Every element shares the same margins and gutters - the old
-// hand-placed magic numbers were why it read as scattered.
+// The Night Watch on glass: the printer's screen is the engine-room gauge
+// panel of the night bridge. Warm black room, one amber lamp on the action
+// at hand, phosphor needles for every live number, mono caps for every
+// label, hairline rules, machined corners. The word pono keeps the log
+// while the machine is idle (the dictionary entry is the idle hero).
 //
-// "Crazy good using every trick" - within a 2-core ARMv7 software renderer
-// (no GPU): depth via baked gradients (rendered once, zero idle cost), one
-// hero arc, heat-aware instruments, and exactly one tiny idle pulse. No
+// Pure LVGL v8 + pono_theme tokens, designed natively for the printer's real
+// 480x272. Laid out on ONE grid: 12px outer margin, a top bar, a two-column
+// main zone (hero + readouts/actions), and a bottom nav bar.
+//
+// Within a 2-core ARMv7 software renderer (no GPU): flat fills only (no
+// gradients to composite), one hero arc while printing, heat-aware
+// instruments, and exactly one tiny idle pulse on the live dot. No
 // perpetual full-area animation.
 
 #include "pono_home.h"
@@ -17,13 +21,15 @@
 #include "pono_anim.h"   // Hawaii flag asset + comet spinner for the boot screen
 
 #include <cstdio>
+#include <ctime>
 
 namespace pono {
 
 // ---- small builders -------------------------------------------------------
 
 static lv_obj_t *card(lv_obj_t *p, int x, int y, int w, int h,
-                      lv_color_t bg, int radius, lv_opa_t opa = LV_OPA_COVER) {
+                      lv_color_t bg, int radius = radius_sm,
+                      lv_opa_t opa = LV_OPA_COVER) {
   lv_obj_t *o = lv_obj_create(p);
   lv_obj_remove_style_all(o);
   lv_obj_set_pos(o, x, y);
@@ -45,31 +51,49 @@ static lv_obj_t *lbl(lv_obj_t *p, const char *txt, const lv_font_t *font,
   return l;
 }
 
-// Vertical two-stop gradient fill - cheap depth, rendered once.
-static void vgrad(lv_obj_t *o, lv_color_t top, lv_color_t bottom) {
-  lv_obj_set_style_bg_color(o, top, 0);
-  lv_obj_set_style_bg_grad_color(o, bottom, 0);
-  lv_obj_set_style_bg_grad_dir(o, LV_GRAD_DIR_VER, 0);
-  lv_obj_set_style_bg_opa(o, LV_OPA_COVER, 0);
+// Letterspaced caps tag: the instrument label voice. Author text UPPERCASE.
+static lv_obj_t *tag(lv_obj_t *p, const char *txt, lv_color_t color, int x, int y) {
+  lv_obj_t *l = lbl(p, txt, font_micro, color, x, y);
+  lv_obj_set_style_text_letter_space(l, track_caps, 0);
+  return l;
 }
 
-// Soft colored glow around an object (static unless an anim drives its width).
-static void soft_shadow(lv_obj_t *o, lv_color_t color, int width, lv_opa_t opa) {
-  lv_obj_set_style_shadow_color(o, color, 0);
-  lv_obj_set_style_shadow_width(o, width, 0);
-  lv_obj_set_style_shadow_opa(o, opa, 0);
-  lv_obj_set_style_shadow_spread(o, 0, 0);
+// 1px hairline border: ink over the room at a quiet opacity. The engineering-
+// drawing rule that replaces gradients and glows everywhere.
+static void hairline(lv_obj_t *o, lv_opa_t opa = opa_border_subtle) {
+  lv_obj_set_style_border_color(o, color_text_primary, 0);
+  lv_obj_set_style_border_width(o, 1, 0);
+  lv_obj_set_style_border_opa(o, opa, 0);
 }
 
-// 1px hairline border (subtle card edge definition).
-static void hairline(lv_obj_t *o, lv_color_t color, lv_opa_t opa) {
+// Hairline in a stated color (state pills, alarm outlines).
+static void hairline_c(lv_obj_t *o, lv_color_t color, lv_opa_t opa) {
   lv_obj_set_style_border_color(o, color, 0);
   lv_obj_set_style_border_width(o, 1, 0);
   lv_obj_set_style_border_opa(o, opa, 0);
 }
 
-// Pulse a glow on a (small) object - the one "alive" idle animation.
-static void glow_pulse(lv_obj_t *o, lv_color_t color, int lo, int hi, uint32_t period) {
+// Panel: the standard raised surface with a resting hairline.
+static lv_obj_t *panel(lv_obj_t *p, int x, int y, int w, int h,
+                       lv_opa_t border = opa_border_subtle) {
+  lv_obj_t *o = card(p, x, y, w, h, color_surface_raised);
+  hairline(o, border);
+  return o;
+}
+
+// Solid lamp switch: THE primary action. Dark text on lit amber.
+static lv_obj_t *lamp_btn(lv_obj_t *p, int x, int y, int w, int h,
+                          const char *txt, const lv_font_t *f) {
+  lv_obj_t *b = card(p, x, y, w, h, color_accent_primary);
+  lv_obj_t *l = lbl(b, txt, f, color_surface_base, 0, 0);
+  lv_obj_center(l);
+  return b;
+}
+
+// Phosphor bloom pulse on a small live indicator - the one idle-state
+// animation. Authentic CRT bloom on the instrument's heartbeat; decorative
+// glows elsewhere are banned, this is the documented exception.
+static void bloom_pulse(lv_obj_t *o, lv_color_t color, int lo, int hi, uint32_t period) {
   lv_obj_set_style_shadow_color(o, color, 0);
   lv_obj_set_style_shadow_opa(o, LV_OPA_60, 0);
   lv_obj_set_style_shadow_spread(o, 0, 0);
@@ -95,49 +119,86 @@ void set_state_pulse(lv_obj_t *dot, bool on) {
   if (!dot) return;
   lv_anim_del(dot, nullptr);
   if (on) {
-    glow_pulse(dot, color_accent_secondary, 3, 11, 850);
+    bloom_pulse(dot, color_accent_primary, 3, 11, 850);
   } else {
     lv_obj_set_style_shadow_width(dot, 3, 0);  // settle to a calm static dot
   }
 }
 
-// Heat-aware temperature readout: "Nozzle        248 / 250" (or "off" when idle).
+// Heat-aware temperature readout: "NOZZLE   248 / 250" (or "off" when idle).
 // Fixed columns so a digit-count change on live update never shifts the layout.
 static void temp_card(lv_obj_t *p, int x, int y, int w, int h, const char *name,
                       int val, int target,
                       lv_obj_t **o_card, lv_obj_t **o_val, lv_obj_t **o_set) {
-  lv_obj_t *c = card(p, x, y, w, h, color_surface_elevated, 12);
-  vgrad(c, color_surface_elevated, color_surface_raised);
-  hairline(c, color_text_tertiary, opa_border_subtle);
-  lv_obj_t *nm = lbl(c, name, font_caption, color_text_secondary, 0, 0);
+  lv_obj_t *c = panel(p, x, y, w, h);
+  lv_obj_t *nm = tag(c, name, color_text_secondary, 0, 0);
   lv_obj_align(nm, LV_ALIGN_LEFT_MID, 14, 0);
-  lv_color_t vc = (val >= 240) ? color_state_error
-                : (val >= 45)  ? color_state_warning
-                               : color_text_primary;
+  // Live reading: phosphor when cool, lamp while heat is at work, alarm only
+  // past the hotend's 280C rating (an actual overheat, not normal PA temps).
+  lv_color_t vc = (val >= 280) ? color_state_error
+                : (val >= 45)  ? color_accent_primary
+                               : color_accent_secondary;
   char vb[12]; snprintf(vb, sizeof vb, "%d", val);
   lv_obj_t *v = lbl(c, vb, font_num_medium, vc, 0, 0);
   lv_obj_align(v, LV_ALIGN_LEFT_MID, 118, 0);
   char sb[16];
   if (target > 0) snprintf(sb, sizeof sb, "/ %d", target);
   else            snprintf(sb, sizeof sb, "off");
-  lv_obj_t *s = lbl(c, sb, font_caption, color_text_secondary, 0, 0);
+  lv_obj_t *s = lbl(c, sb, font_caption, color_text_tertiary, 0, 0);
   lv_obj_align(s, LV_ALIGN_RIGHT_MID, -14, 0);
   if (o_card) *o_card = c;
   if (o_val)  *o_val = v;
   if (o_set)  *o_set = s;
 }
 
-// Bottom-bar navigation tile: centered icon over a caption.
+// Bottom-bar navigation tile: centered icon over a caps caption.
 static lv_obj_t *nav_tile(lv_obj_t *p, int x, int y, int w, int h,
                           const char *icon, const char *name, const lv_font_t *ms) {
-  lv_obj_t *t = card(p, x, y, w, h, color_surface_elevated, 12);
-  vgrad(t, color_surface_elevated, color_surface_raised);
-  hairline(t, color_text_tertiary, opa_border_subtle);
-  lv_obj_t *ic = lbl(t, icon, ms, color_accent_primary, 0, 0);
+  lv_obj_t *t = panel(p, x, y, w, h);
+  lv_obj_t *ic = lbl(t, icon, ms, color_text_secondary, 0, 0);
   lv_obj_align(ic, LV_ALIGN_TOP_MID, 0, 9);
-  lv_obj_t *nl = lbl(t, name, font_micro, color_text_secondary, 0, 0);
+  lv_obj_t *nl = tag(t, name, color_text_tertiary, 0, 0);
   lv_obj_align(nl, LV_ALIGN_BOTTOM_MID, 0, -7);
   return t;
+}
+
+// ---- the 43 ----------------------------------------------------------------
+// Pukui-Elbert senses 1 and 2 of pono: 35 nvs. glosses then 8 vs. glosses.
+// The canonical list (the deck's PONO array, kept in the same order).
+static const char *GLOSS[43] = {
+  "goodness", "uprightness", "morality", "moral qualities",
+  "correct or proper procedure", "excellence", "well-being", "prosperity",
+  "welfare", "benefit", "behalf", "equity", "sake",
+  "true condition or nature", "duty", "moral", "fitting", "proper",
+  "righteous", "right", "upright", "just", "virtuous", "fair",
+  "beneficial", "successful", "in perfect order", "accurate", "correct",
+  "eased", "relieved", "should", "ought", "must", "necessary",
+  "completely", "properly", "rightly", "well", "exactly", "carefully",
+  "satisfactorily", "much",
+};
+static const int GLOSS_NVS = 35;  // 0..34 nvs., 35..42 vs.
+
+int gloss_count() { return 43; }
+
+int gloss_today_index() {
+  // One meaning a day, same seed as the deck: days-since-epoch modulo 43.
+  long days = (long)(time(nullptr) / 86400);
+  int ix = (int)(days % 43);
+  return ix < 0 ? ix + 43 : ix;
+}
+
+const char *gloss_text(int ix) { return GLOSS[((ix % 43) + 43) % 43]; }
+const char *gloss_pos(int ix)  { return (((ix % 43) + 43) % 43) < GLOSS_NVS ? "nvs." : "vs."; }
+
+void home_set_gloss(HomeHandles *h, int ix) {
+  if (!h) return;
+  ix = ((ix % 43) + 43) % 43;
+  if (h->def)    lv_label_set_text(h->def, GLOSS[ix]);
+  if (h->defpos) lv_label_set_text(h->defpos, gloss_pos(ix));
+  if (h->defn) {
+    char b[12]; snprintf(b, sizeof b, "%02d / 43", ix + 1);
+    lv_label_set_text(h->defn, b);
+  }
 }
 
 // ---- model ----------------------------------------------------------------
@@ -203,13 +264,11 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_pad_all(parent, 0, 0);
 
-  // baked vertical depth wash (rendered once, zero idle cost)
-  lv_obj_set_style_bg_color(parent, lv_color_hex(0x0b1220), 0);
-  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x070b12), 0);
-  lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
+  // the room: flat warm black
+  lv_obj_set_style_bg_color(parent, color_surface_base, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-  // ===== TOP BAR: the flag mark + one state chip + a hairline divider =====
+  // ===== TOP BAR: the flag mark + loaded material + one state chip =====
   // The Hawaii flag is the identity mark (boot screen set the precedent);
   // 192x96 asset zoomed to 48x24 around a top-left pivot.
   {
@@ -219,66 +278,95 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
     lv_img_set_zoom(fl, 64);
     lv_obj_set_pos(fl, CX0, TOP_Y + 1);
   }
+  // Loaded material rides the top bar: a truthful instrument line, present in
+  // both layouts so the hero stays free for the entry / the ring.
+  lv_obj_t *mat = tag(parent, m.material ? m.material : "", color_text_tertiary, 0, 0);
+  lv_obj_align(mat, LV_ALIGN_TOP_MID, 0, TOP_Y + 7);
   {
     lv_color_t sc = m.paused ? color_state_warning
-                  : pr       ? color_accent_secondary : color_text_secondary;
-    lv_obj_t *pill = card(parent, CX1 - 104, TOP_Y, 104, TOP_H - 2, color_surface_elevated, 12);
-    hairline(pill, sc, opa_border_strong);
+                  : pr       ? color_accent_primary : color_accent_secondary;
+    lv_obj_t *pill = card(parent, CX1 - 104, TOP_Y, 104, TOP_H - 2, color_surface_raised);
+    hairline_c(pill, sc, opa_border_strong);
     lv_obj_t *dot = card(pill, 0, 0, 8, 8, sc, 4);
     lv_obj_align(dot, LV_ALIGN_LEFT_MID, 11, 0);
-    lv_obj_t *prl = lbl(pill, m.paused ? "PAUSED" : (pr ? "PRINTING" : "READY"), font_micro, sc, 0, 0);
+    lv_obj_t *prl = tag(pill, m.paused ? "PAUSED" : (pr ? "PRINTING" : "READY"), sc, 0, 0);
     lv_obj_align(prl, LV_ALIGN_LEFT_MID, 25, 0);
-    if (pr && !m.paused) glow_pulse(dot, color_accent_secondary, 3, 11, 850);
+    if (pr && !m.paused) bloom_pulse(dot, sc, 3, 11, 850);
     if (out) { out->state_pill = pill; out->state_dot = dot; }
   }
-  card(parent, CX0, TOP_Y + TOP_H + 1, CX1 - CX0, 1, color_text_tertiary, 0, opa_border_subtle);
+  card(parent, CX0, TOP_Y + TOP_H + 1, CX1 - CX0, 1, color_text_primary, 0, opa_border_subtle);
 
-  // ===== MAIN: left hero (ring) + right column (temps + actions) =====
+  // ===== MAIN: left hero + right column (temps + actions) =====
   const int HERO_W = 176, HERO_X = CX0;
   const int RCOL_X = CX0 + HERO_W + GUT, RCOL_W = CX1 - RCOL_X;  // 198, 270
 
-  // ---- hero card ----
-  lv_obj_t *hero = card(parent, HERO_X, MAIN_Y, HERO_W, MAIN_H, color_surface_raised, 16);
-  vgrad(hero, color_surface_elevated, color_surface_raised);
-  hairline(hero, color_text_tertiary, opa_border_subtle);
+  lv_obj_t *hero = panel(parent, HERO_X, MAIN_Y, HERO_W, MAIN_H);
 
-  const int ringD = 104, ringX = HERO_X + (HERO_W - ringD) / 2, ringY = MAIN_Y + 14;
-  lv_obj_t *arc = lv_arc_create(parent);
-  lv_obj_set_size(arc, ringD, ringD);
-  lv_obj_set_pos(arc, ringX, ringY);
-  lv_arc_set_rotation(arc, 270);
-  lv_arc_set_bg_angles(arc, 0, 360);
-  lv_arc_set_range(arc, 0, 100);
-  lv_arc_set_value(arc, pr ? m.progress_pct : 0);
-  lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
-  lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_set_style_arc_width(arc, 8, LV_PART_MAIN);
-  lv_obj_set_style_arc_width(arc, 8, LV_PART_INDICATOR);
-  lv_obj_set_style_arc_color(arc, color_surface_base, LV_PART_MAIN);
-  lv_obj_set_style_arc_color(arc, color_accent_primary, LV_PART_INDICATOR);
-  lv_obj_set_style_arc_rounded(arc, true, LV_PART_INDICATOR);
+  lv_obj_t *arc = nullptr;
+  lv_obj_t *pl = nullptr, *lyl = nullptr, *eta_l = nullptr;
+  if (pr) {
+    // ---- printing hero: the progress ring ----
+    const int ringD = 104, ringX = HERO_X + (HERO_W - ringD) / 2, ringY = MAIN_Y + 14;
+    arc = lv_arc_create(parent);
+    lv_obj_set_size(arc, ringD, ringD);
+    lv_obj_set_pos(arc, ringX, ringY);
+    lv_arc_set_rotation(arc, 270);
+    lv_arc_set_bg_angles(arc, 0, 360);
+    lv_arc_set_range(arc, 0, 100);
+    lv_arc_set_value(arc, m.progress_pct);
+    lv_obj_remove_style(arc, NULL, LV_PART_KNOB);
+    lv_obj_clear_flag(arc, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_style_arc_width(arc, 8, LV_PART_MAIN);
+    lv_obj_set_style_arc_width(arc, 8, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_color(arc, color_surface_elevated, LV_PART_MAIN);
+    lv_obj_set_style_arc_color(arc, color_accent_primary, LV_PART_INDICATOR);
+    lv_obj_set_style_arc_rounded(arc, false, LV_PART_INDICATOR);
 
-  char pctbuf[8];
-  if (pr) snprintf(pctbuf, sizeof pctbuf, "%d%%", m.progress_pct);
-  lv_obj_t *pl = lbl(parent, pr ? pctbuf : "Ready",
-                     pr ? font_num_large : font_h2, color_text_primary, 0, 0);
-  lv_obj_align_to(pl, arc, LV_ALIGN_CENTER, 0, 0);
+    char pctbuf[8];
+    snprintf(pctbuf, sizeof pctbuf, "%d%%", m.progress_pct);
+    pl = lbl(parent, pctbuf, font_num_large, color_accent_secondary, 0, 0);
+    lv_obj_align_to(pl, arc, LV_ALIGN_CENTER, 0, 0);
 
-  char lybuf[28];
-  if (pr) snprintf(lybuf, sizeof lybuf, "layer %d / %d", m.layer, m.layer_total);
-  lv_obj_t *lyl = lbl(parent, pr ? lybuf : m.material, font_micro, color_text_secondary, 0, 0);
-  lv_obj_align_to(lyl, arc, LV_ALIGN_OUT_BOTTOM_MID, 0, 8);
+    char lybuf[28];
+    snprintf(lybuf, sizeof lybuf, "layer %d / %d", m.layer, m.layer_total);
+    lyl = lbl(parent, lybuf, font_micro, color_text_secondary, 0, 0);
+    lv_obj_align_to(lyl, arc, LV_ALIGN_OUT_BOTTOM_MID, 0, 8);
 
-  lv_obj_t *eta_l = lbl(parent, pr ? m.eta : "", font_caption, color_accent_primary, 0, 0);
-  lv_obj_align_to(eta_l, lyl, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+    eta_l = lbl(parent, m.eta ? m.eta : "", font_caption, color_accent_primary, 0, 0);
+    lv_obj_align_to(eta_l, lyl, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+  } else {
+    // ---- idle hero: the dictionary entry ----
+    // The word keeps the log while the machine is idle. Day-seeded gloss,
+    // tap anywhere on the entry for the next; the counter is the instrument.
+    lv_obj_add_flag(hero, LV_OBJ_FLAG_CLICKABLE);
+    int ix = gloss_today_index();
+
+    lv_obj_t *word = lbl(hero, "pono", font_serif_display, color_text_primary, 0, 0);
+    lv_obj_align(word, LV_ALIGN_TOP_MID, 0, 4);
+
+    lv_obj_t *def = lbl(hero, gloss_text(ix), font_serif_italic, color_text_secondary, 0, 0);
+    lv_obj_set_width(def, HERO_W - 24);
+    lv_label_set_long_mode(def, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_align(def, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(word, LV_ALIGN_TOP_MID, 0, 4);
+    lv_obj_align(def, LV_ALIGN_TOP_MID, 0, 60);
+
+    lv_obj_t *pos = tag(hero, gloss_pos(ix), color_text_tertiary, 0, 0);
+    lv_obj_align(pos, LV_ALIGN_BOTTOM_LEFT, 12, -8);
+    char cb[12]; snprintf(cb, sizeof cb, "%02d / 43", ix + 1);
+    lv_obj_t *cnt = lbl(hero, cb, font_micro, color_accent_secondary, 0, 0);
+    lv_obj_align(cnt, LV_ALIGN_BOTTOM_RIGHT, -12, -8);
+
+    if (out) { out->hero = hero; out->def = def; out->defpos = pos; out->defn = cnt; }
+  }
 
   // ---- right column: two temp readouts ----
   const int tH = 42;
   lv_obj_t *nzc = nullptr, *nz_num = nullptr, *nz_set = nullptr;
   lv_obj_t *bdc = nullptr, *bd_num = nullptr, *bd_set = nullptr;
-  temp_card(parent, RCOL_X, MAIN_Y, RCOL_W, tH, "Nozzle",
+  temp_card(parent, RCOL_X, MAIN_Y, RCOL_W, tH, "NOZZLE",
             m.nozzle, m.nozzle_set, &nzc, &nz_num, &nz_set);
-  temp_card(parent, RCOL_X, MAIN_Y + tH + 8, RCOL_W, tH, "Bed",
+  temp_card(parent, RCOL_X, MAIN_Y + tH + 8, RCOL_W, tH, "BED",
             m.bed, m.bed_set, &bdc, &bd_num, &bd_set);
 
   // ---- action row: printing/paused -> [Pause|Resume] + Cancel + Tune; idle -> Print + Tune ----
@@ -288,43 +376,32 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   int tnx, tnw;
   if (pr) {
     const int pw = 104, cw = 66, g = 6;
-    // primary: Resume (cyan, go) when paused, else Pause (amber, caution)
-    prim = card(parent, RCOL_X, ay, pw, aH, m.paused ? color_accent_primary : color_state_warning, 12);
-    if (m.paused) vgrad(prim, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
-    else          vgrad(prim, lv_color_hex(0xffb84d), lv_color_hex(0xe08600));
-    soft_shadow(prim, m.paused ? color_accent_primary : color_state_warning, 12, LV_OPA_40);
-    lv_obj_t *priml = lbl(prim, m.paused ? (LV_SYMBOL_PLAY "  Resume") : (LV_SYMBOL_PAUSE "  Pause"),
-                          ms, color_surface_base, 0, 0);
-    lv_obj_center(priml);
-    // cancel/abort (red); the app gates it behind a confirm dialog
-    cxl = card(parent, RCOL_X + pw + g, ay, cw, aH, color_state_error, 12);
-    vgrad(cxl, lv_color_hex(0xff5d77), lv_color_hex(0xe11d48));
-    soft_shadow(cxl, color_state_error, 12, LV_OPA_40);
-    lv_obj_center(lbl(cxl, LV_SYMBOL_STOP, ms, color_text_primary, 0, 0));
+    // primary: the lamp marks the action at hand (Resume when paused, Pause otherwise)
+    prim = lamp_btn(parent, RCOL_X, ay, pw, aH,
+                    m.paused ? (LV_SYMBOL_PLAY "  Resume") : (LV_SYMBOL_PAUSE "  Pause"), ms);
+    // cancel/abort: alarm outline (destructive; the app gates it behind confirm)
+    cxl = card(parent, RCOL_X + pw + g, ay, cw, aH, color_surface_raised);
+    hairline_c(cxl, color_state_error, opa_border_strong);
+    lv_obj_center(lbl(cxl, LV_SYMBOL_STOP, ms, color_state_error, 0, 0));
     tnx = RCOL_X + pw + g + cw + g;   // 182
     tnw = CX1 - tnx;                  // 88, to the content right edge
   } else {
     const int primW = 168;
-    prim = card(parent, RCOL_X, ay, primW, aH, color_accent_primary, 12);
-    vgrad(prim, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
-    soft_shadow(prim, color_accent_primary, 12, LV_OPA_40);
-    lv_obj_center(lbl(prim, LV_SYMBOL_PLAY "  Print", ms, color_surface_base, 0, 0));
+    prim = lamp_btn(parent, RCOL_X, ay, primW, aH, LV_SYMBOL_PLAY "  Print", ms);
     tnx = RCOL_X + primW + GUT - 2;
     tnw = RCOL_W - primW - GUT + 2;
   }
 
-  lv_obj_t *tn = card(parent, tnx, ay, tnw, aH, color_surface_elevated, 12);
-  vgrad(tn, color_surface_elevated, color_surface_raised);
-  hairline(tn, color_text_tertiary, opa_border_medium);
-  lv_obj_t *tni = lbl(tn, LV_SYMBOL_SETTINGS, ms, color_accent_primary, 0, 0);
+  lv_obj_t *tn = panel(parent, tnx, ay, tnw, aH, opa_border_medium);
+  lv_obj_t *tni = lbl(tn, LV_SYMBOL_SETTINGS, ms, color_text_secondary, 0, 0);
   lv_obj_align(tni, LV_ALIGN_TOP_MID, 0, 8);
-  lv_obj_t *tnl = lbl(tn, "Tune", font_micro, color_text_secondary, 0, 0);
+  lv_obj_t *tnl = tag(tn, "TUNE", color_text_tertiary, 0, 0);
   lv_obj_align(tnl, LV_ALIGN_BOTTOM_MID, 0, -7);
 
   // ===== BOTTOM NAV BAR: five equal tiles =====
   const char *bi[5] = {LV_SYMBOL_GPS, LV_SYMBOL_DOWNLOAD, LV_SYMBOL_DIRECTORY,
                        LV_SYMBOL_LOOP, LV_SYMBOL_LIST};
-  const char *bn[5] = {"Move", "Filament", "Files", "Fans", "More"};
+  const char *bn[5] = {"MOVE", "FILAMENT", "FILES", "FANS", "MORE"};
   const int tw = 84, tg = 8;
   const int bx0 = CX0 + ((CX1 - CX0) - (5 * tw + 4 * tg)) / 2;  // centered (== 14)
   for (int i = 0; i < 5; i++) {
@@ -335,13 +412,13 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
 
   if (out) {
     out->arc = arc; out->pct = pl; out->layer = lyl;
-    out->job = nullptr; out->material = nullptr; out->eta = eta_l;
+    out->job = nullptr; out->material = mat; out->eta = eta_l;
     out->nozzle = nz_num; out->bed = bd_num;
     out->nozzle_set = nz_set; out->bed_set = bd_set;
     out->tile_nozzle = nzc; out->tile_bed = bdc;
     out->tile_tune = tn; out->btn_pausestop = prim; out->btn_cancel = cxl;
   }
-  return arc;
+  return arc ? arc : hero;
 }
 
 // ---- Tune screen -----------------------------------------------------------
@@ -350,41 +427,34 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
 // dragging repaints only the slider, so it stays buttery on this SoC).
 void build_tune(lv_obj_t *parent, TuneHandles *h) {
   const lv_font_t *ms = &lv_font_montserrat_14;
-  lv_obj_t *back = screen_header(parent, "Tune");
+  lv_obj_t *back = screen_header(parent, "TUNE");
   if (h) h->back = back;
 
   // ---- two tiers ----
-  lv_obj_t *st = card(parent, 12, 54, 224, 50, color_surface_elevated, 12);
-  vgrad(st, color_surface_elevated, color_surface_raised);
-  hairline(st, color_text_tertiary, opa_border_medium);
+  lv_obj_t *st = panel(parent, 12, 54, 224, 50, opa_border_medium);
   lv_obj_t *stt = lbl(st, "Standard", font_body, color_text_primary, 0, 0);
   lv_obj_align(stt, LV_ALIGN_TOP_LEFT, 14, 8);
-  lv_obj_t *sts = lbl(st, "machine auto-cals", font_micro, color_text_secondary, 0, 0);
+  lv_obj_t *sts = tag(st, "MACHINE AUTO-CALS", color_text_tertiary, 0, 0);
   lv_obj_align(sts, LV_ALIGN_BOTTOM_LEFT, 14, -8);
   if (h) h->standard = st;
 
-  lv_obj_t *om = card(parent, 244, 54, 224, 50, color_surface_base, 12);
-  vgrad(om, color_surface_elevated, color_surface_base);
-  lv_obj_set_style_border_color(om, color_accent_primary, 0);
-  lv_obj_set_style_border_width(om, 2, 0);
-  lv_obj_set_style_border_opa(om, LV_OPA_COVER, 0);
-  soft_shadow(om, color_accent_primary, 10, LV_OPA_40);
+  // Full Calibration: the lamp-marked tier (the action this screen exists for).
+  lv_obj_t *om = card(parent, 244, 54, 224, 50, color_surface_raised);
+  hairline_c(om, color_accent_primary, LV_OPA_COVER);
   lv_obj_t *omt = lbl(om, "Full Calibration", font_body, color_accent_primary, 0, 0);
   lv_obj_align(omt, LV_ALIGN_TOP_LEFT, 14, 8);
-  lv_obj_t *oms = lbl(om, "complete tuning suite", font_micro, color_text_secondary, 0, 0);
+  lv_obj_t *oms = tag(om, "COMPLETE TUNING SUITE", color_text_tertiary, 0, 0);
   lv_obj_align(oms, LV_ALIGN_BOTTOM_LEFT, 14, -8);
   if (h) h->omega = om;
 
   // ---- individual calibrations ----
-  lbl(parent, "INDIVIDUAL", font_micro, color_text_secondary, 12, 112);
+  tag(parent, "INDIVIDUAL", color_text_tertiary, 12, 112);
   const char *cals[5] = {"Bed Mesh", "Pressure Adv", "Flow", "Input Shaper", "Z-Offset"};
   for (int i = 0; i < 5; i++) {
     int col = i % 3, row = i / 3;
     int x = 12 + col * 154;
     int y = 128 + row * 44;
-    lv_obj_t *t = card(parent, x, y, 146, 38, color_surface_elevated, 10);
-    vgrad(t, color_surface_elevated, color_surface_raised);
-    hairline(t, color_text_tertiary, opa_border_subtle);
+    lv_obj_t *t = panel(parent, x, y, 146, 38);
     lv_obj_t *nl = lbl(t, cals[i], font_caption, color_text_primary, 0, 0);
     lv_obj_align(nl, LV_ALIGN_LEFT_MID, 12, 0);
     lv_obj_t *ch = lbl(t, LV_SYMBOL_RIGHT, ms, color_text_tertiary, 0, 0);
@@ -393,8 +463,8 @@ void build_tune(lv_obj_t *parent, TuneHandles *h) {
   }
 
   // ---- live speed slider ----
-  lbl(parent, "SPEED", font_micro, color_text_secondary, 12, 224);
-  lv_obj_t *spv = lbl(parent, "100%", font_num_small, color_accent_primary, 0, 0);
+  tag(parent, "SPEED", color_text_tertiary, 12, 224);
+  lv_obj_t *spv = lbl(parent, "100%", font_num_small, color_accent_secondary, 0, 0);
   lv_obj_align(spv, LV_ALIGN_TOP_RIGHT, -14, 222);
   if (h) h->speed_val = spv;
   lv_obj_t *sl = lv_slider_create(parent);
@@ -404,13 +474,11 @@ void build_tune(lv_obj_t *parent, TuneHandles *h) {
   lv_slider_set_value(sl, 100, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(sl, color_surface_elevated, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(sl, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_radius(sl, 5, LV_PART_MAIN);
+  lv_obj_set_style_radius(sl, radius_sm, LV_PART_MAIN);
   lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
-  lv_obj_set_style_radius(sl, 5, LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
-  lv_obj_set_style_shadow_color(sl, color_accent_primary, LV_PART_KNOB);
-  lv_obj_set_style_shadow_width(sl, 10, LV_PART_KNOB);
-  lv_obj_set_style_shadow_opa(sl, LV_OPA_50, LV_PART_KNOB);
+  lv_obj_set_style_radius(sl, radius_sm, LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(sl, color_text_primary, LV_PART_KNOB);
+  lv_obj_set_style_radius(sl, radius_sm, LV_PART_KNOB);
   if (h) h->speed = sl;
 }
 
@@ -420,9 +488,10 @@ static lv_obj_t *setting_row(lv_obj_t *list, const char *name) {
   lv_obj_t *r = lv_obj_create(list);
   lv_obj_remove_style_all(r);
   lv_obj_set_size(r, lv_pct(100), 36);
-  vgrad(r, color_surface_elevated, color_surface_raised);
-  lv_obj_set_style_radius(r, 8, 0);
-  hairline(r, color_text_tertiary, opa_border_subtle);
+  lv_obj_set_style_bg_color(r, color_surface_raised, 0);
+  lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(r, radius_sm, 0);
+  hairline(r);
   lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_t *n = lbl(r, name, font_caption, color_text_primary, 0, 0);
   lv_obj_align(n, LV_ALIGN_LEFT_MID, 12, 0);
@@ -439,11 +508,11 @@ static lv_obj_t *value_pill(lv_obj_t *row, const char *val) {
   lv_obj_align(p, LV_ALIGN_RIGHT_MID, -8, 0);
   lv_obj_set_style_bg_color(p, color_surface_base, 0);
   lv_obj_set_style_bg_opa(p, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(p, 6, 0);
-  hairline(p, color_accent_primary, opa_border_medium);
+  lv_obj_set_style_radius(p, radius_sm, 0);
+  hairline_c(p, color_accent_secondary, opa_border_medium);
   lv_obj_clear_flag(p, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_add_flag(p, LV_OBJ_FLAG_CLICKABLE);
-  lv_obj_t *v = lbl(p, val, font_caption, color_accent_primary, 0, 0);
+  lv_obj_t *v = lbl(p, val, font_caption, color_accent_secondary, 0, 0);
   lv_obj_center(v);
   return p;
 }
@@ -468,18 +537,19 @@ static void chip_row(lv_obj_t *list, const char *a, const char *b, const char *c
     lv_obj_t *ch = lv_obj_create(r);
     lv_obj_remove_style_all(ch);
     lv_obj_set_size(ch, 140, 30);
-    vgrad(ch, color_surface_elevated, color_surface_raised);
-    lv_obj_set_style_radius(ch, 7, 0);
-    hairline(ch, color_text_tertiary, opa_border_subtle);
+    lv_obj_set_style_bg_color(ch, color_surface_raised, 0);
+    lv_obj_set_style_bg_opa(ch, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(ch, radius_sm, 0);
+    hairline(ch);
     lv_obj_clear_flag(ch, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *l = lbl(ch, labs[i], font_micro, color_accent_primary, 0, 0);
+    lv_obj_t *l = lbl(ch, labs[i], font_micro, color_text_secondary, 0, 0);
     lv_obj_center(l);
     out[i] = ch;
   }
 }
 
 void build_settings(lv_obj_t *parent, SettingsHandles *h) {
-  lv_obj_t *back = screen_header(parent, "Expert Tune");
+  lv_obj_t *back = screen_header(parent, "EXPERT TUNE");
   if (h) h->back = back;
 
   lv_obj_t *list = lv_obj_create(parent);
@@ -490,10 +560,10 @@ void build_settings(lv_obj_t *parent, SettingsHandles *h) {
   lv_obj_set_style_pad_row(list, 7, 0);
   lv_obj_set_scroll_dir(list, LV_DIR_VER);
   lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
-  lv_obj_set_style_bg_color(list, color_accent_primary, LV_PART_SCROLLBAR);
+  lv_obj_set_style_bg_color(list, color_text_secondary, LV_PART_SCROLLBAR);
   lv_obj_set_style_bg_opa(list, LV_OPA_40, LV_PART_SCROLLBAR);
   lv_obj_set_style_width(list, 3, LV_PART_SCROLLBAR);
-  lv_obj_set_style_radius(list, 2, LV_PART_SCROLLBAR);
+  lv_obj_set_style_radius(list, radius_sm, LV_PART_SCROLLBAR);
 
   // Speed factor (M220) + quick presets
   { lv_obj_t *p = value_pill(setting_row(list, "Speed factor"), "100%"); if (h) h->speed = p; }
@@ -506,19 +576,17 @@ void build_settings(lv_obj_t *parent, SettingsHandles *h) {
   // Z-offset (live babystep via SET_GCODE_OFFSET): [-] value [+], value also keypad-tappable
   {
     lv_obj_t *r = setting_row(list, "Z-offset");
-    lv_obj_t *pls = card(r, 0, 0, 34, 28, color_surface_elevated, 7);
-    vgrad(pls, color_surface_elevated, color_surface_raised);
-    hairline(pls, color_text_tertiary, opa_border_subtle);
+    lv_obj_t *pls = card(r, 0, 0, 34, 28, color_surface_elevated);
+    hairline(pls);
     lv_obj_align(pls, LV_ALIGN_RIGHT_MID, -8, 0);
-    lv_obj_center(lbl(pls, LV_SYMBOL_PLUS, &lv_font_montserrat_14, color_accent_primary, 0, 0));
+    lv_obj_center(lbl(pls, LV_SYMBOL_PLUS, &lv_font_montserrat_14, color_text_primary, 0, 0));
     lv_obj_t *pv = value_pill(r, "0.000");
     lv_obj_set_width(pv, 68);
     lv_obj_align(pv, LV_ALIGN_RIGHT_MID, -48, 0);
-    lv_obj_t *mns = card(r, 0, 0, 34, 28, color_surface_elevated, 7);
-    vgrad(mns, color_surface_elevated, color_surface_raised);
-    hairline(mns, color_text_tertiary, opa_border_subtle);
+    lv_obj_t *mns = card(r, 0, 0, 34, 28, color_surface_elevated);
+    hairline(mns);
     lv_obj_align(mns, LV_ALIGN_RIGHT_MID, -122, 0);
-    lv_obj_center(lbl(mns, LV_SYMBOL_MINUS, &lv_font_montserrat_14, color_accent_primary, 0, 0));
+    lv_obj_center(lbl(mns, LV_SYMBOL_MINUS, &lv_font_montserrat_14, color_text_primary, 0, 0));
     if (h) { h->zoff = pv; h->zoff_plus = pls; h->zoff_minus = mns; }
   }
 
@@ -536,32 +604,27 @@ void build_settings(lv_obj_t *parent, SettingsHandles *h) {
 // chip top-left. The app shows/hides them over the cockpit and wires actions.
 // ============================================================================
 
-// Shared chrome: depth backdrop + top bar (back chip + title + divider).
+// Shared chrome: the room + top bar (back chip + caps title + divider).
 // Returns the back chip so the caller wires "return to cockpit".
 static lv_obj_t *screen_header(lv_obj_t *parent, const char *title) {
   const lv_font_t *ms = &lv_font_montserrat_14;
   lv_obj_clear_flag(parent, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_set_style_pad_all(parent, 0, 0);
-  lv_obj_set_style_bg_color(parent, lv_color_hex(0x0b1220), 0);
-  lv_obj_set_style_bg_grad_color(parent, lv_color_hex(0x070b12), 0);
-  lv_obj_set_style_bg_grad_dir(parent, LV_GRAD_DIR_VER, 0);
+  lv_obj_set_style_bg_color(parent, color_surface_base, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
-  lv_obj_t *back = card(parent, 12, 10, 42, 28, color_surface_elevated, 10);
-  vgrad(back, color_surface_elevated, color_surface_raised);
-  hairline(back, color_text_tertiary, opa_border_medium);
-  lv_obj_t *bi = lbl(back, LV_SYMBOL_LEFT, ms, color_accent_primary, 0, 0);
+  lv_obj_t *back = panel(parent, 12, 10, 42, 28, opa_border_medium);
+  lv_obj_t *bi = lbl(back, LV_SYMBOL_LEFT, ms, color_text_primary, 0, 0);
   lv_obj_center(bi);
-  lbl(parent, title, font_h2, color_text_primary, 64, 13);
-  card(parent, 12, 44, 456, 1, color_text_tertiary, 0, opa_border_subtle);
+  lv_obj_t *t = lbl(parent, title, font_h2, color_text_primary, 64, 13);
+  lv_obj_set_style_text_letter_space(t, track_caps, 0);
+  card(parent, 12, 44, 456, 1, color_text_primary, 0, opa_border_subtle);
   return back;
 }
 
 // Generic tappable card-button with a centered label.
 static lv_obj_t *tap_btn(lv_obj_t *p, int x, int y, int w, int h,
                          const char *txt, const lv_font_t *f, lv_color_t tc) {
-  lv_obj_t *b = card(p, x, y, w, h, color_surface_elevated, 10);
-  vgrad(b, color_surface_elevated, color_surface_raised);
-  hairline(b, color_text_tertiary, opa_border_medium);
+  lv_obj_t *b = panel(p, x, y, w, h, opa_border_medium);
   lv_obj_t *l = lbl(b, txt, f, tc, 0, 0);
   lv_obj_center(l);
   return b;
@@ -569,7 +632,7 @@ static lv_obj_t *tap_btn(lv_obj_t *p, int x, int y, int w, int h,
 
 void build_move(lv_obj_t *parent, MoveHandles *h) {
   const lv_font_t *ms = &lv_font_montserrat_14;
-  lv_obj_t *back = screen_header(parent, "Move");
+  lv_obj_t *back = screen_header(parent, "MOVE");
   if (h) h->back = back;
 
   const int bs = 50;
@@ -590,37 +653,34 @@ void build_move(lv_obj_t *parent, MoveHandles *h) {
   if (h) { h->zplus = zp; h->zminus = zm; }
 
   // ---- step selector ----
-  lbl(parent, "step (mm)", font_micro, color_text_tertiary, 282, 40);
+  tag(parent, "STEP (MM)", color_text_tertiary, 282, 40);
   const char *steps[4] = {"0.1", "1", "10", "100"};
   for (int i = 0; i < 4; i++) {
     int sw = 44, sx = 280 + i * (sw + 4);
     bool on = (i == 1);
-    lv_obj_t *sb = card(parent, sx, 54, sw, 32, on ? color_accent_primary : color_surface_elevated, 8);
-    if (!on) { vgrad(sb, color_surface_elevated, color_surface_raised); hairline(sb, color_text_tertiary, opa_border_subtle); }
+    lv_obj_t *sb = card(parent, sx, 54, sw, 32, on ? color_accent_primary : color_surface_raised);
+    if (!on) hairline(sb);
     lv_obj_t *sl = lbl(sb, steps[i], font_caption, on ? color_surface_base : color_text_secondary, 0, 0);
     lv_obj_center(sl);
     if (h) h->step[i] = sb;
   }
 
   // ---- home all + motors off ----
-  lv_obj_t *ha = card(parent, 280, 96, 188, 46, color_accent_primary, 10);
-  vgrad(ha, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
-  lv_obj_t *hal = lbl(ha, LV_SYMBOL_HOME "  Home All", ms, color_surface_base, 0, 0);
-  lv_obj_center(hal);
+  lv_obj_t *ha = lamp_btn(parent, 280, 96, 188, 46, LV_SYMBOL_HOME "  Home All", ms);
   lv_obj_t *mo = tap_btn(parent, 280, 150, 188, 46, "Motors Off", font_body, color_text_secondary);
   if (h) { h->home_all = ha; h->motors_off = mo; }
 
   // ---- position readout ----
-  lv_obj_t *pc = card(parent, 280, 204, 188, 44, color_surface_base, 10);
-  hairline(pc, color_text_tertiary, opa_border_subtle);
-  lv_obj_t *pl = lbl(pc, "X --  Y --  Z --", font_caption, color_text_secondary, 0, 0);
+  lv_obj_t *pc = card(parent, 280, 204, 188, 44, color_surface_base);
+  hairline(pc);
+  lv_obj_t *pl = lbl(pc, "X --  Y --  Z --", font_num_small, color_accent_secondary, 0, 0);
   lv_obj_center(pl);
   if (h) h->pos = pl;
 }
 
 void build_filament(lv_obj_t *parent, FilamentHandles *h) {
   const lv_font_t *ms = &lv_font_montserrat_14;
-  lv_obj_t *back = screen_header(parent, "Filament");
+  lv_obj_t *back = screen_header(parent, "FILAMENT");
   if (h) h->back = back;
 
   // Live nozzle temp rides the header line (right side) - frees a full row so
@@ -630,9 +690,9 @@ void build_filament(lv_obj_t *parent, FilamentHandles *h) {
   lv_obj_set_pos(tc, 250, 6);
   lv_obj_set_size(tc, 218, 34);
   lv_obj_clear_flag(tc, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_t *tn = lbl(tc, "nozzle", font_micro, color_text_tertiary, 0, 0);
+  lv_obj_t *tn = tag(tc, "NOZZLE", color_text_tertiary, 0, 0);
   lv_obj_align(tn, LV_ALIGN_LEFT_MID, 60, 0);
-  lv_obj_t *tv = lbl(tc, "-- / --", font_num_small, color_text_primary, 0, 0);
+  lv_obj_t *tv = lbl(tc, "-- / --", font_num_small, color_accent_secondary, 0, 0);
   lv_obj_align(tv, LV_ALIGN_RIGHT_MID, -14, 0);
   if (h) h->temp = tv;
 
@@ -648,8 +708,8 @@ void build_filament(lv_obj_t *parent, FilamentHandles *h) {
 
   // Load length: slider + live mm readout (used by Load; Extrude/Retract keep
   // their fixed 25mm purge).
-  lbl(parent, "LOAD LENGTH", font_micro, color_text_secondary, 12, 106);
-  lv_obj_t *lval = lbl(parent, "200 mm", font_num_small, color_accent_primary, 0, 0);
+  tag(parent, "LOAD LENGTH", color_text_tertiary, 12, 106);
+  lv_obj_t *lval = lbl(parent, "200 mm", font_num_small, color_accent_secondary, 0, 0);
   lv_obj_align(lval, LV_ALIGN_TOP_RIGHT, -14, 104);
   lv_obj_t *sl = lv_slider_create(parent);
   lv_obj_set_pos(sl, 12, 128);
@@ -658,21 +718,16 @@ void build_filament(lv_obj_t *parent, FilamentHandles *h) {
   lv_slider_set_value(sl, 200, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(sl, color_surface_elevated, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(sl, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_radius(sl, 5, LV_PART_MAIN);
+  lv_obj_set_style_radius(sl, radius_sm, LV_PART_MAIN);
   lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
-  lv_obj_set_style_radius(sl, 5, LV_PART_INDICATOR);
-  lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
-  lv_obj_set_style_shadow_color(sl, color_accent_primary, LV_PART_KNOB);
-  lv_obj_set_style_shadow_width(sl, 12, LV_PART_KNOB);
-  lv_obj_set_style_shadow_opa(sl, LV_OPA_50, LV_PART_KNOB);
+  lv_obj_set_style_radius(sl, radius_sm, LV_PART_INDICATOR);
+  lv_obj_set_style_bg_color(sl, color_text_primary, LV_PART_KNOB);
+  lv_obj_set_style_radius(sl, radius_sm, LV_PART_KNOB);
   lv_obj_set_ext_click_area(sl, 16);  // thin track, fat finger
   if (h) { h->len_slider = sl; h->len_val = lval; }
 
   // load / unload (primary)
-  lv_obj_t *ld = card(parent, 12, 152, 224, 52, color_accent_primary, 10);
-  vgrad(ld, lv_color_hex(0x33eaff), lv_color_hex(0x00b3cc));
-  lv_obj_t *ldl = lbl(ld, LV_SYMBOL_DOWN "  Load", ms, color_surface_base, 0, 0);
-  lv_obj_center(ldl);
+  lv_obj_t *ld = lamp_btn(parent, 12, 152, 224, 52, LV_SYMBOL_DOWN "  Load", ms);
   lv_obj_t *ul = tap_btn(parent, 244, 152, 224, 52, LV_SYMBOL_UP "  Unload", ms, color_text_primary);
   if (h) { h->load = ld; h->unload = ul; }
 
@@ -687,25 +742,21 @@ void build_filament(lv_obj_t *parent, FilamentHandles *h) {
 static void temp_section(lv_obj_t *parent, int x, int w, const char *name,
                          const char *p0, const char *p1, const char *p2,
                          lv_obj_t *out[8]) {
-  lv_obj_t *c = card(parent, x, 52, w, 196, color_surface_raised, 14);
-  vgrad(c, color_surface_elevated, color_surface_raised);
-  hairline(c, color_text_tertiary, opa_border_subtle);
-  lv_obj_t *nm = lbl(c, name, font_caption, color_text_secondary, 0, 0);
+  lv_obj_t *c = panel(parent, x, 52, w, 196);
+  lv_obj_t *nm = tag(c, name, color_text_secondary, 0, 0);
   lv_obj_align(nm, LV_ALIGN_TOP_MID, 0, 10);
-  lv_obj_t *cv = lbl(c, "--", font_num_large, color_text_primary, 0, 0);
-  lv_obj_align(cv, LV_ALIGN_TOP_MID, 0, 28);
+  lv_obj_t *cv = lbl(c, "--", font_num_large, color_accent_secondary, 0, 0);
+  lv_obj_align(cv, LV_ALIGN_TOP_MID, 0, 26);
   lv_obj_add_flag(cv, LV_OBJ_FLAG_CLICKABLE);   // tap the number to type an exact target
   lv_obj_set_ext_click_area(cv, 18);            // fat-finger touch target
   // manual -/+ steppers flanking the live target value (the "set temp" control)
-  lv_obj_t *mn = card(c, 10, 68, 46, 34, color_surface_elevated, 8);
-  vgrad(mn, color_surface_elevated, color_surface_raised);
-  hairline(mn, color_text_tertiary, opa_border_subtle);
-  lv_obj_t *mnl = lbl(mn, LV_SYMBOL_MINUS, &lv_font_montserrat_14, color_accent_primary, 0, 0);
+  lv_obj_t *mn = card(c, 10, 68, 46, 34, color_surface_elevated);
+  hairline(mn);
+  lv_obj_t *mnl = lbl(mn, LV_SYMBOL_MINUS, &lv_font_montserrat_14, color_text_primary, 0, 0);
   lv_obj_center(mnl);
-  lv_obj_t *ps_btn = card(c, w - 10 - 46, 68, 46, 34, color_surface_elevated, 8);
-  vgrad(ps_btn, color_surface_elevated, color_surface_raised);
-  hairline(ps_btn, color_text_tertiary, opa_border_subtle);
-  lv_obj_t *psl = lbl(ps_btn, LV_SYMBOL_PLUS, &lv_font_montserrat_14, color_accent_primary, 0, 0);
+  lv_obj_t *ps_btn = card(c, w - 10 - 46, 68, 46, 34, color_surface_elevated);
+  hairline(ps_btn);
+  lv_obj_t *psl = lbl(ps_btn, LV_SYMBOL_PLUS, &lv_font_montserrat_14, color_text_primary, 0, 0);
   lv_obj_center(psl);
   lv_obj_t *tv = lbl(c, "off", font_caption, color_accent_primary, 0, 0);
   lv_obj_align(tv, LV_ALIGN_TOP_MID, 0, 76);
@@ -713,22 +764,21 @@ static void temp_section(lv_obj_t *parent, int x, int w, const char *name,
   const char *ps[3] = {p0, p1, p2};
   int pw = (w - 24 - 2 * 6) / 3;
   for (int i = 0; i < 3; i++) {
-    lv_obj_t *pb = card(c, 12 + i * (pw + 6), 110, pw, 34, color_surface_elevated, 8);
-    vgrad(pb, color_surface_elevated, color_surface_raised);
-    hairline(pb, color_text_tertiary, opa_border_subtle);
-    lv_obj_t *lab = lbl(pb, ps[i], font_micro, color_accent_primary, 0, 0);
+    lv_obj_t *pb = card(c, 12 + i * (pw + 6), 110, pw, 34, color_surface_elevated);
+    hairline(pb);
+    lv_obj_t *lab = lbl(pb, ps[i], font_micro, color_text_secondary, 0, 0);
     lv_obj_center(lab);
     out[2 + i] = pb;
   }
-  lv_obj_t *ob = card(c, 12, 152, w - 24, 32, color_surface_base, 8);
-  hairline(ob, color_state_error, opa_border_medium);
+  lv_obj_t *ob = card(c, 12, 152, w - 24, 32, color_surface_base);
+  hairline_c(ob, color_state_error, opa_border_medium);
   lv_obj_t *ol = lbl(ob, "Off", font_caption, color_state_error, 0, 0);
   lv_obj_center(ol);
   out[5] = ob;
 }
 
 void build_temps(lv_obj_t *parent, TempsHandles *h) {
-  lv_obj_t *back = screen_header(parent, "Temperature");
+  lv_obj_t *back = screen_header(parent, "TEMPERATURE");
   if (h) h->back = back;
   lv_obj_t *nz[8], *bd[8];
   temp_section(parent, 12, 224, "NOZZLE", "PLA 220", "PETG 240", "PA 260", nz);
@@ -744,16 +794,24 @@ void build_temps(lv_obj_t *parent, TempsHandles *h) {
 }
 
 // ---- Bed mesh heatmap -------------------------------------------------------
-// 5-stop colormap blue->cyan->green->yellow->red across t in [0,1].
+// Color as function: probed Z deviation, cold -> hot. The ramp runs cold steel
+// (low) through phosphor (level) to lamp and alarm (high), so "high spot" reads
+// in the same language as every other warning on the panel. Universally-read
+// cold/hot semantics, Night Watch vocabulary.
 static lv_color_t heat_color(float t) {
   if (t < 0.f) t = 0.f;
   if (t > 1.f) t = 1.f;
-  float r, g, b;
-  if (t < 0.25f)      { float u = t / 0.25f;           r = 0;     g = u;     b = 1; }
-  else if (t < 0.5f)  { float u = (t - 0.25f) / 0.25f; r = 0;     g = 1;     b = 1 - u; }
-  else if (t < 0.75f) { float u = (t - 0.5f) / 0.25f;  r = u;     g = 1;     b = 0; }
-  else                { float u = (t - 0.75f) / 0.25f; r = 1;     g = 1 - u; b = 0; }
-  return lv_color_make((uint8_t)(r * 255), (uint8_t)(g * 255), (uint8_t)(b * 255));
+  // 4 stops: #3a4a63 cold steel -> #8fd6ad phosphor -> #e2a13c lamp -> #e06a5a alarm
+  const uint8_t st[4][3] = {
+    {0x3a, 0x4a, 0x63}, {0x8f, 0xd6, 0xad}, {0xe2, 0xa1, 0x3c}, {0xe0, 0x6a, 0x5a},
+  };
+  float seg = t * 3.0f;
+  int i = (int)seg; if (i > 2) i = 2;
+  float u = seg - (float)i;
+  uint8_t r = (uint8_t)(st[i][0] + (st[i + 1][0] - st[i][0]) * u);
+  uint8_t g = (uint8_t)(st[i][1] + (st[i + 1][1] - st[i][1]) * u);
+  uint8_t b = (uint8_t)(st[i][2] + (st[i + 1][2] - st[i][2]) * u);
+  return lv_color_make(r, g, b);
 }
 
 void mesh_render(lv_obj_t *grid, const float *z, int rows, int cols, float zmin, float zmax) {
@@ -777,7 +835,7 @@ void mesh_render(lv_obj_t *grid, const float *z, int rows, int cols, float zmin,
 }
 
 void build_mesh(lv_obj_t *parent, MeshHandles *h) {
-  lv_obj_t *back = screen_header(parent, "Bed Mesh");
+  lv_obj_t *back = screen_header(parent, "BED MESH");
   if (h) h->back = back;
 
   lv_obj_t *grid = lv_obj_create(parent);
@@ -786,9 +844,9 @@ void build_mesh(lv_obj_t *parent, MeshHandles *h) {
   lv_obj_set_size(grid, 192, 192);
   lv_obj_set_style_bg_color(grid, color_surface_base, 0);
   lv_obj_set_style_bg_opa(grid, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(grid, 6, 0);
+  lv_obj_set_style_radius(grid, radius_sm, 0);
   lv_obj_set_style_clip_corner(grid, true, 0);
-  hairline(grid, color_text_tertiary, opa_border_medium);
+  hairline(grid, opa_border_medium);
   lv_obj_clear_flag(grid, LV_OBJ_FLAG_SCROLLABLE);
   if (h) h->grid = grid;
 
@@ -797,17 +855,18 @@ void build_mesh(lv_obj_t *parent, MeshHandles *h) {
   lv_obj_t *rg = lbl(parent, "Range: --", font_micro, color_text_secondary, 220, 92);
   if (h) h->range = rg;
 
-  lv_obj_t *bar = lv_obj_create(parent);  // legend: red (high) top -> blue (low) bottom
+  // legend: alarm (high) top -> cold steel (low) bottom, the heat_color ramp
+  lv_obj_t *bar = lv_obj_create(parent);
   lv_obj_remove_style_all(bar);
   lv_obj_set_pos(bar, 220, 132);
   lv_obj_set_size(bar, 22, 104);
-  lv_obj_set_style_bg_color(bar, lv_color_make(255, 0, 0), 0);
-  lv_obj_set_style_bg_grad_color(bar, lv_color_make(0, 80, 255), 0);
+  lv_obj_set_style_bg_color(bar, color_state_error, 0);
+  lv_obj_set_style_bg_grad_color(bar, lv_color_make(0x3a, 0x4a, 0x63), 0);
   lv_obj_set_style_bg_grad_dir(bar, LV_GRAD_DIR_VER, 0);
   lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
-  lv_obj_set_style_radius(bar, 4, 0);
-  lbl(parent, "high", font_micro, color_text_secondary, 250, 132);
-  lbl(parent, "low", font_micro, color_text_secondary, 250, 222);
+  lv_obj_set_style_radius(bar, radius_sm, 0);
+  tag(parent, "HIGH", color_text_tertiary, 250, 132);
+  tag(parent, "LOW", color_text_tertiary, 250, 226);
 
   // demo surface so the sim and first boot show a heatmap before a real probe
   static const float demo[49] = {
@@ -822,7 +881,7 @@ void build_mesh(lv_obj_t *parent, MeshHandles *h) {
 }
 
 void build_more(lv_obj_t *parent, MoreHandles *h) {
-  lv_obj_t *back = screen_header(parent, "More");
+  lv_obj_t *back = screen_header(parent, "MORE");
   if (h) h->back = back;
 
   lv_obj_t *list = lv_obj_create(parent);
@@ -833,7 +892,7 @@ void build_more(lv_obj_t *parent, MoreHandles *h) {
   lv_obj_set_style_pad_row(list, 8, 0);
   lv_obj_set_scroll_dir(list, LV_DIR_VER);
   lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
-  lv_obj_set_style_bg_color(list, color_accent_primary, LV_PART_SCROLLBAR);
+  lv_obj_set_style_bg_color(list, color_text_secondary, LV_PART_SCROLLBAR);
   lv_obj_set_style_bg_opa(list, LV_OPA_40, LV_PART_SCROLLBAR);
   lv_obj_set_style_width(list, 3, LV_PART_SCROLLBAR);
 
@@ -841,72 +900,103 @@ void build_more(lv_obj_t *parent, MoreHandles *h) {
     lv_obj_t *r = lv_obj_create(list);
     lv_obj_remove_style_all(r);
     lv_obj_set_size(r, lv_pct(100), 58);
-    vgrad(r, color_surface_elevated, color_surface_raised);
-    lv_obj_set_style_radius(r, 12, 0);
-    hairline(r, color_text_tertiary, opa_border_subtle);
+    lv_obj_set_style_bg_color(r, color_surface_raised, 0);
+    lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(r, radius_sm, 0);
+    hairline(r);
     lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *ic = lbl(r, icon, &lv_font_montserrat_14, color_accent_primary, 0, 0);
+    lv_obj_t *ic = lbl(r, icon, &lv_font_montserrat_14, color_text_secondary, 0, 0);
     lv_obj_align(ic, LV_ALIGN_LEFT_MID, 16, 0);
     lv_obj_t *tl = lbl(r, title, font_body, color_text_primary, 0, 0);
     lv_obj_align(tl, LV_ALIGN_LEFT_MID, 48, -9);
-    lv_obj_t *sl = lbl(r, sub, font_micro, color_text_secondary, 0, 0);
+    lv_obj_t *sl = tag(r, sub, color_text_tertiary, 0, 0);
     lv_obj_align(sl, LV_ALIGN_LEFT_MID, 48, 10);
     lv_obj_t *ch = lbl(r, LV_SYMBOL_RIGHT, &lv_font_montserrat_14, color_text_tertiary, 0, 0);
     lv_obj_align(ch, LV_ALIGN_RIGHT_MID, -14, 0);
     return r;
   };
 
-  lv_obj_t *w  = row(LV_SYMBOL_WIFI, "Wi-Fi & Network", "Scan and connect");
-  lv_obj_t *m  = row(LV_SYMBOL_IMAGE, "Bed Mesh", "Live probed surface heatmap");
-  lv_obj_t *e  = row(LV_SYMBOL_SETTINGS, "Expert Tune", "Live print tuning");
-  lv_obj_t *li = row(LV_SYMBOL_CHARGE, "Lights", "Case + hotend LEDs");
-  lv_obj_t *sy = row(LV_SYMBOL_LIST, "System", "Version, network, uptime");
-  lv_obj_t *pw = row(LV_SYMBOL_POWER, "Power", "Restart, reboot, shutdown");
+  lv_obj_t *w  = row(LV_SYMBOL_WIFI, "Wi-Fi & Network", "SCAN AND CONNECT");
+  lv_obj_t *m  = row(LV_SYMBOL_IMAGE, "Bed Mesh", "LIVE PROBED SURFACE HEATMAP");
+  lv_obj_t *e  = row(LV_SYMBOL_SETTINGS, "Expert Tune", "LIVE PRINT TUNING");
+  lv_obj_t *li = row(LV_SYMBOL_CHARGE, "Lights", "CASE + HOTEND LEDS");
+  lv_obj_t *sy = row(LV_SYMBOL_LIST, "System", "VERSION, UPDATE, NETWORK");
+  lv_obj_t *pw = row(LV_SYMBOL_POWER, "Power", "RESTART, REBOOT, SHUTDOWN");
   if (h) { h->wifi = w; h->mesh = m; h->expert = e; h->led = li; h->system = sy; h->power = pw; }
 }
 
 void build_system(lv_obj_t *parent, SystemHandles *h) {
-  lv_obj_t *back = screen_header(parent, "System");
+  lv_obj_t *back = screen_header(parent, "SYSTEM");
   if (h) h->back = back;
   lv_obj_t *list = lv_obj_create(parent);
   lv_obj_remove_style_all(list);
-  lv_obj_set_pos(list, 12, 58);
-  lv_obj_set_size(list, 456, 200);
+  lv_obj_set_pos(list, 12, 54);
+  lv_obj_set_size(list, 456, 180);
   lv_obj_set_flex_flow(list, LV_FLEX_FLOW_COLUMN);
-  lv_obj_set_style_pad_row(list, 7, 0);
+  lv_obj_set_style_pad_row(list, 3, 0);
   lv_obj_clear_flag(list, LV_OBJ_FLAG_SCROLLABLE);
   auto inforow = [&](const char *name) -> lv_obj_t * {
     lv_obj_t *r = lv_obj_create(list);
     lv_obj_remove_style_all(r);
-    lv_obj_set_size(r, lv_pct(100), 34);
-    vgrad(r, color_surface_elevated, color_surface_raised);
-    lv_obj_set_style_radius(r, 8, 0);
-    hairline(r, color_text_tertiary, opa_border_subtle);
+    lv_obj_set_size(r, lv_pct(100), 27);
+    lv_obj_set_style_bg_color(r, color_surface_raised, 0);
+    lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(r, radius_sm, 0);
+    hairline(r);
     lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
-    lv_obj_t *n = lbl(r, name, font_caption, color_text_secondary, 0, 0);
-    lv_obj_align(n, LV_ALIGN_LEFT_MID, 14, 0);
+    lv_obj_t *n = tag(r, name, color_text_tertiary, 0, 0);
+    lv_obj_align(n, LV_ALIGN_LEFT_MID, 12, 0);
     lv_obj_t *v = lbl(r, "--", font_caption, color_text_primary, 0, 0);
-    lv_obj_align(v, LV_ALIGN_RIGHT_MID, -14, 0);
+    lv_obj_align(v, LV_ALIGN_RIGHT_MID, -12, 0);
     return v;
   };
-  lv_obj_t *fw = inforow("Firmware");
-  lv_obj_t *hn = inforow("Hostname");
-  lv_obj_t *ip = inforow("IP address");
-  lv_obj_t *up = inforow("Uptime");
-  lv_obj_t *mc = inforow("CPU temp");
-  if (h) { h->version = fw; h->host = hn; h->ip = ip; h->uptime = up; h->mcu = mc; }
+  lv_obj_t *fw = inforow("FIRMWARE");
+
+  // Update row: live status on the right; the Install chip appears between
+  // when a newer build is published (the app reveals it).
+  lv_obj_t *ur = lv_obj_create(list);
+  lv_obj_remove_style_all(ur);
+  lv_obj_set_size(ur, lv_pct(100), 27);
+  lv_obj_set_style_bg_color(ur, color_surface_raised, 0);
+  lv_obj_set_style_bg_opa(ur, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(ur, radius_sm, 0);
+  hairline(ur);
+  lv_obj_clear_flag(ur, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *un = tag(ur, "UPDATE", color_text_tertiary, 0, 0);
+  lv_obj_align(un, LV_ALIGN_LEFT_MID, 12, 0);
+  lv_obj_t *us = lbl(ur, "checking...", font_caption, color_text_secondary, 0, 0);
+  lv_obj_align(us, LV_ALIGN_RIGHT_MID, -12, 0);
+  lv_obj_t *ub = card(ur, 0, 0, 84, 22, color_accent_primary);
+  lv_obj_align(ub, LV_ALIGN_RIGHT_MID, -12, 0);
+  lv_obj_t *ubl = tag(ub, "INSTALL", color_surface_base, 0, 0);
+  lv_obj_center(ubl);
+  lv_obj_add_flag(ub, LV_OBJ_FLAG_HIDDEN);   // hidden until an update is available
+
+  lv_obj_t *hn = inforow("HOSTNAME");
+  lv_obj_t *ip = inforow("IP ADDRESS");
+  lv_obj_t *up = inforow("UPTIME");
+  lv_obj_t *mc = inforow("CPU TEMP");
+
+  // The plate line: the motto, engraved at the foot of the system page.
+  lv_obj_t *motto = lbl(parent, "ua mau ke ea o ka ‘āina i ka pono",
+                        font_serif_italic, color_text_tertiary, 0, 0);
+  lv_obj_align(motto, LV_ALIGN_BOTTOM_MID, 0, -6);
+
+  if (h) {
+    h->version = fw; h->host = hn; h->ip = ip; h->uptime = up; h->mcu = mc;
+    h->update_status = us; h->btn_install = ub;
+  }
 }
 
 void build_power(lv_obj_t *parent, PowerHandles *h) {
-  lv_obj_t *back = screen_header(parent, "Power");
+  lv_obj_t *back = screen_header(parent, "POWER");
   if (h) h->back = back;
   lv_obj_t *rk = tap_btn(parent, 12, 64, 224, 86, "Restart Klipper", font_body, color_text_primary);
   lv_obj_t *rf = tap_btn(parent, 244, 64, 224, 86, "Restart Firmware", font_body, color_text_primary);
-  lv_obj_t *rb = card(parent, 12, 160, 224, 86, color_state_warning, 12);
-  vgrad(rb, lv_color_hex(0xffc04a), lv_color_hex(0xff9e1b));
+  // Reboot: deep-amber caution fill. Shutdown: solid alarm. Both confirm-gated.
+  lv_obj_t *rb = card(parent, 12, 160, 224, 86, color_state_warning);
   lv_obj_center(lbl(rb, "Reboot", font_body, color_surface_base, 0, 0));
-  lv_obj_t *sd = card(parent, 244, 160, 224, 86, color_state_error, 12);
-  vgrad(sd, lv_color_hex(0xff5a5a), lv_color_hex(0xd83232));
+  lv_obj_t *sd = card(parent, 244, 160, 224, 86, color_state_error);
   lv_obj_center(lbl(sd, "Shutdown", font_body, color_surface_base, 0, 0));
   if (h) { h->restart_klipper = rk; h->restart_fw = rf; h->reboot = rb; h->shutdown = sd; }
 }
@@ -915,8 +1005,7 @@ void seg_highlight(lv_obj_t *const *btns, int n, int active) {
   for (int i = 0; i < n; i++) {
     if (!btns[i]) continue;
     bool on = (i == active);
-    lv_obj_set_style_bg_color(btns[i], on ? lv_color_hex(0x33eaff) : color_surface_elevated, 0);
-    lv_obj_set_style_bg_grad_color(btns[i], on ? lv_color_hex(0x00b3cc) : color_surface_raised, 0);
+    lv_obj_set_style_bg_color(btns[i], on ? color_accent_primary : color_surface_raised, 0);
     lv_obj_t *l = lv_obj_get_child(btns[i], 0);
     if (l) lv_obj_set_style_text_color(l, on ? color_surface_base : color_text_secondary, 0);
   }
@@ -928,19 +1017,13 @@ void build_confirm(lv_obj_t *parent, ConfirmHandles *h) {
   lv_obj_t *scrim = lv_obj_create(parent);
   lv_obj_remove_style_all(scrim);
   lv_obj_set_size(scrim, LV_PCT(100), LV_PCT(100));
-  lv_obj_set_style_bg_color(scrim, lv_color_black(), 0);
-  lv_obj_set_style_bg_opa(scrim, LV_OPA_50, 0);
+  lv_obj_set_style_bg_color(scrim, color_surface_base, 0);
+  lv_obj_set_style_bg_opa(scrim, LV_OPA_70, 0);
   lv_obj_add_flag(scrim, LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_CLICKABLE);
   lv_obj_clear_flag(scrim, LV_OBJ_FLAG_SCROLLABLE);
 
-  lv_obj_t *cd = card(parent, 70, 71, 340, 130, color_surface_raised, 14);  // centered on 480x272
-  vgrad(cd, color_surface_elevated, color_surface_raised);
-  lv_obj_set_style_border_color(cd, color_accent_primary, 0);
-  lv_obj_set_style_border_width(cd, 1, 0);
-  lv_obj_set_style_border_opa(cd, LV_OPA_70, 0);
-  lv_obj_set_style_shadow_color(cd, lv_color_black(), 0);
-  lv_obj_set_style_shadow_width(cd, 24, 0);
-  lv_obj_set_style_shadow_opa(cd, LV_OPA_50, 0);
+  lv_obj_t *cd = card(parent, 70, 71, 340, 130, color_surface_raised);  // centered on 480x272
+  hairline(cd, opa_border_medium);
   lv_obj_add_flag(cd, LV_OBJ_FLAG_HIDDEN);
 
   lv_obj_t *msg = lbl(cd, "Are you sure?", font_body, color_text_primary, 0, 0);
@@ -950,20 +1033,17 @@ void build_confirm(lv_obj_t *parent, ConfirmHandles *h) {
   lv_obj_align(msg, LV_ALIGN_TOP_MID, 0, 22);
 
   lv_obj_t *cancel = tap_btn(cd, 16, 76, 150, 40, "Cancel", font_body, color_text_primary);
-  lv_obj_t *confirm = card(cd, 174, 76, 150, 40, color_state_error, 10);
-  vgrad(confirm, lv_color_hex(0xff5a5f), lv_color_hex(0xd92d36));
+  lv_obj_t *confirm = card(cd, 174, 76, 150, 40, color_state_error);
   lv_obj_center(lbl(confirm, "Confirm", font_body, color_surface_base, 0, 0));
 
   if (h) { h->scrim = scrim; h->card = cd; h->msg = msg; h->cancel = cancel; h->confirm = confirm; }
 }
 
 void build_lights(lv_obj_t *parent, LightsHandles *h) {
-  lv_obj_t *back = screen_header(parent, "Lights");
+  lv_obj_t *back = screen_header(parent, "LIGHTS");
   if (h) h->back = back;
   auto section = [&](int y, const char *name, lv_obj_t **off, lv_obj_t **mid, lv_obj_t **full) {
-    lv_obj_t *c = card(parent, 12, y, 456, 88, color_surface_raised, 14);
-    vgrad(c, color_surface_elevated, color_surface_raised);
-    hairline(c, color_text_tertiary, opa_border_subtle);
+    lv_obj_t *c = panel(parent, 12, y, 456, 88);
     lv_obj_t *nm = lbl(c, name, font_body, color_text_primary, 0, 0);
     lv_obj_align(nm, LV_ALIGN_TOP_LEFT, 16, 12);
     const int bw = 134, bh = 38, gap = 8, x0 = 16, by = 40;
@@ -983,24 +1063,23 @@ void build_lights(lv_obj_t *parent, LightsHandles *h) {
 }
 
 void build_fans(lv_obj_t *parent, FansHandles *h) {
-  lv_obj_t *back = screen_header(parent, "Fans");
+  lv_obj_t *back = screen_header(parent, "FANS");
   if (h) h->back = back;
 
   // One row per fan. The three user-settable fans get a live slider (drag to 0
   // = off); the two Klipper-managed fans show an AUTO pill + live %.
-  static const char *names[5]    = {"Part cooling", "Model fan", "Box fan", "Mainboard", "Hotend"};
+  static const char *names[5]    = {"PART COOLING", "MODEL FAN", "BOX FAN", "MAINBOARD", "HOTEND"};
   static const bool  settable[5] = {true, true, true, false, false};
   const int X = 12, W = 456, RH = 38, Y0 = 60, GAP = 4;
   for (int i = 0; i < 5; i++) {
     int y = Y0 + i * (RH + GAP);
-    lv_obj_t *c = card(parent, X, y, W, RH, color_surface_raised, 10);
-    hairline(c, color_text_tertiary, opa_border_subtle);
-    lv_obj_t *nm = lbl(c, names[i], font_caption, color_text_secondary, 0, 0);
+    lv_obj_t *c = panel(parent, X, y, W, RH);
+    lv_obj_t *nm = tag(c, names[i], color_text_secondary, 0, 0);
     lv_obj_align(nm, LV_ALIGN_LEFT_MID, 14, 0);
     // Fans read 0 at boot (Klipper zeroes every fan on restart, which is when
     // build_fans runs) and the consume() loop only updates a fan on a non-null
     // speed delta -- an idle fan never sends one, so seed 0% not "--%".
-    lv_obj_t *pv = lbl(c, "0%", font_body, color_accent_primary, 0, 0);
+    lv_obj_t *pv = lbl(c, "0%", font_num_small, color_accent_secondary, 0, 0);
     lv_obj_align(pv, LV_ALIGN_RIGHT_MID, -14, 0);
     if (h) h->val[i] = pv;
     if (settable[i]) {
@@ -1009,17 +1088,19 @@ void build_fans(lv_obj_t *parent, FansHandles *h) {
       lv_obj_align(sl, LV_ALIGN_CENTER, 30, 0);
       lv_slider_set_range(sl, 0, 100);
       lv_slider_set_value(sl, 0, LV_ANIM_OFF);
-      lv_obj_set_style_bg_color(sl, color_surface_base, LV_PART_MAIN);
-      lv_obj_set_style_radius(sl, 4, LV_PART_MAIN);
+      lv_obj_set_style_bg_color(sl, color_surface_elevated, LV_PART_MAIN);
+      lv_obj_set_style_radius(sl, radius_sm, LV_PART_MAIN);
       lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_INDICATOR);
-      lv_obj_set_style_radius(sl, 4, LV_PART_INDICATOR);
-      lv_obj_set_style_bg_color(sl, color_accent_primary, LV_PART_KNOB);
+      lv_obj_set_style_radius(sl, radius_sm, LV_PART_INDICATOR);
+      lv_obj_set_style_bg_color(sl, color_text_primary, LV_PART_KNOB);
+      lv_obj_set_style_radius(sl, radius_sm, LV_PART_KNOB);
       if (h) h->slider[i] = sl;
     } else {
-      lv_obj_t *pill = card(c, 0, 0, 50, 22, color_surface_elevated, 11);
-      hairline(pill, color_accent_secondary, opa_border_strong);
+      lv_obj_t *pill = card(c, 0, 0, 50, 22, color_surface_elevated);
+      hairline_c(pill, color_accent_secondary, opa_border_strong);
       lv_obj_align(pill, LV_ALIGN_CENTER, 30, 0);
-      lv_obj_center(lbl(pill, "AUTO", font_micro, color_accent_secondary, 0, 0));
+      lv_obj_t *al = tag(pill, "AUTO", color_accent_secondary, 0, 0);
+      lv_obj_center(al);
     }
   }
 }
@@ -1029,20 +1110,21 @@ void files_add_row(lv_obj_t *list, const char *name, const char *meta) {
   lv_obj_t *r = lv_obj_create(list);
   lv_obj_remove_style_all(r);
   lv_obj_set_size(r, lv_pct(100), 54);
-  vgrad(r, color_surface_elevated, color_surface_raised);
-  lv_obj_set_style_radius(r, 10, 0);
-  hairline(r, color_text_tertiary, opa_border_subtle);
+  lv_obj_set_style_bg_color(r, color_surface_raised, 0);
+  lv_obj_set_style_bg_opa(r, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(r, radius_sm, 0);
+  hairline(r);
   lv_obj_clear_flag(r, LV_OBJ_FLAG_SCROLLABLE);
   // child 0: thumbnail image (hidden until the app loads one from metadata).
   // pivot 0,0 + pos so a zoom-to-fit lands the visual exactly in a 46px slot.
   lv_obj_t *th = lv_img_create(r);
   lv_obj_add_flag(th, LV_OBJ_FLAG_HIDDEN);
-  lv_obj_set_style_radius(th, 6, 0);
+  lv_obj_set_style_radius(th, radius_sm, 0);
   lv_obj_set_style_clip_corner(th, true, 0);
   lv_img_set_pivot(th, 0, 0);
   lv_obj_set_pos(th, 8, 4);
   // child 1: fallback file glyph (shown until a thumbnail replaces it)
-  lv_obj_t *ic = lbl(r, LV_SYMBOL_FILE, &lv_font_montserrat_14, color_accent_primary, 0, 0);
+  lv_obj_t *ic = lbl(r, LV_SYMBOL_FILE, &lv_font_montserrat_14, color_text_secondary, 0, 0);
   lv_obj_align(ic, LV_ALIGN_LEFT_MID, 18, 0);
   // child 2: name, child 3: meta
   lv_obj_t *nm = lbl(r, name, font_caption, color_text_primary, 0, 0);
@@ -1050,7 +1132,7 @@ void files_add_row(lv_obj_t *list, const char *name, const char *meta) {
   lv_obj_t *mt = lbl(r, meta, font_micro, color_text_secondary, 0, 0);
   lv_obj_align(mt, LV_ALIGN_LEFT_MID, 62, 10);
   // child 4: play
-  lv_obj_t *pi = lbl(r, LV_SYMBOL_PLAY, &lv_font_montserrat_14, color_accent_secondary, 0, 0);
+  lv_obj_t *pi = lbl(r, LV_SYMBOL_PLAY, &lv_font_montserrat_14, color_accent_primary, 0, 0);
   lv_obj_align(pi, LV_ALIGN_RIGHT_MID, -14, 0);
 }
 
@@ -1073,7 +1155,7 @@ void files_apply_meta(lv_obj_t *row, const char *thumb_path, int zoom, const cha
 }
 
 void build_files(lv_obj_t *parent, FilesHandles *h) {
-  lv_obj_t *back = screen_header(parent, "Files");
+  lv_obj_t *back = screen_header(parent, "FILES");
   if (h) h->back = back;
   lv_obj_t *list = lv_obj_create(parent);
   lv_obj_remove_style_all(list);
@@ -1083,10 +1165,10 @@ void build_files(lv_obj_t *parent, FilesHandles *h) {
   lv_obj_set_style_pad_row(list, 8, 0);
   lv_obj_set_scroll_dir(list, LV_DIR_VER);
   lv_obj_set_scrollbar_mode(list, LV_SCROLLBAR_MODE_ACTIVE);
-  lv_obj_set_style_bg_color(list, color_accent_primary, LV_PART_SCROLLBAR);
+  lv_obj_set_style_bg_color(list, color_text_secondary, LV_PART_SCROLLBAR);
   lv_obj_set_style_bg_opa(list, LV_OPA_40, LV_PART_SCROLLBAR);
   lv_obj_set_style_width(list, 3, LV_PART_SCROLLBAR);
-  lv_obj_set_style_radius(list, 2, LV_PART_SCROLLBAR);
+  lv_obj_set_style_radius(list, radius_sm, LV_PART_SCROLLBAR);
   if (h) h->list = list;
   // placeholder rows; the app clears + repopulates from Moonraker.
   files_add_row(list, "omega_cube.gcode", "18m  .  PA-CF");
@@ -1097,10 +1179,8 @@ void build_files(lv_obj_t *parent, FilesHandles *h) {
 
 // ---- boot / connecting screen ----------------------------------------------
 // Static Hawaii flag hero + a cycling island joke + a real progress bar the
-// app drives from the live connect stages. No ocean animation: a static hero
-// cannot jank, and the honest progress is the motion. The "Pono Print"
-// wordmark came off 2026-06-10 (Jack: "I just want the HI flag") - the flag
-// IS the identity mark.
+// app drives from the live connect stages. The flag IS the identity mark
+// (Jack: "I just want the HI flag"); the dedication signs the watch off.
 void build_boot(lv_obj_t *parent, BootHandles *h) {
   lv_obj_set_style_bg_color(parent, color_surface_base, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
@@ -1109,39 +1189,36 @@ void build_boot(lv_obj_t *parent, BootHandles *h) {
   // carries the top half alone).
   const int fw = pono_flag_w, fh = pono_flag_h;          // 192 x 96
   const int fx = (480 - fw) / 2, fy = 28;
-  lv_obj_t *frame = card(parent, fx - 2, fy - 2, fw + 4, fh + 4, color_surface_elevated, 6);
-  hairline(frame, color_text_tertiary, opa_border_medium);
+  lv_obj_t *frame = card(parent, fx - 2, fy - 2, fw + 4, fh + 4, color_surface_elevated);
+  hairline(frame, opa_border_medium);
   lv_obj_t *flag = lv_img_create(parent);
   lv_img_set_src(flag, &pono_flag);
   lv_obj_set_pos(flag, fx, fy);
   if (h) h->flag = flag;
 
-  // Cycling island joke (the app rotates the text via the joke timer).
+  // Cycling island joke (the app rotates the text via the joke timer) in the
+  // logbook's own hand.
   lv_obj_t *joke = lv_label_create(parent);
   lv_obj_set_width(joke, lv_pct(84));
   lv_obj_set_height(joke, LV_SIZE_CONTENT);
   lv_label_set_long_mode(joke, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_align(joke, LV_TEXT_ALIGN_CENTER, 0);
   lv_obj_set_style_text_color(joke, color_text_secondary, 0);
-  lv_obj_set_style_text_font(joke, font_caption, 0);
+  lv_obj_set_style_text_font(joke, font_serif_italic, 0);
   lv_label_set_text(joke, "Warming up the trade winds...");
-  lv_obj_align(joke, LV_ALIGN_TOP_MID, 0, 152);
+  lv_obj_align(joke, LV_ALIGN_TOP_MID, 0, 148);
   if (h) h->joke = joke;
 
-  // Loading widget: a styled box (brand-cyan edge) holding the comet spinner on
-  // the left and a real status line over a progress bar. The app feeds both
-  // from the live connect stages, so the bar actually means something.
+  // Loading widget: a quiet panel holding the comet spinner on the left and a
+  // real status line over a progress bar. The app feeds both from the live
+  // connect stages, so the bar actually means something.
   const int bx = 60, by = 192, bw = 360, bh = 56;
-  lv_obj_t *box = card(parent, bx, by, bw, bh, color_surface_raised, 12);
-  vgrad(box, color_surface_elevated, color_surface_raised);
-  lv_obj_set_style_border_color(box, color_accent_primary, 0);
-  lv_obj_set_style_border_width(box, 1, 0);
-  lv_obj_set_style_border_opa(box, LV_OPA_50, 0);
+  lv_obj_t *box = panel(parent, bx, by, bw, bh, opa_border_medium);
 
-  // Comet spinner: the "still working" circle Jack wants kept. The shared asset
-  // is 88px (the busy overlay's hero size); zoom this instance to ~44px so it
-  // fits the widget. align_to the box: the 88px object box centres the ~44px
-  // visual at box-left + 30.
+  // Comet spinner: the "still working" circle. The shared asset is 88px (the
+  // busy overlay's hero size); zoom this instance to ~44px so it fits the
+  // widget. align_to the box: the 88px object box centres the ~44px visual at
+  // box-left + 30.
   lv_obj_t *spin = spinner_create(parent, 1000);
   lv_img_set_zoom(spin, 128);                            // 88px -> 44px visual
   lv_obj_align_to(spin, box, LV_ALIGN_LEFT_MID, -14, 0);
@@ -1158,14 +1235,15 @@ void build_boot(lv_obj_t *parent, BootHandles *h) {
   lv_bar_set_value(bar, 4, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(bar, color_surface_base, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_radius(bar, 4, LV_PART_MAIN);
+  lv_obj_set_style_radius(bar, radius_sm, LV_PART_MAIN);
   lv_obj_set_style_bg_color(bar, color_accent_primary, LV_PART_INDICATOR);
-  lv_obj_set_style_radius(bar, 4, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(bar, radius_sm, LV_PART_INDICATOR);
   if (h) h->bar = bar;
 
-  // Dedication, pinned bottom (kept from the old boot screen).
-  lv_obj_t *ded = lbl(parent, "For Elio and Io", font_micro, color_accent_primary, 0, 0);
-  lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -8);
+  // Dedication, pinned bottom (kept from the old boot screen), in the
+  // logbook's hand under the lamp.
+  lv_obj_t *ded = lbl(parent, "For Elio and Io", font_serif_italic, color_accent_primary, 0, 0);
+  lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -6);
 }
 
 void boot_set_progress(BootHandles *h, int pct, const char *stage) {

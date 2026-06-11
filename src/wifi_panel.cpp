@@ -110,11 +110,9 @@ WifiPanel::WifiPanel(std::mutex &l)
   lv_obj_move_background(cont);
   lv_obj_move_foreground(spinner);
 
-  // ---- Pono restyle: depth backdrop + a real top header (back + title +
-  // refresh) instead of the two floating image buttons hanging bottom-right ----
-  lv_obj_set_style_bg_color(cont, lv_color_hex(0x0b1220), 0);
-  lv_obj_set_style_bg_grad_color(cont, lv_color_hex(0x070b12), 0);
-  lv_obj_set_style_bg_grad_dir(cont, LV_GRAD_DIR_VER, 0);
+  // ---- Pono restyle: the room + a real top header (back + title + refresh)
+  // instead of the two floating image buttons hanging bottom-right ----
+  lv_obj_set_style_bg_color(cont, pono::color_surface_base, 0);
   lv_obj_set_style_bg_opa(cont, LV_OPA_COVER, 0);
   // pad_top 0 on cont keeps the floating header (back/title/refresh) in the
   // y=0..56 top band; the scrolling content is pushed below it by padding the

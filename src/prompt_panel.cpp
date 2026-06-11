@@ -2,7 +2,7 @@
 #include "state.h"
 #include "utils.h"
 #include "logger.h"
-#include "pono_theme.h"  // Phase A.4 pass 4: Westworld Dark semantic tokens
+#include "pono_theme.h"  // Night Watch semantic tokens
 #include "pono_anim.h"   // busy_hide: a prompt must not sit behind the cal/busy overlay
 
 // uncomment for helper boxes
@@ -36,9 +36,11 @@ PromptPanel::PromptPanel(KWebSocketClient &websocket_client, std::mutex &lock, l
 
   lv_obj_center(prompt_cont);
   lv_obj_set_style_pad_all(prompt_cont, 5, 0);
-  lv_obj_set_style_radius(prompt_cont, 5, LV_PART_MAIN);
-  lv_obj_set_style_border_width(prompt_cont, 2, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_color(prompt_cont, pono::color_text_tertiary, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_radius(prompt_cont, pono::radius_sm, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(prompt_cont, pono::color_surface_raised, LV_PART_MAIN);
+  lv_obj_set_style_border_width(prompt_cont, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_color(prompt_cont, pono::color_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
+  lv_obj_set_style_border_opa(prompt_cont, pono::opa_border_medium, LV_PART_MAIN | LV_STATE_DEFAULT);
   lv_obj_set_style_max_height(prompt_cont, lv_pct(92), 0);
   lv_obj_set_style_max_width(prompt_cont, lv_pct(94), 0);
   lv_obj_set_style_min_height(prompt_cont, lv_pct(38), 0);
@@ -336,14 +338,14 @@ void PromptPanel::handle_macro_response(json &j) {
           lv_obj_center(label);
 
           // Pick BOTH fill and text per type, as LOCAL styles. The theme's
-          // button apply_cb sets a LOCAL cyan bg on every lv_btn, and in LVGL a
-          // local style outranks an *added* one -- so the style_btn_* fills
-          // added below were silently ignored and every prompt button rendered
-          // cyan. For secondary/default that left light text on cyan: the
-          // unreadable "white on pale blue" case. Setting bg_color locally here
+          // button apply_cb sets a LOCAL accent bg on every lv_btn, and in
+          // LVGL a local style outranks an *added* one -- so the style_btn_*
+          // fills added below were silently ignored and every prompt button
+          // rendered in the accent. For secondary/default that left light
+          // text on a bright fill: unreadable. Setting bg_color locally here
           // overrides the theme and restores the intended per-type fills; text
           // is paired dark-on-bright / light-on-dark for contrast either way.
-          lv_color_t btn_bg  = pono::color_accent_primary;  // cyan (info/primary)
+          lv_color_t btn_bg  = pono::color_accent_primary;  // the lamp (info/primary)
           lv_color_t btn_txt = pono::color_surface_base;    // dark text on bright fill
           if (!prompt_button_type.compare("secondary")) {
             LOG_DEBUG("type secondary");
@@ -361,11 +363,11 @@ void PromptPanel::handle_macro_response(json &j) {
           } else if (!prompt_button_type.compare("info")) {
             LOG_DEBUG("type info");
             lv_obj_add_style(btn, &style_btn_blue, 0);
-            btn_bg = pono::color_accent_primary;            // cyan, dark text
+            btn_bg = pono::color_accent_primary;            // lamp, dark text
           } else if (!prompt_button_type.compare("primary")) {
             LOG_DEBUG("type primary");
             lv_obj_add_style(btn, &style_btn_blue, 0);
-            btn_bg = pono::color_accent_primary;            // cyan, dark text
+            btn_bg = pono::color_accent_primary;            // lamp, dark text
           } else { // unspecified type -> neutral dark fill, light text
             LOG_DEBUG("type default");
             lv_obj_add_style(btn, &style_btn_dark_grey, 0);

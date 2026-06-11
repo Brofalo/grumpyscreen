@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-# gen_pono_spinner.py - bake a tapered cyan "comet" spinner into an LVGL
+# gen_pono_spinner.py - bake a tapered lamp-amber "comet" spinner into an LVGL
 # canned-animation frame array (lv_animimg). Pre-rendered frames mean playback
 # on the printer is a per-frame bitmap blit (near-zero CPU, no vector math),
 # which is what lets a weak 2-core A7 with no GPU show a smooth loader.
@@ -18,7 +18,7 @@ from PIL import Image
 SIZE = 88          # on-screen px (square)
 SS = 3             # supersample for anti-aliasing
 N = 24             # frames in one revolution (15 deg/frame -> smooth at 1s)
-CYAN = (0, 229, 255)   # color_accent_primary #00e5ff
+LAMP = (226, 161, 60)  # color_accent_primary #e2a13c (the lamp)
 TAIL_DEG = 290.0   # comet length; the remaining ~70 deg is the transparent gap
 Rc = 34.0          # ring centre radius (in on-screen px)
 HW = 4.5           # ring half-width at the head (in on-screen px)
@@ -94,9 +94,9 @@ def main():
         head = (90.0 - i * (360.0 / N)) % 360.0
         a = (np.clip(frame_alpha(head), 0, 1) * 255).astype(np.uint8)
         rgba = np.zeros((W, W, 4), np.uint8)
-        rgba[..., 0] = CYAN[0]
-        rgba[..., 1] = CYAN[1]
-        rgba[..., 2] = CYAN[2]
+        rgba[..., 0] = LAMP[0]
+        rgba[..., 1] = LAMP[1]
+        rgba[..., 2] = LAMP[2]
         rgba[..., 3] = a
         img = Image.fromarray(rgba, 'RGBA').resize((SIZE, SIZE), Image.LANCZOS)
         frames.append(img)

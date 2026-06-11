@@ -63,11 +63,11 @@ void boot_set_progress(BootHandles *h, int pct, const char *stage);
 // be null, callers must guard. The sim ignores it (passes nullptr).
 struct HomeHandles {
   // live-updated values
-  lv_obj_t *arc = nullptr;         // progress arc (lv_arc_set_value)
+  lv_obj_t *arc = nullptr;         // progress arc (printing layout only; null when idle)
   lv_obj_t *pct = nullptr;         // "47%"
   lv_obj_t *layer = nullptr;       // "layer 84 / 180"
   lv_obj_t *job = nullptr;         // job name
-  lv_obj_t *material = nullptr;    // material/profile line
+  lv_obj_t *material = nullptr;    // material/profile line (top bar)
   lv_obj_t *eta = nullptr;         // "1:12 left"
   lv_obj_t *nozzle = nullptr;      // nozzle current-temp number
   lv_obj_t *nozzle_set = nullptr;  // nozzle target "/250"
@@ -75,6 +75,11 @@ struct HomeHandles {
   lv_obj_t *bed_set = nullptr;     // bed target "/60"
   lv_obj_t *state_pill = nullptr;  // PRINTING pill (hide when idle)
   lv_obj_t *state_dot = nullptr;   // pulsing beat inside the pill (anim gated to printing)
+  // the dictionary entry (idle layout only; null when printing)
+  lv_obj_t *hero = nullptr;        // the entry panel, tappable: advance the gloss
+  lv_obj_t *def = nullptr;         // gloss text ("in perfect order")
+  lv_obj_t *defpos = nullptr;      // sense tag ("nvs." / "vs.")
+  lv_obj_t *defn = nullptr;        // counter ("27 / 43")
   // tappable launchers (app attaches event cbs)
   lv_obj_t *tile_tune = nullptr;
   lv_obj_t *tile_nozzle = nullptr;
@@ -84,6 +89,17 @@ struct HomeHandles {
   lv_obj_t *qa[4] = {nullptr, nullptr, nullptr, nullptr}; // Move/Filament/Files/Fans
   lv_obj_t *tile_more = nullptr;  // 5th nav tile -> More menu
 };
+
+// ---- The 43 ------------------------------------------------------------
+// Pukui-Elbert senses 1 and 2 of pono, exactly 43 glosses: the theme of every
+// Pono surface, one meaning at a time. The idle cockpit hero is the dictionary
+// entry: today's gloss (day-seeded), tap to advance, with the NN / 43 counter.
+int gloss_count();
+int gloss_today_index();              // day-seeded: days-since-epoch % 43
+const char *gloss_text(int ix);
+const char *gloss_pos(int ix);        // "nvs." (senses 1) or "vs." (sense 2)
+// Update the entry's three labels for index ix (wraps modulo). Null-safe.
+void home_set_gloss(HomeHandles *h, int ix);
 
 // Build the full 480x272 home cockpit into `parent` (a screen-sized object).
 // Returns the arc; if `out` is non-null, fills it with live handles + tap
@@ -196,9 +212,14 @@ struct MeshHandles {
 };
 void build_mesh(lv_obj_t *parent, MeshHandles *h = nullptr);
 
-// System info screen: firmware version, network, uptime (app fills the values).
+// System info screen: firmware version, update lane, network, uptime (app
+// fills the values). The update row carries a live status ("up to date" /
+// "alpha.174 available") and an Install chip the app reveals when a newer
+// build is published on the firmware host.
 struct SystemHandles {
   lv_obj_t *back = nullptr, *version = nullptr, *ip = nullptr, *host = nullptr, *uptime = nullptr, *mcu = nullptr;
+  lv_obj_t *update_status = nullptr;  // "checking..." / "up to date" / "alpha.NNN available"
+  lv_obj_t *btn_install = nullptr;    // lamp chip, hidden until an update is available
 };
 void build_system(lv_obj_t *parent, SystemHandles *h = nullptr);
 

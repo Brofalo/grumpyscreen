@@ -19,7 +19,7 @@ static void hal_init(lv_color_t p, lv_color_t s);
 #include "hv/hlog.h"
 #include "config.h"
 #include "logger.h"        // LOG_ERROR/LOG_INFO (was reaching here transitively via a retired panel)
-#include "pono_theme.h"   // Pono Print Phase A - Westworld Dark token theme
+#include "pono_theme.h"   // Pono Print Phase A - Night Watch token theme
 
 #include <algorithm>
 
@@ -82,12 +82,12 @@ static void hal_init(lv_color_t primary, lv_color_t secondary) {
 #endif
     lv_disp_set_theme(disp, th);
 
-    // Pono Print Phase A: register Westworld Dark token theme on top.
+    // Pono Print Phase A: register Night Watch token theme on top.
     // pono::theme_init builds an lv_theme_t with default as parent and an
     // apply_cb that overrides per-widget styles using the tokens declared
     // in src/pono_theme.h. New widgets inherit Pono defaults; existing
     // hardcoded panel styling (Phase A.4 refactor scope) still wins where
-    // explicitly set. Theme stays Westworld Dark for Phase A; theme
+    // explicitly set. Theme stays the Night Watch; theme
     // variants (Mainsail Blue / High-contrast / Pono Cyan-on-Black) ship
     // in Phase G per docs/design/pono-print-ui-design.md §4.6.
     pono::theme_init(disp);

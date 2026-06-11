@@ -102,6 +102,7 @@ class MainPanel : public NotifyConsumer {
   void back_to_home();                    // hide all sub-screens, show the cockpit
   void hide_busy_overlay();               // Pono: drop the shared busy/cal overlay + clear cal_overlay_ (so consume() can re-show cal after a manual action)
   void populate_system();                 // fill the System screen (version/ip/uptime)
+  void check_update();                    // async: compare the firmware host's published build to /etc/pono-version
   void confirm(const char *msg, std::function<void()> action);  // modal confirm before destructive actions
   static void _confirm_tap(lv_event_t *e);
   void render_bed_mesh(const json &bm);   // draw the heatmap from a bed_mesh status object
@@ -128,6 +129,9 @@ class MainPanel : public NotifyConsumer {
   bool home_printing_ = false;    // last-known printing state (ETA + pulse gating)
   bool home_paused_ = false;      // last-known paused state (Resume vs Pause button)
   bool home_pulsing_ = false;     // is the state-dot pulse currently running
+  int gloss_ix_ = -1;             // dictionary-entry position once the operator advances it (-1 = today's)
+  bool update_checking_ = false;  // a version check is in flight (guard re-entry)
+  std::string update_avail_;      // newer published version ("0.0.1-alpha.NNN"), empty = none
   bool busy_ = false;             // idle_timeout.state=="Printing" (print OR cal) -> keep panel awake
   std::string cal_msg_;           // display_status.message (cal step text via SET_DISPLAY_TEXT)
   std::string cal_overlay_text_;  // text currently on the cal overlay (skip redundant redraws)

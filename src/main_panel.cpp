@@ -9,6 +9,9 @@
 
 #include <string>
 #include <cstdint>
+#include <cstdio>        // popen: version check against the firmware host
+#include <cstdlib>       // system: run update-pono-print from the Install chip
+#include <thread>        // network work off the LVGL thread (labels updated under lv_lock)
 
 LV_IMG_DECLARE(filament_img);
 LV_IMG_DECLARE(light_img);
@@ -240,9 +243,11 @@ void MainPanel::consume(json &j) {
           home_bed_ != rend_bed_ || home_bed_set_ != rend_bed_set_) {
         if (home_h.nozzle) {
           lv_label_set_text(home_h.nozzle, fmt::format("{}", home_nozzle_).c_str());
+          // phosphor cool, lamp while heat is at work, alarm only past the
+          // hotend's 280C rating (mirrors build_home's temp_card semantics)
           lv_obj_set_style_text_color(home_h.nozzle,
-            home_nozzle_ >= 240 ? pono::color_state_error :
-            home_nozzle_ >= 45  ? pono::color_state_warning : pono::color_text_primary, 0);
+            home_nozzle_ >= 280 ? pono::color_state_error :
+            home_nozzle_ >= 45  ? pono::color_accent_primary : pono::color_accent_secondary, 0);
         }
         if (home_h.nozzle_set) {
           lv_label_set_text(home_h.nozzle_set,
@@ -253,7 +258,7 @@ void MainPanel::consume(json &j) {
           lv_label_set_text(home_h.bed, fmt::format("{}", home_bed_).c_str());
           lv_obj_set_style_text_color(home_h.bed,
             home_bed_ >= 100 ? pono::color_state_error :
-            home_bed_ >= 45  ? pono::color_state_warning : pono::color_text_primary, 0);
+            home_bed_ >= 45  ? pono::color_accent_primary : pono::color_accent_secondary, 0);
         }
         if (home_h.bed_set) {
           lv_label_set_text(home_h.bed_set,
@@ -309,7 +314,7 @@ void MainPanel::consume(json &j) {
       if (printing || busy_) lv_disp_trig_activity(NULL);
       if (printing) {  // progress + layer + ETA only while a job runs
         int pct = (int)(home_progress_ * 100.0 + 0.5);
-        lv_arc_set_value(home_h.arc, pct);
+        if (home_h.arc) lv_arc_set_value(home_h.arc, pct);  // idle layout has no arc (the entry lives there)
         if (home_h.pct) {
           lv_label_set_text(home_h.pct, fmt::format("{}%", pct).c_str());
           lv_obj_align_to(home_h.pct, home_h.arc, LV_ALIGN_CENTER, 0, 0);
@@ -486,6 +491,11 @@ void MainPanel::_home_tap(lv_event_t *e) {
   else if (t == h.tile_nozzle || t == h.tile_bed) s->show_pono(s->temp_scr_);   // temps
   else if (t == h.tile_tune) s->show_pono(s->tune_scr_);  // Tune
   else if (t == h.tile_more) s->show_pono(s->more_scr_);  // More menu
+  else if (t == h.hero) {                               // the dictionary entry: next gloss
+    if (s->gloss_ix_ < 0) s->gloss_ix_ = pono::gloss_today_index();
+    s->gloss_ix_ = (s->gloss_ix_ + 1) % pono::gloss_count();
+    pono::home_set_gloss(&h, s->gloss_ix_);
+  }
 }
 
 // ---- Pono native sub-screen management ----
@@ -528,7 +538,7 @@ void MainPanel::create_pono_screens() {
     tune_h_.back, tune_h_.standard, tune_h_.omega,
     tune_h_.cals[0], tune_h_.cals[1], tune_h_.cals[2], tune_h_.cals[3], tune_h_.cals[4],
     more_h_.back, more_h_.wifi, more_h_.expert, more_h_.mesh, more_h_.led, more_h_.system, more_h_.power,
-    mesh_h_.back, system_h_.back,
+    mesh_h_.back, system_h_.back, system_h_.btn_install,
     lights_h_.back, lights_h_.case_off, lights_h_.case_50, lights_h_.case_full,
     lights_h_.hot_off, lights_h_.hot_50, lights_h_.hot_full,
     power_h_.back, power_h_.restart_klipper, power_h_.restart_fw, power_h_.reboot, power_h_.shutdown,
@@ -648,6 +658,92 @@ void MainPanel::populate_system() {
 
   { std::ifstream f("/sys/class/thermal/thermal_zone0/temp"); long mdeg = -1; f >> mdeg;
     if (system_h_.mcu) lv_label_set_text(system_h_.mcu, mdeg > 0 ? fmt::format("{:.1f} C", mdeg / 1000.0).c_str() : "--"); }
+
+  check_update();
+}
+
+// Run a shell command, return trimmed stdout (empty on failure).
+static std::string sh_capture(const std::string &cmd) {
+  std::string out;
+  FILE *p = popen(cmd.c_str(), "r");
+  if (!p) return out;
+  char buf[256];
+  while (fgets(buf, sizeof buf, p)) out += buf;
+  pclose(p);
+  while (!out.empty() && (out.back() == '\n' || out.back() == '\r' || out.back() == ' '))
+    out.pop_back();
+  return out;
+}
+
+// Compare the firmware host's published build for this device's update channel
+// against /etc/pono-version, async. Network runs on a worker thread; label
+// writes take lv_lock. The System screen's objects live for the app's
+// lifetime (screens are built once, never deleted), so the detached thread's
+// handles cannot dangle.
+void MainPanel::check_update() {
+  if (update_checking_) return;
+  update_checking_ = true;
+  if (system_h_.update_status) {
+    lv_label_set_text(system_h_.update_status, "checking...");
+    lv_obj_set_style_text_color(system_h_.update_status, pono::color_text_secondary, 0);
+    lv_obj_align(system_h_.update_status, LV_ALIGN_RIGHT_MID, -12, 0);
+  }
+  if (system_h_.btn_install) lv_obj_add_flag(system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
+
+  std::thread([this] {
+    std::string lane = sh_capture("config-manager update release 2>/dev/null");
+    if (lane.empty()) lane = "nightly";
+
+    std::string current;
+    { std::ifstream f("/etc/pono-version"); std::string line;
+      const std::string key = "DISTRO_VERSION=";
+      while (std::getline(f, line)) {
+        if (line.rfind(key, 0) == 0) {
+          current = line.substr(key.size());
+          if (!current.empty() && current.front() == '"') current.erase(0, 1);
+          if (!current.empty() && current.back() == '"') current.pop_back();
+          break;
+        }
+      }
+    }
+
+    std::string latest, status;
+    bool avail = false;
+    if (lane == "nightly" || lane == "stable") {
+      // version.txt: "pono-print-0.0.1-alpha.172 @ b0ebeff (run 172)".
+      // Canonical host first, the fallback host serves the same bucket.
+      std::string vt = sh_capture(
+        "curl -sf -m 10 https://dl.pono-print.com/pono-print/" + lane + "/version.txt"
+        " || curl -sf -m 10 https://dl.ponodata.com/pono-print/" + lane + "/version.txt");
+      const std::string pfx = "pono-print-";
+      if (vt.rfind(pfx, 0) == 0) {
+        latest = vt.substr(pfx.size());
+        size_t sp = latest.find(' ');
+        if (sp != std::string::npos) latest = latest.substr(0, sp);
+      }
+      if (latest.empty())         status = "check failed (" + lane + ")";
+      else if (latest == current) status = "up to date (" + lane + ")";
+      else                        { status = latest + " available"; avail = true; }
+    } else {
+      // an explicit tag pin: the operator chose a version, don't second-guess it
+      status = "pinned: " + lane;
+    }
+
+    std::lock_guard<std::mutex> lk(lv_lock);
+    update_avail_ = avail ? latest : "";
+    if (system_h_.update_status) {
+      lv_label_set_text(system_h_.update_status, status.c_str());
+      lv_obj_set_style_text_color(system_h_.update_status,
+        avail ? pono::color_accent_primary : pono::color_text_secondary, 0);
+      // shift left of the INSTALL chip when it is shown
+      lv_obj_align(system_h_.update_status, LV_ALIGN_RIGHT_MID, avail ? -106 : -12, 0);
+    }
+    if (system_h_.btn_install) {
+      if (avail) lv_obj_clear_flag(system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
+      else       lv_obj_add_flag(system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
+    }
+    update_checking_ = false;
+  }).detach();
 }
 
 void MainPanel::_sub_tap(lv_event_t *e) {
@@ -767,6 +863,33 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     pono::seg_highlight(cb, 3, s->led_case_level_);
     pono::seg_highlight(hb, 3, s->led_hot_level_);
     s->show_pono(s->lights_scr_); return;
+  }
+  // Update install: confirm, then run the device's own update path. On
+  // success update-pono-print flashes the spare slot and reboots the machine
+  // itself, so the busy overlay is honestly the last thing this boot shows.
+  if (t == s->system_h_.btn_install) {
+    if (s->update_avail_.empty()) return;
+    std::string msg = "Install " + s->update_avail_ +
+                      "? The printer flashes the spare slot and reboots itself.";
+    s->confirm(msg.c_str(), [s]{
+      pono::busy_show("Updating - do not power off");
+      std::thread([s]{
+        int rc = system("update-pono-print >>/tmp/pono-update-ui.log 2>&1");
+        // Reached only on failure (success ends in reboot). Surface the fault.
+        std::lock_guard<std::mutex> lk(s->lv_lock);
+        pono::busy_hide();
+        if (s->system_h_.update_status) {
+          lv_label_set_text(s->system_h_.update_status,
+            rc == 0 ? "rebooting..." : "FAULT: update failed");
+          lv_obj_set_style_text_color(s->system_h_.update_status,
+            rc == 0 ? pono::color_accent_primary : pono::color_state_error, 0);
+          lv_obj_align(s->system_h_.update_status, LV_ALIGN_RIGHT_MID, -12, 0);
+        }
+        if (rc != 0 && s->system_h_.btn_install)
+          lv_obj_add_flag(s->system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
+      }).detach();
+    });
+    return;
   }
   // Power actions
   if (t == s->power_h_.restart_klipper) { s->confirm("Restart Klipper?",       [s]{ s->ws.gcode_script("RESTART"); }); return; }
@@ -906,7 +1029,7 @@ void MainPanel::populate_files() {
 void MainPanel::attach_home_taps() {
   lv_obj_t *taps[] = { home_h.btn_pausestop, home_h.btn_cancel, home_h.qa[0], home_h.qa[1],
                        home_h.qa[2], home_h.qa[3], home_h.tile_nozzle, home_h.tile_bed,
-                       home_h.tile_tune, home_h.tile_more };
+                       home_h.tile_tune, home_h.tile_more, home_h.hero };
   for (lv_obj_t *t : taps) if (t) lv_obj_add_event_cb(t, &MainPanel::_home_tap, LV_EVENT_CLICKED, this);
 }
 
@@ -938,6 +1061,9 @@ void MainPanel::rebuild_home() {
   lv_obj_clean(home_scr);                  // drop old children + their anims
   pono::build_home(home_scr, m, &home_h);  // repopulates home_h with fresh handles
   attach_home_taps();
+  // keep the operator's advanced gloss across layout flips (a print ends, the
+  // entry returns where they left it; -1 = the day's gloss, already built in)
+  if (!m.printing && gloss_ix_ >= 0) pono::home_set_gloss(&home_h, gloss_ix_);
   home_pulsing_ = home_printing_ && !home_paused_;  // build_home pulses only while actively printing
   // fresh label handles -> force the next consume() to repaint temps/fans into them
   rend_nozzle_ = rend_nozzle_set_ = rend_bed_ = rend_bed_set_ = INT_MIN;
