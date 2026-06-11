@@ -8,13 +8,13 @@ This is the UI binary that ships in the Pono Print SWU build.
 
 | Path | What |
 |---|---|
-| `src/pono_theme.h` | 30-token design system (11 colors + 9 fonts + spacing + radii + frame + motion durations) per Pono Print UI/UX design spec §1 |
+| `src/pono_theme.h` | Night Watch token registry (11 colors + 9 fonts + spacing + radii + frame + motion durations) |
 | `src/pono_theme.cpp` | Token definitions + LVGL theme provider with per-widget-class `apply_cb` |
 | `src/main.cpp` | Entry. Calls `pono::theme_init(disp)` after `lv_init()` |
-| `src/*_panel.cpp` | 13 screen panels (Phase A.4 refactor scope: token-ize all hardcoded RGB) |
-| `assets/pono/fonts/` | Compiled LVGL .c font files for Inter + JetBrains Mono at 9 sizes |
+| `src/pono_home.cpp` | The cockpit + every native sub-screen (one grid, one token set) |
+| `assets/pono/fonts/` | Compiled LVGL .c font files for IBM Plex Mono + Instrument Serif |
 | `sim/` | SDL2 desktop simulator harness for iteration without flashing |
-| `tools/regen_pono_fonts.sh` | Inter + JBM regen via `lv_font_conv` (one-shot, results committed) |
+| `tools/regen_pono_fonts.sh` | Font regen via `lv_font_conv` (one-shot, results committed) |
 | `themes/` | Legacy 2-color JSON themes (kept for compat; superseded by `pono_theme.cpp`) |
 
 ## Quick build (printer target via Yocto)
@@ -58,7 +58,7 @@ Source-tree provenance (the legal credit chain required by GPL-3 §5):
 - `jamesturton/grumpyscreen` is itself a derivative of [`ballaswag/guppyscreen`](https://github.com/ballaswag/guppyscreen).
 - The LVGL framework is licensed MIT and embedded as a submodule.
 - Material Design Icons by [pictogrammers.com](https://pictogrammers.com/library/mdi/), Apache 2.0.
-- Inter font by [Rasmus Andersson](https://github.com/rsms/inter), OFL.
-- JetBrains Mono font by [JetBrains](https://www.jetbrains.com/lp/mono/), OFL.
+- IBM Plex Mono font by [IBM](https://github.com/IBM/plex), OFL.
+- Instrument Serif font by [Instrument](https://github.com/Instrument/instrument-serif), OFL.
 
 Source distribution: this repository at https://github.com/Brofalo/grumpyscreen is the canonical source for the binary that ships in Pono Print SWU images. Submodule pinning preserves upstream LVGL and lv_drivers SRCREVs at the commits used for builds.
