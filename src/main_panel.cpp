@@ -119,7 +119,10 @@ void MainPanel::init(json &j) {
   // under /result/status. Moonraker only sends a field in a delta when it CHANGES,
   // so without this a connect to an already-printing (or already-homed) machine
   // shows the idle layout, 0% progress, and "--" position until state next moves.
-  if (home_h.arc) {
+  // Gate on state_pill: it exists in BOTH layouts. The arc does not (the idle
+  // hero is the dictionary entry), so an arc gate would dead-end the whole
+  // live pipeline on any idle boot.
+  if (home_h.state_pill) {
     auto V = [&](const char *p) { return j[json::json_pointer(p)]; };
     { auto v = V("/result/status/virtual_sdcard/progress");        if (!v.is_null()) home_progress_    = v.template get<double>(); }
     { auto v = V("/result/status/print_stats/print_duration");     if (!v.is_null()) home_duration_    = v.template get<double>(); }
@@ -183,8 +186,9 @@ void MainPanel::consume(json &j) {
     if (li != rend_led_img_) { led_btn.set_image(li); rend_led_img_ = li; } }
 
   // --- Pono cockpit: cache live values, rebuild on the idle<->printing flip
-  // (build_home is sim-verified for both states), update in place otherwise. ---
-  if (home_h.arc) {
+  // (build_home is sim-verified for both states), update in place otherwise.
+  // Gated on state_pill, present in both layouts (the arc is printing-only). ---
+  if (home_h.state_pill) {
     auto V = [&](const char *p) { return j[json::json_pointer(p)]; };
     { auto v = V("/params/0/virtual_sdcard/progress");        if (!v.is_null()) home_progress_    = v.template get<double>(); }
     { auto v = V("/params/0/print_stats/print_duration");     if (!v.is_null()) home_duration_    = v.template get<double>(); }
