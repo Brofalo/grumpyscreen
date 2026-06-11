@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // pono_home.cpp - Pono Print home cockpit builder (see pono_home.h)
 //
-// The Night Watch on glass: the printer's screen is the engine-room gauge
+// Kukui on glass: the printer's screen is the engine-room gauge
 // panel of the night bridge. Warm black room, one amber lamp on the action
 // at hand, phosphor needles for every live number, mono caps for every
 // label, hairline rules, machined corners. The word pono keeps the log
@@ -797,7 +797,7 @@ void build_temps(lv_obj_t *parent, TempsHandles *h) {
 // Color as function: probed Z deviation, cold -> hot. The ramp runs cold steel
 // (low) through phosphor (level) to lamp and alarm (high), so "high spot" reads
 // in the same language as every other warning on the panel. Universally-read
-// cold/hot semantics, Night Watch vocabulary.
+// cold/hot semantics, Kukui vocabulary.
 static lv_color_t heat_color(float t) {
   if (t < 0.f) t = 0.f;
   if (t > 1.f) t = 1.f;

@@ -8,7 +8,7 @@ This is the UI binary that ships in the Pono Print SWU build.
 
 | Path | What |
 |---|---|
-| `src/pono_theme.h` | Night Watch token registry (11 colors + 9 fonts + spacing + radii + frame + motion durations) |
+| `src/pono_theme.h` | Kukui token registry (11 colors + 9 fonts + spacing + radii + frame + motion durations) |
 | `src/pono_theme.cpp` | Token definitions + LVGL theme provider with per-widget-class `apply_cb` |
 | `src/main.cpp` | Entry. Calls `pono::theme_init(disp)` after `lv_init()` |
 | `src/pono_home.cpp` | The cockpit + every native sub-screen (one grid, one token set) |

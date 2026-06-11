@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // pono_theme.cpp - Pono Print design token definitions + LVGL theme provider
 //
-// The Night Watch on glass. Tokens are compile-time constants; the theme
+// Kukui on glass. Tokens are compile-time constants; the theme
 // provider registers an lv_theme_t whose apply_cb sets per-widget-type
 // styles using the tokens.
 //
@@ -25,7 +25,7 @@
 
 namespace pono {
 
-// ---- Color token definitions (Night Watch) ----
+// ---- Color token definitions (Kukui) ----
 const lv_color_t color_surface_base     = LV_COLOR_MAKE(0x0d, 0x0b, 0x09);
 const lv_color_t color_surface_raised   = LV_COLOR_MAKE(0x11, 0x0f, 0x0c);
 const lv_color_t color_surface_elevated = LV_COLOR_MAKE(0x18, 0x15, 0x10);
@@ -125,7 +125,7 @@ void theme_init(lv_disp_t *disp) {
 // ---- LV_PALETTE_* to Pono token mapping ----
 //
 // User-configured temp-sensor color stores an int that casts to lv_palette_t.
-// Bridge that int to a Night Watch token so user configs render with Pono
+// Bridge that int to a Kukui token so user configs render with Pono
 // coherence instead of LVGL stock palette colors. Cool palette picks land on
 // phosphor (instrument), warm picks on the lamp family, reds on alarm.
 lv_color_t color_for_palette(lv_palette_t p) {

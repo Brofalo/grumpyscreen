@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # regen_pono_fonts.sh - Regenerate Pono Print font .c files from TTF source.
 #
-# Night Watch face set (pono-design canon): IBM Plex Mono carries every
+# Kukui face set (pono-design canon): IBM Plex Mono carries every
 # label, readout, and numeral (the instrument lettering); Instrument Serif
 # carries the two logbook moments (the pono dictionary entry on the idle
 # cockpit, the dedication + motto on the boot screen). The Inter + JetBrains

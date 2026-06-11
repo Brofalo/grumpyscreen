@@ -2,7 +2,7 @@
 #include "state.h"
 #include "utils.h"
 #include "logger.h"
-#include "pono_theme.h"  // Night Watch semantic tokens
+#include "pono_theme.h"  // Kukui semantic tokens
 #include "pono_anim.h"   // busy_hide: a prompt must not sit behind the cal/busy overlay
 
 // uncomment for helper boxes

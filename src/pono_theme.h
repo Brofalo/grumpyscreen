@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // pono_theme.h - Pono Print design token registry
 //
-// The Night Watch on glass (pono-design canon, 2026-06-10): warm black,
+// Kukui on glass (the lamp; pono-design canon): warm black,
 // one amber lamp, phosphor instrument readouts, mono lettering, hairline
 // rules, machined corners. The lamp is light, not paint: it marks the
 // action at hand, live attention, and focus. Phosphor marks live numbers.
@@ -20,7 +20,7 @@
 
 namespace pono {
 
-// ---- Color tokens (Night Watch) ----
+// ---- Color tokens (Kukui) ----
 extern const lv_color_t color_surface_base;     // #0d0b09 the room (warm black)
 extern const lv_color_t color_surface_raised;   // #110f0c panel
 extern const lv_color_t color_surface_elevated; // #181510 lift (hover/raised)
@@ -98,7 +98,7 @@ void theme_init(lv_disp_t *disp);
 // ---- LV_PALETTE_* to Pono token mapping ----
 //
 // Bridges user-configured int palette indices (LV_PALETTE_RED through
-// LV_PALETTE_GREY, plus LV_PALETTE_NONE = 0xff sentinel) to the Night Watch
+// LV_PALETTE_GREY, plus LV_PALETTE_NONE = 0xff sentinel) to the Kukui
 // token cluster. Used by main_panel temp sensor color config where the
 // user-supplied int is cast to lv_palette_t.
 //
