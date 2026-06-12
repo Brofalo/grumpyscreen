@@ -1,0 +1,14 @@
+name: gate
+on:
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gate:
+    uses: Brofalo/gatekeeper/.github/workflows/reusable-ci.yml@v1
+    with:
+      run_semgrep: true
+      run_dependency_review: true
+      runner_labels: '["ubuntu-latest"]'
