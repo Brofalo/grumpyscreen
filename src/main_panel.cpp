@@ -764,7 +764,18 @@ void MainPanel::_sub_tap(lv_event_t *e) {
       t == s->more_h_.back || t == s->settings_h_.back ||
       t == s->mesh_h_.back || t == s->system_h_.back || t == s->power_h_.back ||
       t == s->lights_h_.back) { s->back_to_home(); return; }
-  // Move jog (relative)
+  // Move jog (relative). Belt to apply_move_gates(): even if a tap lands
+  // before the disable repaints (state flip races the finger), motion
+  // commands never dispatch while actively printing, and motors-off never
+  // dispatches while printing or paused.
+  {
+    const bool printing = s->home_printing_ && !s->home_paused_;
+    const bool held = s->home_printing_ || s->home_paused_;
+    const bool is_motion = (t == mv.xplus || t == mv.xminus || t == mv.yplus ||
+                            t == mv.yminus || t == mv.zplus || t == mv.zminus ||
+                            t == mv.home_xy || t == mv.home_all);
+    if ((printing && is_motion) || (held && t == mv.motors_off)) return;
+  }
   double st = s->move_step_;
   if (t == mv.xplus)  { s->ws.gcode_script(fmt::format("G91\nG1 X{} F6000\nG90", st)); return; }
   if (t == mv.xminus) { s->ws.gcode_script(fmt::format("G91\nG1 X-{} F6000\nG90", st)); return; }
@@ -1072,6 +1083,33 @@ void MainPanel::rebuild_home() {
   // fresh label handles -> force the next consume() to repaint temps/fans into them
   rend_nozzle_ = rend_nozzle_set_ = rend_bed_ = rend_bed_set_ = INT_MIN;
   for (int i = 0; i < 5; i++) rend_fan_[i] = INT_MIN;
+  apply_move_gates();  // print state changed: re-gate the Move screen with it
+}
+
+// Mid-print motion is the one tap that wrecks a job from the glass: G28 drags
+// the head through the part, a 100mm jog ditto, M84 drops the steppers and
+// loses position. Jog + home are disabled while actively PRINTING (jogging
+// while PAUSED is a real workflow - inspection, filament - and RESUME
+// restores position). Motors-off gates while printing OR paused: position
+// loss makes the resume wrong either way. Belt and suspenders with the
+// _sub_tap guard; the dim makes the gate visible on the glass.
+void MainPanel::apply_move_gates() {
+  pono::MoveHandles &mv = move_h_;
+  const bool printing = home_printing_ && !home_paused_;
+  const bool held = home_printing_ || home_paused_;
+  lv_obj_t *motion[] = {mv.xplus, mv.xminus, mv.yplus, mv.yminus,
+                        mv.zplus, mv.zminus, mv.home_xy, mv.home_all};
+  for (lv_obj_t *o : motion) {
+    if (!o) continue;
+    lv_obj_set_style_opa(o, LV_OPA_40, LV_PART_MAIN | LV_STATE_DISABLED);
+    if (printing) lv_obj_add_state(o, LV_STATE_DISABLED);
+    else          lv_obj_clear_state(o, LV_STATE_DISABLED);
+  }
+  if (mv.motors_off) {
+    lv_obj_set_style_opa(mv.motors_off, LV_OPA_40, LV_PART_MAIN | LV_STATE_DISABLED);
+    if (held) lv_obj_add_state(mv.motors_off, LV_STATE_DISABLED);
+    else      lv_obj_clear_state(mv.motors_off, LV_STATE_DISABLED);
+  }
 }
 
 void MainPanel::handle_homing_cb(lv_event_t *event) {
