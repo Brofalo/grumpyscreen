@@ -37,7 +37,13 @@ class KWebSocketClient : public hv::WebSocketClient {
   void register_method_callback(std::string resp_method,
 				std::string handler_name,
 				std::function<void(json&)> cb);
-  
+
+  // Milliseconds since the last notify_status_update landed, -1 before the
+  // first one. Monotonic clock; written on the ws thread, read anywhere.
+  // Feeds the UI's stale watchdog: an open socket whose notifies stopped
+  // (wedged Moonraker) must not keep rendering readouts as live.
+  int64_t ms_since_status_update() const;
+
  private:
   std::map<uint32_t, std::function<void(json&)>> callbacks;
   std::map<uint32_t, NotifyConsumer*> consumers;
@@ -47,6 +53,7 @@ class KWebSocketClient : public hv::WebSocketClient {
   // method_name : { <unique-name-cb-handler> :handler-cb }
   std::map<std::string, std::map<std::string, std::function<void(json&)>>> method_resp_cbs;
   std::atomic_uint64_t id;
+  std::atomic<int64_t> last_status_ms_{-1};  // steady-clock stamp of the last status notify
 };
 
 #endif //__KWEBSOCKET_CLIENT_H__

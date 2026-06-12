@@ -158,6 +158,12 @@ int main(int argc, char **argv) {
     pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
   } else if (screen == "paused") {
     pono::build_home(lv_scr_act(), pono::demo_home_paused_model());
+  } else if (screen == "stale") {
+    // T6 demo: mid-print with the readout-stale flag up. The app's watchdog
+    // raises this when the status stream goes quiet on an open socket.
+    static pono::HomeHandles hh;
+    pono::build_home(lv_scr_act(), pono::demo_home_model(), &hh);
+    pono::home_set_stale(&hh, 23);
   } else if (screen == "spinner") {
     // Canned-animation demo: a baked comet spinner over a heating wait state.
     lv_obj_t *scr = lv_scr_act();

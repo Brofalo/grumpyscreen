@@ -75,6 +75,7 @@ struct HomeHandles {
   lv_obj_t *bed_set = nullptr;     // bed target "/60"
   lv_obj_t *state_pill = nullptr;  // PRINTING pill (hide when idle)
   lv_obj_t *state_dot = nullptr;   // pulsing beat inside the pill (anim gated to printing)
+  lv_obj_t *stale = nullptr;       // readout-stale flag (printing layout only; hidden while fresh)
   // the dictionary entry (idle layout only; null when printing)
   lv_obj_t *hero = nullptr;        // the entry panel, tappable: advance the gloss
   lv_obj_t *def = nullptr;         // gloss text ("in perfect order")
@@ -110,6 +111,11 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out = nu
 // the idle<->printing transition; a per-frame restart would stutter the beat.
 // Keeps the always-on idle dashboard at zero animation cost.
 void set_state_pulse(lv_obj_t *dot, bool on);
+
+// Show or hide the readout-stale flag (instrument-glass law: stale flags
+// itself). age_s >= 0 shows "READOUT STALE Ns" over the ring; negative
+// hides it. Null-safe; a no-op on the idle layout, which has no flag.
+void home_set_stale(HomeHandles *h, int age_s);
 
 // ---- Native sub-screen handles (the app wires actions + live values) ----
 struct MoveHandles {
