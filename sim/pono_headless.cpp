@@ -115,8 +115,7 @@ int main(int argc, char **argv) {
     lv_obj_set_style_pad_all(scr, 0, 0);
     static pono::BootHandles bh;
     pono::build_boot(scr, &bh);
-    lv_label_set_text(bh.joke,
-        "First layer is like a good poke bowl: get the base right or the whole thing falls apart.");
+    // joke retired 2026-06-11: the boot screen is the flag.
     pono::boot_set_progress(&bh, 45, "Reading printer objects...");
   } else if (screen == "move") {
     pono::build_move(lv_scr_act());

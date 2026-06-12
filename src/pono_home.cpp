@@ -1186,72 +1186,45 @@ void build_files(lv_obj_t *parent, FilesHandles *h) {
 }
 
 // ---- boot / connecting screen ----------------------------------------------
-// Static Hawaii flag hero + a cycling island joke + a real progress bar the
-// app drives from the live connect stages. The flag IS the identity mark
-// (Jack: "I just want the HI flag"); the dedication signs the watch off.
+// The boot screen IS the Hawaii state flag (Jack, 2026-06-11: "ALL the boot
+// screens to just be the Hawaiian Flag"). Frame, wordmark, joke cycle, and
+// comet spinner are retired; what remains under the flag is one status line
+// and a real progress bar driven by the live connect stages, because this is
+// also the disconnected screen and silent waiting is the nobody-home tell
+// (kb/mediums.md law 7). The dedication signs the watch off, kept.
 void build_boot(lv_obj_t *parent, BootHandles *h) {
   lv_obj_set_style_bg_color(parent, color_surface_base, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-  // Hawaii flag hero, framed, top-centre (dropped a little lower now that it
-  // carries the top half alone).
-  const int fw = pono_flag_w, fh = pono_flag_h;          // 192 x 96
-  const int fx = (480 - fw) / 2, fy = 28;
-  lv_obj_t *frame = card(parent, fx - 2, fy - 2, fw + 4, fh + 4, color_surface_elevated);
-  hairline(frame, opa_border_medium);
+  // The flag, frameless, near full-bleed.
+  const int fw = pono_flag_boot_w, fh = pono_flag_boot_h;  // 416 x 208
+  const int fx = (480 - fw) / 2, fy = 8;
   lv_obj_t *flag = lv_img_create(parent);
-  lv_img_set_src(flag, &pono_flag);
+  lv_img_set_src(flag, &pono_flag_boot);
   lv_obj_set_pos(flag, fx, fy);
   if (h) h->flag = flag;
 
-  // Cycling island joke (the app rotates the text via the joke timer) in the
-  // logbook's own hand.
-  lv_obj_t *joke = lv_label_create(parent);
-  lv_obj_set_width(joke, lv_pct(84));
-  lv_obj_set_height(joke, LV_SIZE_CONTENT);
-  lv_label_set_long_mode(joke, LV_LABEL_LONG_WRAP);
-  lv_obj_set_style_text_align(joke, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_set_style_text_color(joke, color_text_secondary, 0);
-  lv_obj_set_style_text_font(joke, font_serif_italic, 0);
-  lv_label_set_text(joke, "Warming up the trade winds...");
-  lv_obj_align(joke, LV_ALIGN_TOP_MID, 0, 148);
-  if (h) h->joke = joke;
-
-  // Loading widget: a quiet panel holding the comet spinner on the left and a
-  // real status line over a progress bar. The app feeds both from the live
-  // connect stages, so the bar actually means something.
-  const int bx = 60, by = 192, bw = 360, bh = 56;
-  lv_obj_t *box = panel(parent, bx, by, bw, bh, opa_border_medium);
-
-  // Comet spinner: the "still working" circle. The shared asset is 88px (the
-  // busy overlay's hero size); zoom this instance to ~44px so it fits the
-  // widget. align_to the box: the 88px object box centres the ~44px visual at
-  // box-left + 30.
-  lv_obj_t *spin = spinner_create(parent, 1000);
-  lv_img_set_zoom(spin, 128);                            // 88px -> 44px visual
-  lv_obj_align_to(spin, box, LV_ALIGN_LEFT_MID, -14, 0);
-  if (h) h->spinner = spin;
-
-  lv_obj_t *st = lbl(box, "Waiting for Klipper to start...", font_caption, color_text_primary, 0, 0);
-  lv_obj_align(st, LV_ALIGN_TOP_LEFT, 56, 10);
+  // The one instrument line, hoist-aligned under the fly.
+  lv_obj_t *st = lbl(parent, "Waiting for Klipper to start...", font_caption, color_text_primary, 0, 0);
+  lv_obj_align(st, LV_ALIGN_TOP_LEFT, fx, fy + fh + 8);    // y 224
   if (h) h->status = st;
 
-  lv_obj_t *bar = lv_bar_create(box);
-  lv_obj_set_size(bar, bw - 56 - 20, 8);
-  lv_obj_align(bar, LV_ALIGN_BOTTOM_LEFT, 56, -12);
+  // Hairline progress bar, flag-width (0..100, app-driven, never decorative).
+  lv_obj_t *bar = lv_bar_create(parent);
+  lv_obj_set_size(bar, fw, 4);
+  lv_obj_set_pos(bar, fx, fy + fh + 30);                   // y 246
   lv_bar_set_range(bar, 0, 100);
   lv_bar_set_value(bar, 4, LV_ANIM_OFF);
-  lv_obj_set_style_bg_color(bar, color_surface_base, LV_PART_MAIN);
+  lv_obj_set_style_bg_color(bar, color_surface_elevated, LV_PART_MAIN);
   lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, LV_PART_MAIN);
-  lv_obj_set_style_radius(bar, radius_sm, LV_PART_MAIN);
+  lv_obj_set_style_radius(bar, 0, LV_PART_MAIN);
   lv_obj_set_style_bg_color(bar, color_accent_primary, LV_PART_INDICATOR);
-  lv_obj_set_style_radius(bar, radius_sm, LV_PART_INDICATOR);
+  lv_obj_set_style_radius(bar, 0, LV_PART_INDICATOR);
   if (h) h->bar = bar;
 
-  // Dedication, pinned bottom (kept from the old boot screen), in the
-  // logbook's hand under the lamp.
+  // Dedication, in the logbook's hand under the lamp.
   lv_obj_t *ded = lbl(parent, "For Elio and Io", font_serif_italic, color_accent_primary, 0, 0);
-  lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -6);
+  lv_obj_align(ded, LV_ALIGN_BOTTOM_RIGHT, -10, -4);
 }
 
 void boot_set_progress(BootHandles *h, int pct, const char *stage) {
