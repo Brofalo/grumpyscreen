@@ -12,6 +12,11 @@ name: reusable-ci
 # semgrep bootstraps itself when missing (hosted runners). dependency-review
 # defaults off: the API behind it needs GHAS on private repos; public repos
 # turn it on in the caller.
+#
+# On pull_request and merge_group events semgrep runs against the PR base as
+# a baseline: only findings introduced by the change block. Latent debt in a
+# repo does not ambush unrelated PRs; burn it down deliberately with a
+# workflow_dispatch run, which scans the full tree.
 on:
   workflow_call:
     inputs:
@@ -116,10 +121,14 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
+          # depth 2 so the PR base (first parent of the merge ref) is local
+          # for --baseline-commit without persisted credentials.
+          fetch-depth: 2
       - name: semgrep
         env:
           RUN: ${{ inputs.run_semgrep }}
           CONFIG: ${{ inputs.semgrep_config }}
+          BASELINE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
         run: |
           set -euo pipefail
           if [ "$RUN" != "true" ]; then echo "semgrep disabled, passing"; exit 0; fi
@@ -128,7 +137,17 @@ jobs:
               || python3 -m pip install --user --quiet --break-system-packages semgrep
             export PATH="$HOME/.local/bin:$PATH"
           fi
-          semgrep scan --error --config "$CONFIG" --quiet .
+          if [ -n "$BASELINE" ]; then
+            git fetch --quiet --depth=1 origin "$BASELINE" || true
+            if git cat-file -e "$BASELINE" 2>/dev/null; then
+              semgrep scan --error --config "$CONFIG" --quiet --baseline-commit "$BASELINE" .
+            else
+              echo "baseline commit unavailable, full scan"
+              semgrep scan --error --config "$CONFIG" --quiet .
+            fi
+          else
+            semgrep scan --error --config "$CONFIG" --quiet .
+          fi
 
   tell_check:
     runs-on: ${{ fromJSON(inputs.runner_labels) }}
