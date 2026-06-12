@@ -95,6 +95,7 @@ class MainPanel : public NotifyConsumer {
  private:
   void create_main(lv_obj_t *parent);
   void rebuild_home();        // Pono: rebuild the cockpit in the current state's layout (idle<->printing flip)
+  void apply_move_gates();    // Pono: gate Move-screen motion on print state (mid-print G28/jog/M84 wrecks the job)
   void attach_home_taps();    // Pono: wire cockpit tap targets to _home_tap (reused after rebuild)
   // ---- Pono native sub-screens (replace the legacy panels) ----
   void create_pono_screens();             // build Move/Filament/Temps/Fans/Files/Tune into hidden overlays
