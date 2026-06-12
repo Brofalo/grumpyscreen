@@ -40,17 +40,17 @@ HomeModel demo_home_paused_model();
 
 // ---- boot / connecting screen ----------------------------------------------
 // The screen shown while grumpyscreen waits for Klipper + loads printer state.
-// Hawaii state flag hero, "Pono Print" wordmark, a cycling island joke, and a
-// real progress bar + status line the app drives from the live connect stages
-// (NOT a decorative fake). Pure layout + theme, so it links into the sim too;
-// the app (init_panel) owns the joke-cycle timer and calls boot_set_progress().
+// The boot screen IS the Hawaii state flag (Jack, 2026-06-11), with one
+// status line + a real progress bar the app drives from the live connect
+// stages (NOT a decorative fake). Pure layout + theme, so it links into the
+// sim too; the app (init_panel) calls boot_set_progress().
 struct BootHandles {
-  lv_obj_t *flag = nullptr;     // static Hawaii flag image
+  lv_obj_t *flag = nullptr;     // static Hawaii flag image (pono_flag_boot)
   lv_obj_t *wordmark = nullptr; // retired 2026-06-10 (flag-only boot); stays null
-  lv_obj_t *joke = nullptr;     // cycling island joke (app rotates the text)
+  lv_obj_t *joke = nullptr;     // retired 2026-06-11 (the boot screen is the flag); stays null
   lv_obj_t *status = nullptr;   // stage line ("Connecting to Moonraker...")
   lv_obj_t *bar = nullptr;      // legit progress bar (0..100, app-driven)
-  lv_obj_t *spinner = nullptr;  // comet circle: the "still working" cue
+  lv_obj_t *spinner = nullptr;  // retired 2026-06-11 (same order); stays null
 };
 void build_boot(lv_obj_t *parent, BootHandles *h = nullptr);
 
