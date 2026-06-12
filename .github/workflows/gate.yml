@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   gate:
-    uses: Brofalo/gatekeeper/.github/workflows/reusable-ci.yml@v1
+    uses: ./.github/workflows/reusable-ci.yml
     with:
       run_semgrep: true
       run_dependency_review: true

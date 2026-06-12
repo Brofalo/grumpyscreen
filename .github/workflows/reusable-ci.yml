@@ -1,0 +1,165 @@
+name: reusable-ci
+
+# The shared gate. Target repos call this from a 3-line caller workflow; see
+# templates/caller-ci.yml. Bump the tag on the metarepo and every caller updates
+# at once. Every job always runs and reports, even when its command is not
+# configured, so a repo can mark any subset of checks required without
+# deadlocking the merge queue on a skipped check.
+#
+# Called from a job named "gate", the check contexts are "gate / lint",
+# "gate / test", and so on. The rulesets in this metarepo use those names.
+#
+# semgrep bootstraps itself when missing (hosted runners). dependency-review
+# defaults off: the API behind it needs GHAS on private repos; public repos
+# turn it on in the caller.
+on:
+  workflow_call:
+    inputs:
+      runner_labels:
+        type: string
+        default: '["self-hosted","linux"]'
+      lint_cmd:
+        type: string
+        default: ''
+      typecheck_cmd:
+        type: string
+        default: ''
+      test_cmd:
+        type: string
+        default: ''
+      build_cmd:
+        type: string
+        default: ''
+      run_semgrep:
+        type: boolean
+        default: true
+      semgrep_config:
+        type: string
+        default: 'p/default'
+      run_tell_check:
+        type: boolean
+        default: false
+      tell_check_cmd:
+        type: string
+        default: ''
+      run_dependency_review:
+        type: boolean
+        default: false
+      dependency_fail_on_severity:
+        type: string
+        default: 'low'
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - name: lint
+        env:
+          CMD: ${{ inputs.lint_cmd }}
+        run: |
+          set -euo pipefail
+          if [ -n "$CMD" ]; then eval "$CMD"; else echo "lint not configured, passing"; fi
+
+  typecheck:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - name: typecheck
+        env:
+          CMD: ${{ inputs.typecheck_cmd }}
+        run: |
+          set -euo pipefail
+          if [ -n "$CMD" ]; then eval "$CMD"; else echo "typecheck not configured, passing"; fi
+
+  test:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - name: test
+        env:
+          CMD: ${{ inputs.test_cmd }}
+        run: |
+          set -euo pipefail
+          if [ -n "$CMD" ]; then eval "$CMD"; else echo "test not configured, passing"; fi
+
+  build:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - name: build
+        env:
+          CMD: ${{ inputs.build_cmd }}
+        run: |
+          set -euo pipefail
+          if [ -n "$CMD" ]; then eval "$CMD"; else echo "build not configured, passing"; fi
+
+  semgrep:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - name: semgrep
+        env:
+          RUN: ${{ inputs.run_semgrep }}
+          CONFIG: ${{ inputs.semgrep_config }}
+        run: |
+          set -euo pipefail
+          if [ "$RUN" != "true" ]; then echo "semgrep disabled, passing"; exit 0; fi
+          if ! command -v semgrep >/dev/null 2>&1; then
+            python3 -m pip install --user --quiet semgrep 2>/dev/null \
+              || python3 -m pip install --user --quiet --break-system-packages semgrep
+            export PATH="$HOME/.local/bin:$PATH"
+          fi
+          semgrep scan --error --config "$CONFIG" --quiet .
+
+  tell_check:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - name: tell_check
+        env:
+          RUN: ${{ inputs.run_tell_check }}
+          CMD: ${{ inputs.tell_check_cmd }}
+        run: |
+          set -euo pipefail
+          if [ "$RUN" != "true" ]; then echo "tell_check disabled, passing"; exit 0; fi
+          if [ -n "$CMD" ]; then eval "$CMD"; else echo "run_tell_check set but tell_check_cmd empty"; exit 1; fi
+
+  dependency-review:
+    runs-on: ${{ fromJSON(inputs.runner_labels) }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+      - name: dependency-review
+        if: ${{ inputs.run_dependency_review && (github.event_name == 'pull_request' || github.event_name == 'merge_group') }}
+        uses: actions/dependency-review-action@2031cfc080254a8a887f58cffee85186f0e49e48  # v4
+        with:
+          fail-on-severity: ${{ inputs.dependency_fail_on_severity }}
+          base-ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          head-ref: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+      - name: dependency-review-disabled
+        if: ${{ !inputs.run_dependency_review || (github.event_name != 'pull_request' && github.event_name != 'merge_group') }}
+        run: echo "dependency-review not applicable on this event or disabled, passing"
