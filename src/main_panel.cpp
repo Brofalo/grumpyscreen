@@ -75,9 +75,21 @@ MainPanel::MainPanel(KWebSocketClient &websocket,
 
     lv_obj_add_event_cb(tabview, &MainPanel::_tabview_event_cb,
                             LV_EVENT_VALUE_CHANGED, this);
+
+    // The stale watchdog (UI trust audit T6): an open websocket whose
+    // notifies stopped (wedged Moonraker) used to leave temps, progress
+    // and position rendering as live forever. A notify-driven check can
+    // never fire when notifies stop, so a timer owns the question.
+    stale_timer_ = lv_timer_create([](lv_timer_t *t) {
+      static_cast<MainPanel *>(t->user_data)->check_stale();
+    }, 5000, this);
 }
 
 MainPanel::~MainPanel() {
+  if (stale_timer_ != nullptr) {
+    lv_timer_del(stale_timer_);
+    stale_timer_ = nullptr;
+  }
   if (tabview != NULL) {
     lv_obj_del(tabview);
     tabview = NULL;
@@ -152,8 +164,30 @@ void MainPanel::init(json &j) {
   }
 }
 
-void MainPanel::consume(json &j) {  
+void MainPanel::check_stale() {
+  // Runs inside lv_timer_handler, which the main loop already wraps in
+  // lv_lock (guppyscreen.cpp): taking the same mutex here would deadlock,
+  // so this callback must stay lock-free and LVGL-only.
+  constexpr int64_t STALE_AFTER_MS = 10000;  // status deltas flow ~1Hz mid-print; 10s of silence on an open link is a wedge
+  const bool live = home_h.state_pill && (home_printing_ || home_paused_ || busy_);
+  const int64_t age = live ? ws.ms_since_status_update() : -1;
+  if (live && age >= STALE_AFTER_MS) {
+    pono::home_set_stale(&home_h, (int)(age / 1000));
+    stale_shown_ = true;
+  } else if (stale_shown_) {
+    pono::home_set_stale(&home_h, -1);
+    stale_shown_ = false;
+  }
+}
+
+void MainPanel::consume(json &j) {
   std::lock_guard<std::mutex> lock(lv_lock);
+  if (stale_shown_) {
+    // A notify just landed: the readout is moving again. Clear the flag
+    // here rather than waiting out the watchdog period.
+    pono::home_set_stale(&home_h, -1);
+    stale_shown_ = false;
+  }
   for (const auto &el : sensors) {
     auto target_value = j[json::json_pointer(fmt::format("/params/0/{}/target", el.first))];
     if (!target_value.is_null()) {

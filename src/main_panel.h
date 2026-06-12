@@ -95,6 +95,7 @@ class MainPanel : public NotifyConsumer {
  private:
   void create_main(lv_obj_t *parent);
   void rebuild_home();        // Pono: rebuild the cockpit in the current state's layout (idle<->printing flip)
+  void check_stale();         // Pono: T6 watchdog body (runs under the main loop's lv_lock; must not relock)
   void apply_move_gates();    // Pono: gate Move-screen motion on print state (mid-print G28/jog/M84 wrecks the job)
   void attach_home_taps();    // Pono: wire cockpit tap targets to _home_tap (reused after rebuild)
   // ---- Pono native sub-screens (replace the legacy panels) ----
@@ -130,6 +131,8 @@ class MainPanel : public NotifyConsumer {
   bool home_printing_ = false;    // last-known printing state (ETA + pulse gating)
   bool home_paused_ = false;      // last-known paused state (Resume vs Pause button)
   bool home_pulsing_ = false;     // is the state-dot pulse currently running
+  lv_timer_t *stale_timer_ = nullptr;  // T6: periodic readout-staleness check (notifies can stop; a timer cannot)
+  bool stale_shown_ = false;           // is the stale flag currently visible (touched only under lv_lock)
   int gloss_ix_ = -1;             // dictionary-entry position once the operator advances it (-1 = today's)
   bool update_checking_ = false;  // a version check is in flight (guard re-entry)
   std::string update_avail_;      // newer published version ("0.0.1-alpha.NNN"), empty = none

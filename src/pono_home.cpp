@@ -190,6 +190,18 @@ int gloss_today_index() {
 const char *gloss_text(int ix) { return GLOSS[((ix % 43) + 43) % 43]; }
 const char *gloss_pos(int ix)  { return (((ix % 43) + 43) % 43) < GLOSS_NVS ? "nvs." : "vs."; }
 
+void home_set_stale(HomeHandles *h, int age_s) {
+  if (!h || !h->stale) return;
+  if (age_s < 0) {
+    lv_obj_add_flag(h->stale, LV_OBJ_FLAG_HIDDEN);
+    return;
+  }
+  char b[28];
+  snprintf(b, sizeof b, "READOUT STALE %ds", age_s);
+  lv_label_set_text(h->stale, b);
+  lv_obj_clear_flag(h->stale, LV_OBJ_FLAG_HIDDEN);
+}
+
 void home_set_gloss(HomeHandles *h, int ix) {
   if (!h) return;
   ix = ((ix % 43) + 43) % 43;
@@ -303,7 +315,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   lv_obj_t *hero = panel(parent, HERO_X, MAIN_Y, HERO_W, MAIN_H);
 
   lv_obj_t *arc = nullptr;
-  lv_obj_t *pl = nullptr, *lyl = nullptr, *eta_l = nullptr;
+  lv_obj_t *pl = nullptr, *lyl = nullptr, *eta_l = nullptr, *stale_l = nullptr;
   lv_obj_t *gl_def = nullptr, *gl_pos = nullptr, *gl_cnt = nullptr;
   if (pr) {
     // ---- printing hero: the progress ring ----
@@ -335,6 +347,15 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
 
     eta_l = lbl(parent, m.eta ? m.eta : "", font_caption, color_accent_primary, 0, 0);
     lv_obj_align_to(eta_l, lyl, LV_ALIGN_OUT_BOTTOM_MID, 0, 4);
+
+    // The readout-stale flag (instrument-glass law: stale flags itself).
+    // Hidden until the app's status watchdog sees the notify stream go
+    // quiet mid-print; it sits on the instrument it indicts, in the free
+    // band above the ring. Warn, not alarm: the machine may be fine, the
+    // READOUT is what stopped moving.
+    stale_l = tag(parent, "READOUT STALE", color_state_warning, 0, 0);
+    lv_obj_align_to(stale_l, hero, LV_ALIGN_TOP_MID, 0, 3);
+    lv_obj_add_flag(stale_l, LV_OBJ_FLAG_HIDDEN);
   } else {
     // ---- idle hero: the dictionary entry ----
     // The word keeps the log while the machine is idle. Day-seeded gloss,
@@ -410,7 +431,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   }
 
   if (out) {
-    out->arc = arc; out->pct = pl; out->layer = lyl;
+    out->arc = arc; out->pct = pl; out->layer = lyl; out->stale = stale_l;
     out->job = nullptr; out->material = mat; out->eta = eta_l;
     out->nozzle = nz_num; out->bed = bd_num;
     out->nozzle_set = nz_set; out->bed_set = bd_set;

@@ -14,6 +14,14 @@
 #include "logger.h"
 
 #include <algorithm>
+#include <chrono>
+
+// Monotonic now in ms for the status-staleness stamp (wall clock would
+// lie across an NTP step).
+static int64_t mono_ms() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+    std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 using namespace hv;
 using json = nlohmann::json;
@@ -58,6 +66,7 @@ int KWebSocketClient::connect(const char* url,
     if (j.contains("method")) {
       std::string method = j["method"].template get<std::string>();
       if ("notify_status_update" == method) {
+        last_status_ms_.store(mono_ms(), std::memory_order_relaxed);
         for (const auto &entry : notify_consumers) {
           entry->consume(j);
         }
@@ -100,6 +109,11 @@ int KWebSocketClient::connect(const char* url,
   http_headers headers;
   return open(url, headers);
 };
+
+int64_t KWebSocketClient::ms_since_status_update() const {
+  int64_t t = last_status_ms_.load(std::memory_order_relaxed);
+  return t < 0 ? -1 : mono_ms() - t;
+}
 
 int KWebSocketClient::send_jsonrpc(const std::string &method,
 				   const json &params,
