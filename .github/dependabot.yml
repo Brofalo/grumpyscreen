@@ -1,0 +1,33 @@
+# Dependabot for PONOdata/grumpyscreen
+# Fleet QA config, normalized 2026-06-12.
+# Anchor: CLAUDE.md "CI / Bot / Workflow Hygiene" HARD requirement (2026-05-17).
+# Weekly Monday version updates; security updates fire daily regardless.
+# minor and patch grouped per ecosystem and directory to cut PR volume.
+
+version: 2
+updates:
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    commit-message:
+      prefix: "deps"
+    groups:
+      docker-root-minor-patch:
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 10
+    rebase-strategy: "auto"
+    commit-message:
+      prefix: "deps"
+    groups:
+      github-actions-root-minor-patch:
+        update-types: ["minor", "patch"]

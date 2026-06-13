@@ -1,4 +1,4 @@
-# CodeRabbit v3 configuration for the Pono / Brofalo fleet
+# CodeRabbit v4 configuration for the Pono / Brofalo fleet
 # Posture: max-strict, block-on-defect. pre_merge_checks at error mode.
 # Schema anchor: https://docs.coderabbit.ai/reference/yaml-template (fetched 2026-05-24)
 # Standing-order anchors:
@@ -14,6 +14,11 @@
 # explicit "Root approval" directive 2026-05-24. Bypass for v1->V2->V3
 # evolution-pattern dwell requirement granted by explicit root approval per
 # the substrate-evolution clause.
+# v4 (2026-06-12): fleet consistency + depth pass. Generalized the
+# no-anchor-lines audit pattern (removes the per-repo drift root cause),
+# added C# (.cs/.csproj) and docker-compose path_instructions, added the
+# no-unicode-arrows custom check. Written byte-identical to every in-scope
+# repo with line endings normalized to LF, eliminating all prior drift.
 
 language: en-US
 
@@ -206,6 +211,23 @@ reviews:
         Rust.
         REJECT: .unwrap() / .expect() in library code (return Result).
         unsafe blocks without a `// SAFETY:` comment.
+    - path: "**/*.cs"
+      instructions: |
+        C# / .NET (latest). PascalCase types and members, _camelCase
+        private fields. Nullable reference types enabled.
+        REJECT: async void outside event handlers. .Result / .Wait() on
+        Tasks (deadlock risk; await instead). catch blocks that swallow
+        the exception. blocking I/O on the WPF UI thread (use async).
+        hard-coded secrets or connection strings. string-concatenated SQL
+        (use parameters). IDisposable not disposed (prefer using).
+        REJECT in comments / docs: em dashes, marketing words,
+        first-person plural.
+    - path: "**/*.csproj"
+      instructions: |
+        .NET project manifest.
+        REQUIRED: PackageReference versions pinned. Nullable enabled and
+        TreatWarningsAsErrors where the project allows.
+        REJECT: floating version ranges (Version="*"). Abandoned packages.
     - path: ".github/workflows/*.yml"
       instructions: &workflow_review_instructions |
         GitHub Actions workflow.
@@ -227,6 +249,24 @@ reviews:
         REJECT: RUN apt-get install without rm -rf /var/lib/apt/lists/*.
         ADD that should be COPY. USER root at end of file.
         Default Python image is python:3.14-slim per CLAUDE.md.
+    - path: "**/docker-compose*.yml"
+      instructions: &compose_review_instructions |
+        Docker Compose. Fleet services run under compose (Class 79: a
+        docker-direct restart/stop/rm silently kills a compose-up
+        foreground unit, so manage via systemd, not docker).
+        REQUIRED: pinned image tags or digests, a healthcheck per
+        service, a restart policy, resource limits where the host is
+        shared (pono-pi).
+        REJECT: privileged: true without a stated reason. host network
+        mode without cause. bind-mounting the docker socket. latest or
+        unpinned image tags. secrets inlined in environment (use env_file
+        or compose secrets).
+    - path: "**/docker-compose*.yaml"
+      instructions: *compose_review_instructions
+    - path: "**/compose.yml"
+      instructions: *compose_review_instructions
+    - path: "**/compose.yaml"
+      instructions: *compose_review_instructions
     - path: "**/requirements*.txt"
       instructions: |
         Pinned Python deps.
@@ -314,6 +354,16 @@ reviews:
           + new comments/docs added in the diff. Do not flag em dashes
           inside upstream/vendor code or quoted text from external
           sources.
+      - name: no-unicode-arrows
+        mode: error
+        instructions: |
+          Reject the PR if the title, body, or new comments / docs in the
+          diff contain unicode arrow glyphs (U+2192, U+2190, U+21D2,
+          U+21E8, or similar) used as narration. Per CLAUDE.md output
+          hygiene "no right-arrows" rule, use plain words. Do not flag
+          ASCII "->" (valid in code and type hints), and do not flag
+          arrows inside upstream / vendor code, code blocks, or quoted
+          external text.
       - name: no-ai-tell-prefixes
         mode: error
         instructions: |
@@ -338,9 +388,10 @@ reviews:
         instructions: |
           Reject the PR body if it contains schoolbook anchor lines used
           for internal scaffolding: "Anchored on:", "Pair:", "see
-          HANDOFF-", "audits/cosmos_v4_full_audit_". Per CLAUDE.md "Zero
-          noise output" standing rule, these never ship to public PR
-          surfaces. Internal memory files are out of scope.
+          HANDOFF-", or any audit-scaffolding path of the shape
+          "audits/<name>_v<N>_full_audit_". Per CLAUDE.md "Zero noise
+          output" standing rule, these never ship to public PR surfaces.
+          Internal memory files are out of scope.
       - name: no-first-person-plural-narrative
         mode: error
         instructions: |
