@@ -1,0 +1,32 @@
+# Auto-merge enabler. Drop into a target repo as .github/workflows/automerge.yml.
+# Uses pull_request_target (no checkout, API only) so it also works on Dependabot
+# PRs, whose pull_request token is read-only. Best-effort: it never fails the PR.
+# Enables GitHub auto-merge (squash); GitHub merges once the gatekeeper ruleset is
+# satisfied. Needs the repo Allow auto-merge setting (apply/enable-auto-merge.sh).
+name: automerge
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review, synchronize]
+permissions:
+  pull-requests: write
+concurrency:
+  group: automerge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  enable:
+    if: ${{ github.event.pull_request.draft == false }}
+    runs-on: [self-hosted, linux]
+    timeout-minutes: 5
+    steps:
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7
+        with:
+          script: |
+            try {
+              await github.graphql(
+                `mutation($id: ID!) { enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: SQUASH }) { clientMutationId } }`,
+                { id: context.payload.pull_request.node_id }
+              );
+              core.info("auto-merge enabled");
+            } catch (e) {
+              core.info("auto-merge not enabled: " + e.message);
+            }
