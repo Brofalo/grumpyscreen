@@ -64,6 +64,7 @@ gen IBMPlexMono-SemiBold.ttf plex_semibold_32.c 32 "${ASCII}"   # font_num_large
 
 # Instrument Serif: the logbook voice, used sparingly.
 gen InstrumentSerif-Regular.ttf serif_regular_40.c 40 "${HAWAIIAN}"  # the pono headword
-gen InstrumentSerif-Italic.ttf  serif_italic_18.c  18 "${HAWAIIAN}"  # gloss / dedication / motto
+gen InstrumentSerif-Regular.ttf serif_regular_56.c 56 "${HAWAIIAN}"  # the boot dedication
+gen InstrumentSerif-Italic.ttf  serif_italic_18.c  18 "${HAWAIIAN}"  # gloss / motto
 
 echo "Done. Commit the generated .c files to the fork."

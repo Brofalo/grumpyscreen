@@ -7,19 +7,31 @@
 #include "pono_anim.h"   // pono::busy_hide() (clear a stranded blocking overlay on disconnect)
 
 #include <algorithm>
+#include <fstream>
 #include <string>
 #include <vector>
+
+namespace {
+// The boot init script (pono-print-boot-joke) urandom-picks one line into
+// /run/pono-print-joke for the login banner. We reuse it as the cycle's start
+// index so each boot opens on a different joke, then rotate through the book.
+std::string read_boot_joke() {
+  std::ifstream f("/run/pono-print-joke");
+  if (!f.is_open()) return std::string();
+  std::string line;
+  std::getline(f, line);
+  return line;
+}
+} // namespace
 
 InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
   : cont(lv_obj_create(lv_scr_act()))
   , main_panel(mp)
   , lv_lock(l)
 {
-  // Full-screen boot container: the Hawaii flag with a real progress bar
-  // under it (build_boot); shown only while we wait for Klipper, then hidden
-  // when the live cockpit takes over. The joke cycle and comet spinner were
-  // retired 2026-06-11 (the boot screen is the flag); the joke book still
-  // serves the login banner via pono-print-boot-joke.
+  // Full-screen boot container: the flying Hawaii flag, a cycling island joke,
+  // and a real progress bar (build_boot); shown only while we wait for Klipper,
+  // then hidden when the live cockpit takes over.
   lv_obj_set_size(cont, LV_PCT(100), LV_PCT(100));
   lv_obj_set_style_pad_all(cont, 0, 0);
   lv_obj_set_style_border_width(cont, 0, 0);
@@ -28,12 +40,26 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
 
   pono::build_boot(cont, &boot_);
 
+  // Cycling island jokes: read the device joke book, seed the start from the
+  // boot-picked line so each boot opens on a different one, then rotate slowly.
+  load_jokes();
+  if (boot_.joke && !jokes_.empty())
+    lv_label_set_text(boot_.joke, jokes_[joke_idx_].c_str());
+  joke_timer_ = lv_timer_create(
+      [](lv_timer_t *t) { static_cast<InitPanel *>(t->user_data)->cycle_joke(); },
+      9000, this);   // 9s/joke; faster cycled before the line could be read
+
   pono::boot_set_progress(&boot_, 4, "Waiting for Klipper to start...");
+
+  // Wake the screen once: the flag, joke, instruments, and dedication fade and
+  // rise in. One-shot; a later disconnect re-shows the settled screen, no replay.
+  pono::boot_play_intro(&boot_);
 }
 
 InitPanel::~InitPanel() {
+  if (joke_timer_) { lv_timer_del(joke_timer_); joke_timer_ = nullptr; }
   if (cont != NULL) {
-    lv_obj_del(cont);   // frees the flag/status/bar children too
+    lv_obj_del(cont);   // frees the flag/joke/status/bar children too
     cont = NULL;
   }
 }
@@ -45,11 +71,53 @@ void InitPanel::set_stage(int pct, const char *msg) {
   pono::boot_set_progress(&boot_, pct, msg);
 }
 
+void InitPanel::load_jokes() {
+  std::ifstream f("/usr/share/pono-print/jokes.txt");
+  std::string line;
+  while (std::getline(f, line)) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();   // strip CR
+    if (!line.empty()) jokes_.push_back(line);
+  }
+  if (jokes_.empty()) {
+    std::string j = read_boot_joke();
+    if (!j.empty()) jokes_.push_back(j);
+  }
+  if (jokes_.empty())
+    jokes_.push_back("Pono means doing it right. Step one: level the bed.");
+
+  std::string seed = read_boot_joke();
+  if (!seed.empty()) {
+    for (size_t i = 0; i < jokes_.size(); i++)
+      if (jokes_[i] == seed) { joke_idx_ = i; break; }
+  }
+}
+
+// Timer callback: runs under lv_lock (lv_timer_handler holds it), so the label
+// write is safe against the render loop. Lock-free by contract (no self-lock).
+void InitPanel::cycle_joke() {
+  if (jokes_.empty() || !boot_.joke) return;
+  joke_idx_ = (joke_idx_ + 1) % jokes_.size();
+  lv_label_set_text(boot_.joke, jokes_[joke_idx_].c_str());
+}
+
+// Act 2, once: the cinematic gives way to real loading. Stop cycling jokes and
+// crossfade the joke out for the legit progress bar + live status. Runs on the
+// ws thread (connected()), so it takes lv_lock itself; deleting the joke timer
+// under the lock is safe (a timer cb cannot be mid-run while we hold it).
+void InitPanel::reveal_progress() {
+  std::lock_guard<std::mutex> lock(lv_lock);
+  if (progress_shown_) return;
+  progress_shown_ = true;
+  if (joke_timer_) { lv_timer_del(joke_timer_); joke_timer_ = nullptr; }
+  pono::boot_reveal_progress(&boot_);
+}
+
 void InitPanel::connected(KWebSocketClient &ws) {
   LOG_DEBUG("init panel connected");
   State *state = State::get_instance();
   state->reset();
 
+  reveal_progress();   // Act 2: real loading begins, phase the progress bar in
   set_stage(22, "Connecting to Moonraker...");
 
   ws.send_jsonrpc("printer.objects.list", [this, &ws](json& d) {

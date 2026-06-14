@@ -28,6 +28,48 @@ lv_obj_t *spinner_create(lv_obj_t *parent, uint16_t period_ms) {
   return a;
 }
 
+namespace {
+// Hand the catch-the-wind intro off to the steady loop. The intro's last frame
+// matches loop frame 0 (same small amplitude), so swapping the source in place
+// is invisible. One-shot: the timer auto-deletes after this fires.
+void boot_flag_settle_cb(lv_timer_t *t) {
+  lv_obj_t *im = (lv_obj_t *)t->user_data;
+  lv_obj_set_user_data(im, nullptr);   // clear the back-ref; this timer is going away
+  uint8_t nl = pono_flag_boot_frame_count > 127 ? 127 : pono_flag_boot_frame_count;
+  lv_animimg_set_src(im, (const void **)pono_flag_boot_frames, nl);
+  lv_animimg_set_duration(im, (uint32_t)nl * 1000u / 60u);
+  lv_animimg_set_repeat_count(im, LV_ANIM_REPEAT_INFINITE);
+  lv_animimg_start(im);
+}
+// If the flag is deleted before the gust settles, kill the pending swap timer.
+void boot_flag_del_cb(lv_event_t *e) {
+  lv_obj_t *im = lv_event_get_target(e);
+  lv_timer_t *t = (lv_timer_t *)lv_obj_get_user_data(im);
+  if (t) lv_timer_del(t);
+}
+}  // namespace
+
+lv_obj_t *boot_flag_create(lv_obj_t *parent) {
+  lv_obj_t *a = lv_animimg_create(parent);
+  // Catch the wind: play the decaying-amplitude intro once, then settle into
+  // the steady loop. lv_animimg pic_count is int8_t; both sets are under 127.
+  uint8_t ni = pono_flag_boot_intro_frame_count > 127 ? 127 : pono_flag_boot_intro_frame_count;
+  lv_animimg_set_src(a, (const void **)pono_flag_boot_intro_frames, ni);
+  uint32_t intro_ms = (uint32_t)ni * 1000u / 60u;   // ~60 fps
+  lv_animimg_set_duration(a, intro_ms);
+  lv_animimg_set_repeat_count(a, 1);
+  lv_animimg_start(a);
+  lv_obj_set_size(a, pono_flag_boot_intro_frames[0]->header.w,
+                  pono_flag_boot_intro_frames[0]->header.h);
+  // Swap to the loop when the gust finishes; tie the one-shot timer to the
+  // flag's lifetime so it can never fire on a freed object.
+  lv_timer_t *t = lv_timer_create(boot_flag_settle_cb, intro_ms, a);
+  lv_timer_set_repeat_count(t, 1);
+  lv_obj_set_user_data(a, t);
+  lv_obj_add_event_cb(a, boot_flag_del_cb, LV_EVENT_DELETE, nullptr);
+  return a;
+}
+
 void busy_show(const char *text) {
   if (g_busy == nullptr) {
     g_busy = lv_obj_create(lv_layer_top());

@@ -56,6 +56,7 @@ extern "C" {
     extern const lv_font_t plex_semibold_32;
     extern const lv_font_t plex_semibold_20;
     extern const lv_font_t serif_regular_40;
+    extern const lv_font_t serif_regular_56;
     extern const lv_font_t serif_italic_18;
 }
 
@@ -67,6 +68,7 @@ const lv_font_t *font_num_large     = &plex_semibold_32;
 const lv_font_t *font_num_medium    = &plex_semibold_20;
 const lv_font_t *font_num_small     = &plex_regular_14;
 const lv_font_t *font_serif_display = &serif_regular_40;
+const lv_font_t *font_serif_xl      = &serif_regular_56;
 const lv_font_t *font_serif_italic  = &serif_italic_18;
 
 // ---- Theme provider ----

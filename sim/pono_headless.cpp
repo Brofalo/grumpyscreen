@@ -115,8 +115,29 @@ int main(int argc, char **argv) {
     lv_obj_set_style_pad_all(scr, 0, 0);
     static pono::BootHandles bh;
     pono::build_boot(scr, &bh);
-    // joke retired 2026-06-11: the boot screen is the flag.
-    pono::boot_set_progress(&bh, 45, "Reading printer objects...");
+    // Seed the longest joke so the wrap region is stress-tested (the app cycles
+    // the book; here we just render one).
+    if (bh.joke)
+      lv_label_set_text(bh.joke,
+        "Overhangs with no supports are like cliff jumping at Black Rock: all confidence and good cooling.");
+    pono::boot_set_progress(&bh, 4, "Waiting for Klipper to start...");
+    pono::boot_play_intro(&bh);   // Act 1; step the clock to scan the wake
+    // Act 2 scripted with one-shot timers (mirrors init_panel's connect): reveal
+    // the progress at ~1.6s, then step the real stages so the GIF scans both acts.
+    lv_timer_t *r = lv_timer_create([](lv_timer_t *t) {
+      auto *h = (pono::BootHandles *)t->user_data;
+      pono::boot_reveal_progress(h);
+      pono::boot_set_progress(h, 22, "Connecting to Moonraker...");
+    }, 1600, &bh);
+    lv_timer_set_repeat_count(r, 1);
+    lv_timer_t *s2 = lv_timer_create([](lv_timer_t *t) {
+      pono::boot_set_progress((pono::BootHandles *)t->user_data, 58, "Loading printer state...");
+    }, 2200, &bh);
+    lv_timer_set_repeat_count(s2, 1);
+    lv_timer_t *s3 = lv_timer_create([](lv_timer_t *t) {
+      pono::boot_set_progress((pono::BootHandles *)t->user_data, 100, "Ready");
+    }, 2800, &bh);
+    lv_timer_set_repeat_count(s3, 1);
   } else if (screen == "move") {
     pono::build_move(lv_scr_act());
   } else if (screen == "filament") {

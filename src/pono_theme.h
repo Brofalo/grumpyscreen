@@ -51,6 +51,7 @@ extern const lv_font_t *font_num_large;     // 32 Plex SemiBold
 extern const lv_font_t *font_num_medium;    // 20 Plex SemiBold
 extern const lv_font_t *font_num_small;     // 14 Plex Regular
 extern const lv_font_t *font_serif_display; // 40 Instrument Serif (the headword)
+extern const lv_font_t *font_serif_xl;      // 56 Instrument Serif (boot dedication)
 extern const lv_font_t *font_serif_italic;  // 18 Instrument Serif Italic (gloss/motto)
 
 // ---- Spacing tokens ----
