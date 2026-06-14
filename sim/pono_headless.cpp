@@ -115,7 +115,11 @@ int main(int argc, char **argv) {
     lv_obj_set_style_pad_all(scr, 0, 0);
     static pono::BootHandles bh;
     pono::build_boot(scr, &bh);
-    // joke retired 2026-06-11: the boot screen is the flag.
+    // Seed the longest joke so the wrap region is stress-tested (the app cycles
+    // the book; here we just render one).
+    if (bh.joke)
+      lv_label_set_text(bh.joke,
+        "Overhangs with no supports are like cliff jumping at Black Rock: all confidence and good cooling.");
     pono::boot_set_progress(&bh, 45, "Reading printer objects...");
   } else if (screen == "move") {
     pono::build_move(lv_scr_act());

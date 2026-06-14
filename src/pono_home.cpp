@@ -1207,33 +1207,40 @@ void build_files(lv_obj_t *parent, FilesHandles *h) {
 }
 
 // ---- boot / connecting screen ----------------------------------------------
-// The boot screen IS the Hawaii state flag (Jack, 2026-06-11: "ALL the boot
-// screens to just be the Hawaiian Flag"). Frame, wordmark, joke cycle, and
-// comet spinner are retired; what remains under the flag is one status line
-// and a real progress bar driven by the live connect stages, because this is
-// also the disconnected screen and silent waiting is the nobody-home tell
-// (kb/mediums.md law 7). The dedication signs the watch off, kept.
+// The Hawaii flag flies here (Jack, 2026-06-13): a canned, looping wave
+// (boot_flag_create) is the hero, kept slight on purpose. Under it the island
+// voice cracks a joke while we wait (the app cycles the book), a real progress
+// bar keeps the wait honest (this is also the disconnected screen; silent
+// waiting is the nobody-home tell, kb/mediums.md law 7), and the watch signs
+// off big for the two it is all for.
 void build_boot(lv_obj_t *parent, BootHandles *h) {
   lv_obj_set_style_bg_color(parent, color_surface_base, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
-  // The flag, frameless, near full-bleed.
-  const int fw = pono_flag_boot_w, fh = pono_flag_boot_h;  // 416 x 208
-  const int fx = (480 - fw) / 2, fy = 8;
-  lv_obj_t *flag = lv_img_create(parent);
-  lv_img_set_src(flag, &pono_flag_boot);
+  // The flag, flying. Canned wave, near-zero CPU, frameless on the warm black.
+  const int fw = pono_flag_boot_w, fh = pono_flag_boot_h;  // 320 x 160
+  const int fx = (480 - fw) / 2, fy = 4;
+  lv_obj_t *flag = boot_flag_create(parent);
   lv_obj_set_pos(flag, fx, fy);
   if (h) h->flag = flag;
 
-  // The one instrument line, hoist-aligned under the fly.
-  lv_obj_t *st = lbl(parent, "Waiting for Klipper to start...", font_caption, color_text_primary, 0, 0);
-  lv_obj_align(st, LV_ALIGN_TOP_LEFT, fx, fy + fh + 8);    // y 224
+  // The island's voice while we wait: one joke, cycled by the app (the sim
+  // seeds one). Centered, dim, wraps under the fly.
+  lv_obj_t *jk = lbl(parent, "", font_caption, color_text_secondary, 0, 0);
+  lv_obj_set_width(jk, 456);
+  lv_label_set_long_mode(jk, LV_LABEL_LONG_WRAP);
+  lv_obj_set_style_text_align(jk, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(jk, LV_ALIGN_TOP_MID, 0, fy + fh + 6);     // y ~170
+  if (h) h->joke = jk;
+
+  // The one instrument line + a real progress bar (0..100, app-driven).
+  lv_obj_t *st = lbl(parent, "Waiting for Klipper to start...", font_micro, color_text_tertiary, 0, 0);
+  lv_obj_align(st, LV_ALIGN_BOTTOM_MID, 0, -58);
   if (h) h->status = st;
 
-  // Hairline progress bar, flag-width (0..100, app-driven, never decorative).
   lv_obj_t *bar = lv_bar_create(parent);
-  lv_obj_set_size(bar, fw, 4);
-  lv_obj_set_pos(bar, fx, fy + fh + 30);                   // y 246
+  lv_obj_set_size(bar, 300, 4);
+  lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, -48);
   lv_bar_set_range(bar, 0, 100);
   lv_bar_set_value(bar, 4, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(bar, color_surface_elevated, LV_PART_MAIN);
@@ -1243,9 +1250,9 @@ void build_boot(lv_obj_t *parent, BootHandles *h) {
   lv_obj_set_style_radius(bar, 0, LV_PART_INDICATOR);
   if (h) h->bar = bar;
 
-  // Dedication, in the logbook's hand under the lamp.
-  lv_obj_t *ded = lbl(parent, "For Elio and Io", font_serif_italic, color_accent_primary, 0, 0);
-  lv_obj_align(ded, LV_ALIGN_BOTTOM_RIGHT, -10, -4);
+  // For the two it is all for. The watch signs off big, in the logbook's hand.
+  lv_obj_t *ded = lbl(parent, "For Elio and Io", font_serif_display, color_accent_primary, 0, 0);
+  lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -10);
 }
 
 void boot_set_progress(BootHandles *h, int pct, const char *stage) {

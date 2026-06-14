@@ -20,10 +20,15 @@ class InitPanel {
   void set_message(const char *message);
 
  private:
+  void load_jokes();                          // fill jokes_ from the device joke book
+  void cycle_joke();                          // advance to the next island joke (timer cb)
   void set_stage(int pct, const char *msg);   // progress + status; takes lv_lock itself
 
   lv_obj_t *cont;                 // full-screen boot container
-  pono::BootHandles boot_;        // flag + status + bar (joke/spinner/wordmark retired)
+  pono::BootHandles boot_;        // flying flag + joke + status + bar
+  std::vector<std::string> jokes_;
+  size_t joke_idx_ = 0;
+  lv_timer_t *joke_timer_ = nullptr;  // rotates the joke while we wait
   MainPanel &main_panel;
   std::mutex &lv_lock;
 };

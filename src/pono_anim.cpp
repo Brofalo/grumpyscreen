@@ -28,6 +28,20 @@ lv_obj_t *spinner_create(lv_obj_t *parent, uint16_t period_ms) {
   return a;
 }
 
+lv_obj_t *boot_flag_create(lv_obj_t *parent) {
+  lv_obj_t *a = lv_animimg_create(parent);
+  // Same int8_t pic_count clamp as the spinner; the flag set is well under 127.
+  uint8_t n = pono_flag_boot_frame_count > 127 ? 127 : pono_flag_boot_frame_count;
+  lv_animimg_set_src(a, (const void **)pono_flag_boot_frames, n);
+  // ~60 fps: one full loop in frame_count/60 s. The wave just keeps
+  // flying; no start/stop, this screen only lives during the boot wait.
+  lv_animimg_set_duration(a, (uint32_t)n * 1000u / 60u);
+  lv_animimg_set_repeat_count(a, LV_ANIM_REPEAT_INFINITE);
+  lv_animimg_start(a);
+  lv_obj_set_size(a, pono_flag_boot_frames[0]->header.w, pono_flag_boot_frames[0]->header.h);
+  return a;
+}
+
 void busy_show(const char *text) {
   if (g_busy == nullptr) {
     g_busy = lv_obj_create(lv_layer_top());
