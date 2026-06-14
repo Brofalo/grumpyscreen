@@ -1219,6 +1219,14 @@ void build_boot(lv_obj_t *parent, BootHandles *h) {
   lv_obj_set_style_bg_color(parent, color_surface_base, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
+  // The lamp comes on: a soft amber bloom behind the flag (the intro fades it
+  // in first). Created first so it sits behind everything; the opaque flag
+  // covers its centre, so the glow reads in the warm-black room around it.
+  lv_obj_t *glow = lv_img_create(parent);
+  lv_img_set_src(glow, &pono_glow);
+  lv_obj_set_pos(glow, (480 - pono_glow_w) / 2, -60);
+  if (h) h->glow = glow;
+
   // The flag, flying. Canned wave, near-zero CPU, frameless on the warm black.
   const int fw = pono_flag_boot_w, fh = pono_flag_boot_h;  // 320 x 160
   const int fx = (480 - fw) / 2, fy = 2;
@@ -1306,13 +1314,14 @@ void fade_rise(lv_obj_t *o, int rise, uint32_t delay, uint32_t dur, lv_anim_path
 
 void boot_play_intro(BootHandles *h) {
   if (!h) return;
-  // Act 1, the wake that hides the boot: the flag, joke, and dedication fade
-  // and rise in over the flying flag, the dedication landing last with a touch
-  // of overshoot. The progress bar + status are held dark for Act 2, so the
-  // real connect runs behind the animation. One-shot on first boot; a later
-  // disconnected re-show keeps the settled state.
+  // Act 1, the wake that hides the boot: the lamp glow warms up, the flag
+  // catches the wind and flies in, the joke cracks, and the dedication lands
+  // last with a touch of overshoot. The progress bar + status are held dark for
+  // Act 2, so the real connect runs behind the animation. One-shot on first
+  // boot; a later disconnected re-show keeps the settled state.
   if (h->status) lv_obj_set_style_opa(h->status, LV_OPA_TRANSP, 0);
   if (h->bar)    lv_obj_set_style_opa(h->bar, LV_OPA_TRANSP, 0);
+  fade_rise(h->glow,        0,   0, 760, lv_anim_path_ease_out);
   fade_rise(h->flag,       14,   0, 560, lv_anim_path_ease_out);
   fade_rise(h->joke,        8, 380, 380, lv_anim_path_ease_out);
   fade_rise(h->dedication, 16, 760, 640, lv_anim_path_overshoot);

@@ -45,6 +45,7 @@ HomeModel demo_home_paused_model();
 // decorative fake), and the dedication. Pure layout + theme, so it links into
 // the sim too; the app (init_panel) cycles the joke + calls boot_set_progress().
 struct BootHandles {
+  lv_obj_t *glow = nullptr;       // amber lamp glow behind the flag (the wake)
   lv_obj_t *flag = nullptr;       // flying Hawaii flag (lv_animimg, pono_flag_boot_frames)
   lv_obj_t *wordmark = nullptr;   // retired 2026-06-10 (flag-only boot); stays null
   lv_obj_t *joke = nullptr;       // cycling island joke; app fills + rotates the book

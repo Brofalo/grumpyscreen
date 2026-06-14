@@ -28,6 +28,14 @@ extern const lv_img_dsc_t *pono_flag_boot_frames[];
 extern const uint8_t pono_flag_boot_frame_count;
 extern const uint16_t pono_flag_boot_w;
 extern const uint16_t pono_flag_boot_h;
+// One-shot "catch the wind" intro: boot_flag_create plays these once (a gust
+// that decays to the loop amplitude), then swaps to the loop. Same geometry.
+extern const lv_img_dsc_t *pono_flag_boot_intro_frames[];
+extern const uint8_t pono_flag_boot_intro_frame_count;
+// The amber lamp glow that blooms behind the flag (static, real alpha).
+extern const lv_img_dsc_t pono_glow;
+extern const uint16_t pono_glow_w;
+extern const uint16_t pono_glow_h;
 
 #ifdef __cplusplus
 }  // extern "C"
