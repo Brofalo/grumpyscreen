@@ -100,11 +100,24 @@ void InitPanel::cycle_joke() {
   lv_label_set_text(boot_.joke, jokes_[joke_idx_].c_str());
 }
 
+// Act 2, once: the cinematic gives way to real loading. Stop cycling jokes and
+// crossfade the joke out for the legit progress bar + live status. Runs on the
+// ws thread (connected()), so it takes lv_lock itself; deleting the joke timer
+// under the lock is safe (a timer cb cannot be mid-run while we hold it).
+void InitPanel::reveal_progress() {
+  std::lock_guard<std::mutex> lock(lv_lock);
+  if (progress_shown_) return;
+  progress_shown_ = true;
+  if (joke_timer_) { lv_timer_del(joke_timer_); joke_timer_ = nullptr; }
+  pono::boot_reveal_progress(&boot_);
+}
+
 void InitPanel::connected(KWebSocketClient &ws) {
   LOG_DEBUG("init panel connected");
   State *state = State::get_instance();
   state->reset();
 
+  reveal_progress();   // Act 2: real loading begins, phase the progress bar in
   set_stage(22, "Connecting to Moonraker...");
 
   ws.send_jsonrpc("printer.objects.list", [this, &ws](json& d) {

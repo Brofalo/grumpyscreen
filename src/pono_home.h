@@ -55,11 +55,16 @@ struct BootHandles {
 };
 void build_boot(lv_obj_t *parent, BootHandles *h = nullptr);
 
-// Play the one-shot boot entrance: each piece fades and rises in, eased, the
-// dedication landing last. Called once on first boot (and by the sim to
-// capture it); uses LVGL property anims at 60 fps over the flying flag. The
-// flag must already be built (build_boot). NULL-safe on every handle.
+// Act 1: the one-shot boot wake. The flag, joke, and dedication fade and rise
+// in, eased, the dedication landing last; the progress bar + status are held
+// dark for Act 2. Called once on first boot (and by the sim to capture it);
+// LVGL property anims at 60 fps over the flying flag. NULL-safe on every handle.
 void boot_play_intro(BootHandles *h);
+
+// Act 2: phase the legit progress in. The joke crossfades out and the live
+// status + progress bar fade in, in the same band, showing what is actively
+// loading. Call once when real connect stages begin. NULL-safe.
+void boot_reveal_progress(BootHandles *h);
 
 // Set the boot progress bar + status line together (one honest stage update).
 // pct 0..100; stage is the short status text. NULL-safe on every handle.

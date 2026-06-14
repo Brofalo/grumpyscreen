@@ -1207,40 +1207,46 @@ void build_files(lv_obj_t *parent, FilesHandles *h) {
 }
 
 // ---- boot / connecting screen ----------------------------------------------
-// The Hawaii flag flies here (Jack, 2026-06-13): a canned, looping wave
-// (boot_flag_create) is the hero, kept slight on purpose. Under it the island
-// voice cracks a joke while we wait (the app cycles the book), a real progress
-// bar keeps the wait honest (this is also the disconnected screen; silent
-// waiting is the nobody-home tell, kb/mediums.md law 7), and the watch signs
-// off big for the two it is all for.
+// A two-act boot (Jack, 2026-06-13). Act 1 hides the boot behind the canned
+// animation: the flag flies in, the island voice cracks a joke, the dedication
+// signs off big, all while the real Klipper/Moonraker connect runs in the
+// background. Act 2 (boot_reveal_progress) crossfades the joke out and phases a
+// legit progress bar + live status in, showing what is actively loading. The
+// joke and the progress share one band, so the flag stays the hero and the
+// dedication goes big. build_boot lays it out; boot_play_intro + the app drive
+// the acts.
 void build_boot(lv_obj_t *parent, BootHandles *h) {
   lv_obj_set_style_bg_color(parent, color_surface_base, 0);
   lv_obj_set_style_bg_opa(parent, LV_OPA_COVER, 0);
 
   // The flag, flying. Canned wave, near-zero CPU, frameless on the warm black.
   const int fw = pono_flag_boot_w, fh = pono_flag_boot_h;  // 320 x 160
-  const int fx = (480 - fw) / 2, fy = 4;
+  const int fx = (480 - fw) / 2, fy = 2;
   lv_obj_t *flag = boot_flag_create(parent);
   lv_obj_set_pos(flag, fx, fy);
   if (h) h->flag = flag;
 
-  // The island's voice while we wait: one joke, cycled by the app (the sim
-  // seeds one). Centered, dim, wraps under the fly.
+  const int band = fy + fh + 4;   // the shared joke / progress band, y ~166
+
+  // Act 1: the island's voice while we wait. Centered, dim, wraps; the app
+  // cycles the book (the sim seeds one).
   lv_obj_t *jk = lbl(parent, "", font_caption, color_text_secondary, 0, 0);
   lv_obj_set_width(jk, 456);
   lv_label_set_long_mode(jk, LV_LABEL_LONG_WRAP);
   lv_obj_set_style_text_align(jk, LV_TEXT_ALIGN_CENTER, 0);
-  lv_obj_align(jk, LV_ALIGN_TOP_MID, 0, fy + fh + 6);     // y ~170
+  lv_obj_align(jk, LV_ALIGN_TOP_MID, 0, band);
   if (h) h->joke = jk;
 
-  // The one instrument line + a real progress bar (0..100, app-driven).
-  lv_obj_t *st = lbl(parent, "Waiting for Klipper to start...", font_micro, color_text_tertiary, 0, 0);
-  lv_obj_align(st, LV_ALIGN_BOTTOM_MID, 0, -58);
+  // Act 2: the live status line + a real progress bar (0..100, app-driven), in
+  // the same band. boot_play_intro holds them dark until boot_reveal_progress.
+  lv_obj_t *st = lbl(parent, "Waiting for Klipper to start...", font_caption, color_text_secondary, 0, 0);
+  lv_obj_set_style_text_align(st, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(st, LV_ALIGN_TOP_MID, 0, band + 2);
   if (h) h->status = st;
 
   lv_obj_t *bar = lv_bar_create(parent);
   lv_obj_set_size(bar, 300, 4);
-  lv_obj_align(bar, LV_ALIGN_BOTTOM_MID, 0, -48);
+  lv_obj_align(bar, LV_ALIGN_TOP_MID, 0, band + 24);
   lv_bar_set_range(bar, 0, 100);
   lv_bar_set_value(bar, 4, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(bar, color_surface_elevated, LV_PART_MAIN);
@@ -1251,8 +1257,8 @@ void build_boot(lv_obj_t *parent, BootHandles *h) {
   if (h) h->bar = bar;
 
   // For the two it is all for. The watch signs off big, in the logbook's hand.
-  lv_obj_t *ded = lbl(parent, "For Elio and Io", font_serif_display, color_accent_primary, 0, 0);
-  lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -10);
+  lv_obj_t *ded = lbl(parent, "For Elio and Io", font_serif_xl, color_accent_primary, 0, 0);
+  lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -6);
   if (h) h->dedication = ded;
 }
 
@@ -1300,14 +1306,34 @@ void fade_rise(lv_obj_t *o, int rise, uint32_t delay, uint32_t dur, lv_anim_path
 
 void boot_play_intro(BootHandles *h) {
   if (!h) return;
-  // Wake the porchlight: each piece fades and rises in, eased, the dedication
-  // landing last with a touch of overshoot. The flag keeps flying underneath.
-  // One-shot on first boot; the disconnected re-show keeps the settled state.
+  // Act 1, the wake that hides the boot: the flag, joke, and dedication fade
+  // and rise in over the flying flag, the dedication landing last with a touch
+  // of overshoot. The progress bar + status are held dark for Act 2, so the
+  // real connect runs behind the animation. One-shot on first boot; a later
+  // disconnected re-show keeps the settled state.
+  if (h->status) lv_obj_set_style_opa(h->status, LV_OPA_TRANSP, 0);
+  if (h->bar)    lv_obj_set_style_opa(h->bar, LV_OPA_TRANSP, 0);
   fade_rise(h->flag,       14,   0, 560, lv_anim_path_ease_out);
   fade_rise(h->joke,        8, 380, 380, lv_anim_path_ease_out);
-  fade_rise(h->status,      0, 560, 300, lv_anim_path_ease_out);
-  fade_rise(h->bar,         0, 660, 300, lv_anim_path_ease_out);
-  fade_rise(h->dedication, 14, 860, 600, lv_anim_path_overshoot);
+  fade_rise(h->dedication, 16, 760, 640, lv_anim_path_overshoot);
+}
+
+void boot_reveal_progress(BootHandles *h) {
+  if (!h) return;
+  // Act 2: the playful wait gives way to real loading. The joke fades out and
+  // the legit progress bar + live status fade in, in the same band, at 60 fps.
+  if (h->joke) {
+    lv_anim_t a;
+    lv_anim_init(&a);
+    lv_anim_set_var(&a, h->joke);
+    lv_anim_set_time(&a, 300);
+    lv_anim_set_path_cb(&a, lv_anim_path_ease_in);
+    lv_anim_set_values(&a, LV_OPA_COVER, LV_OPA_TRANSP);
+    lv_anim_set_exec_cb(&a, intro_set_opa);
+    lv_anim_start(&a);
+  }
+  fade_rise(h->status, 0, 340, 360, lv_anim_path_ease_out);
+  fade_rise(h->bar,    0, 420, 360, lv_anim_path_ease_out);
 }
 
 } // namespace pono
