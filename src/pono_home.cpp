@@ -1253,6 +1253,7 @@ void build_boot(lv_obj_t *parent, BootHandles *h) {
   // For the two it is all for. The watch signs off big, in the logbook's hand.
   lv_obj_t *ded = lbl(parent, "For Elio and Io", font_serif_display, color_accent_primary, 0, 0);
   lv_obj_align(ded, LV_ALIGN_BOTTOM_MID, 0, -10);
+  if (h) h->dedication = ded;
 }
 
 void boot_set_progress(BootHandles *h, int pct, const char *stage) {
@@ -1261,6 +1262,52 @@ void boot_set_progress(BootHandles *h, int pct, const char *stage) {
   if (pct > 100) pct = 100;
   if (h->bar) lv_bar_set_value(h->bar, pct, LV_ANIM_ON);
   if (h->status && stage) lv_label_set_text(h->status, stage);
+}
+
+namespace {
+// Boot-intro property anims: fade opacity in, and (optionally) rise from a
+// small downward offset, eased. Captureless callbacks so they take function
+// pointers; the rise and the fade are two anims keyed by var + exec_cb.
+void intro_set_opa(void *o, int32_t v) { lv_obj_set_style_opa((lv_obj_t *)o, (lv_opa_t)v, 0); }
+void intro_set_ty(void *o, int32_t v)  { lv_obj_set_style_translate_y((lv_obj_t *)o, v, 0); }
+
+void fade_rise(lv_obj_t *o, int rise, uint32_t delay, uint32_t dur, lv_anim_path_cb_t rise_path) {
+  if (!o) return;
+  lv_obj_set_style_opa(o, LV_OPA_TRANSP, 0);   // start dark; the anim brings it up
+  lv_anim_t fa;
+  lv_anim_init(&fa);
+  lv_anim_set_var(&fa, o);
+  lv_anim_set_time(&fa, dur);
+  lv_anim_set_delay(&fa, delay);
+  lv_anim_set_path_cb(&fa, lv_anim_path_ease_out);
+  lv_anim_set_values(&fa, LV_OPA_TRANSP, LV_OPA_COVER);
+  lv_anim_set_exec_cb(&fa, intro_set_opa);
+  lv_anim_start(&fa);
+  if (rise) {
+    lv_obj_set_style_translate_y(o, rise, 0);
+    lv_anim_t ra;
+    lv_anim_init(&ra);
+    lv_anim_set_var(&ra, o);
+    lv_anim_set_time(&ra, dur);
+    lv_anim_set_delay(&ra, delay);
+    lv_anim_set_path_cb(&ra, rise_path);
+    lv_anim_set_values(&ra, rise, 0);
+    lv_anim_set_exec_cb(&ra, intro_set_ty);
+    lv_anim_start(&ra);
+  }
+}
+} // namespace
+
+void boot_play_intro(BootHandles *h) {
+  if (!h) return;
+  // Wake the porchlight: each piece fades and rises in, eased, the dedication
+  // landing last with a touch of overshoot. The flag keeps flying underneath.
+  // One-shot on first boot; the disconnected re-show keeps the settled state.
+  fade_rise(h->flag,       14,   0, 560, lv_anim_path_ease_out);
+  fade_rise(h->joke,        8, 380, 380, lv_anim_path_ease_out);
+  fade_rise(h->status,      0, 560, 300, lv_anim_path_ease_out);
+  fade_rise(h->bar,         0, 660, 300, lv_anim_path_ease_out);
+  fade_rise(h->dedication, 14, 860, 600, lv_anim_path_overshoot);
 }
 
 } // namespace pono

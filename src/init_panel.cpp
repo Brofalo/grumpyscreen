@@ -50,6 +50,10 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
       9000, this);   // 9s/joke; faster cycled before the line could be read
 
   pono::boot_set_progress(&boot_, 4, "Waiting for Klipper to start...");
+
+  // Wake the screen once: the flag, joke, instruments, and dedication fade and
+  // rise in. One-shot; a later disconnect re-shows the settled screen, no replay.
+  pono::boot_play_intro(&boot_);
 }
 
 InitPanel::~InitPanel() {

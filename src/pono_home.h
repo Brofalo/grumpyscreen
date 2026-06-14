@@ -45,14 +45,21 @@ HomeModel demo_home_paused_model();
 // decorative fake), and the dedication. Pure layout + theme, so it links into
 // the sim too; the app (init_panel) cycles the joke + calls boot_set_progress().
 struct BootHandles {
-  lv_obj_t *flag = nullptr;     // flying Hawaii flag (lv_animimg, pono_flag_boot_frames)
-  lv_obj_t *wordmark = nullptr; // retired 2026-06-10 (flag-only boot); stays null
-  lv_obj_t *joke = nullptr;     // cycling island joke; app fills + rotates the book
-  lv_obj_t *status = nullptr;   // stage line ("Connecting to Moonraker...")
-  lv_obj_t *bar = nullptr;      // legit progress bar (0..100, app-driven)
-  lv_obj_t *spinner = nullptr;  // retired 2026-06-11 (same order); stays null
+  lv_obj_t *flag = nullptr;       // flying Hawaii flag (lv_animimg, pono_flag_boot_frames)
+  lv_obj_t *wordmark = nullptr;   // retired 2026-06-10 (flag-only boot); stays null
+  lv_obj_t *joke = nullptr;       // cycling island joke; app fills + rotates the book
+  lv_obj_t *status = nullptr;     // stage line ("Connecting to Moonraker...")
+  lv_obj_t *bar = nullptr;        // legit progress bar (0..100, app-driven)
+  lv_obj_t *dedication = nullptr; // "For Elio and Io"; the intro fades it in last
+  lv_obj_t *spinner = nullptr;    // retired 2026-06-11 (same order); stays null
 };
 void build_boot(lv_obj_t *parent, BootHandles *h = nullptr);
+
+// Play the one-shot boot entrance: each piece fades and rises in, eased, the
+// dedication landing last. Called once on first boot (and by the sim to
+// capture it); uses LVGL property anims at 60 fps over the flying flag. The
+// flag must already be built (build_boot). NULL-safe on every handle.
+void boot_play_intro(BootHandles *h);
 
 // Set the boot progress bar + status line together (one honest stage update).
 // pct 0..100; stage is the short status text. NULL-safe on every handle.

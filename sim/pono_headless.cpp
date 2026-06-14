@@ -121,6 +121,7 @@ int main(int argc, char **argv) {
       lv_label_set_text(bh.joke,
         "Overhangs with no supports are like cliff jumping at Black Rock: all confidence and good cooling.");
     pono::boot_set_progress(&bh, 45, "Reading printer objects...");
+    pono::boot_play_intro(&bh);   // capture the one-shot entrance (step the clock to scan it)
   } else if (screen == "move") {
     pono::build_move(lv_scr_act());
   } else if (screen == "filament") {
