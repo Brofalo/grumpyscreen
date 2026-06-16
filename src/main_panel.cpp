@@ -872,6 +872,15 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == tp.bd_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>120?120:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", n)); }); s->numpad.foreground_reset(); return; }
   // Fans (quick)
   // Tune
+  // Safety interlock (the 2026-06-11 Full Cal incident, audit 2026-06-15): never
+  // start a calibration on top of a live job. Standard/Make Pono and the Bed Mesh
+  // + Input Shaper tiles all home, move, and heat; firing them mid-print would be
+  // a crash. Refuse on the device trigger - the gap the host watch cannot close.
+  if ((t == tu.standard || t == tu.omega || t == tu.cals[0] || t == tu.cals[3]) &&
+      (s->home_printing_ || s->home_paused_)) {
+    s->confirm("A job is loaded. Finish or cancel it before calibrating.", []{});
+    return;
+  }
   // Fire-and-navigate: a run parks the operator on the cockpit, where the cal
   // overlay / OMEGA banner carry progress. Staying on this selector reads as
   // "nothing happened" for the minutes before the runner's first announce.

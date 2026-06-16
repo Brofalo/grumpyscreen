@@ -467,12 +467,14 @@ void build_tune(lv_obj_t *parent, TuneHandles *h) {
   lv_obj_align(sts, LV_ALIGN_BOTTOM_LEFT, 14, -8);
   if (h) h->standard = st;
 
-  // Full Calibration: the lamp-marked tier (the action this screen exists for).
+  // Make Pono: the full-calibration tier, lamp-marked (the action this screen
+  // exists for). The name is the word in its first sense - correct, accurate,
+  // in perfect order; the subtitle stays plain so the operator knows what it is.
   lv_obj_t *om = card(parent, 244, 54, 224, 50, color_surface_raised);
   hairline_c(om, color_accent_primary, LV_OPA_COVER);
-  lv_obj_t *omt = lbl(om, "Full Calibration", font_body, color_accent_primary, 0, 0);
+  lv_obj_t *omt = lbl(om, "Make Pono", font_body, color_accent_primary, 0, 0);
   lv_obj_align(omt, LV_ALIGN_TOP_LEFT, 14, 8);
-  lv_obj_t *oms = tag(om, "COMPLETE TUNING SUITE", color_text_tertiary, 0, 0);
+  lv_obj_t *oms = tag(om, "FULL CALIBRATION", color_text_tertiary, 0, 0);
   lv_obj_align(oms, LV_ALIGN_BOTTOM_LEFT, 14, -8);
   if (h) h->omega = om;
 
@@ -490,6 +492,11 @@ void build_tune(lv_obj_t *parent, TuneHandles *h) {
     lv_obj_align(ch, LV_ALIGN_RIGHT_MID, -8, 0);
     if (h) h->cals[i] = t;
   }
+
+  // The porch lamp makes its round of the options: a 60fps amber orbit, ambient
+  // only - the live state lives in the Make Pono narration, never in this light.
+  lv_obj_t *orb = tune_orbit_create(parent);
+  if (h) h->orbit = orb;
 
   // ---- live speed slider ----
   tag(parent, "SPEED", color_text_tertiary, 12, 224);

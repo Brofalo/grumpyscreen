@@ -3,6 +3,7 @@
 #include "pono_anim.h"
 #include "pono_theme.h"
 #include <cstdio>  // sscanf: parse "Full Cal X/N" for the banner progress strip
+#include <cmath>   // cos/sin: the Make Pono orbit path
 
 namespace {
 // Singleton "working" overlay, lazily built on lv_layer_top.
@@ -147,6 +148,51 @@ void omega_status_show(const char *text) {
 void omega_status_hide() {
   if (g_omega == nullptr) return;
   lv_obj_add_flag(g_omega, LV_OBJ_FLAG_HIDDEN);
+}
+
+namespace {
+// The Make Pono orbit geometry, baked for the Tune cluster (two tiers up top +
+// five tiles below). One orbit per screen, so the path needs no per-instance
+// state: the exec_cb reads these constants. Center + radii trace the perimeter
+// of the options on the 480x272 panel.
+constexpr double ORBIT_CX = 240.0, ORBIT_CY = 134.0;
+constexpr double ORBIT_RX = 226.0, ORBIT_RY =  86.0;
+// v is the angle in tenths of a degree (0..3600): constant angular speed on an
+// ellipse gives a varying linear speed (quicker along the long axis), which
+// reads as an organic round, and the 0==3600 wrap stays invisible.
+void tune_orbit_exec_cb(void *obj, int32_t v) {
+  lv_obj_t *dot = (lv_obj_t *)obj;
+  double rad = (double)v * 0.1 * 0.017453292519943295;  // deg -> rad
+  lv_coord_t w = lv_obj_get_width(dot), hh = lv_obj_get_height(dot);
+  lv_obj_set_pos(dot,
+    (lv_coord_t)(ORBIT_CX + ORBIT_RX * std::cos(rad)) - w / 2,
+    (lv_coord_t)(ORBIT_CY + ORBIT_RY * std::sin(rad)) - hh / 2);
+}
+}  // namespace
+
+lv_obj_t *tune_orbit_create(lv_obj_t *parent) {
+  lv_obj_t *dot = lv_obj_create(parent);
+  lv_obj_remove_style_all(dot);
+  lv_obj_set_size(dot, 12, 12);
+  lv_obj_set_style_radius(dot, LV_RADIUS_CIRCLE, 0);
+  lv_obj_set_style_bg_color(dot, color_accent_primary, 0);   // the lamp (amber)
+  lv_obj_set_style_bg_opa(dot, LV_OPA_60, 0);
+  // The bloom: a wide, low-opacity amber shadow = the porch lamp's glow.
+  lv_obj_set_style_shadow_color(dot, color_accent_primary, 0);
+  lv_obj_set_style_shadow_width(dot, 26, 0);
+  lv_obj_set_style_shadow_opa(dot, LV_OPA_40, 0);
+  lv_obj_clear_flag(dot, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_move_background(dot);  // behind the cards: grazes the panel, never text
+  lv_anim_t a;
+  lv_anim_init(&a);
+  lv_anim_set_var(&a, dot);
+  lv_anim_set_exec_cb(&a, tune_orbit_exec_cb);
+  lv_anim_set_values(&a, 0, 3600);
+  lv_anim_set_time(&a, 6000);                       // a calm 6s round
+  lv_anim_set_repeat_count(&a, LV_ANIM_REPEAT_INFINITE);
+  lv_anim_set_path_cb(&a, lv_anim_path_linear);     // linear angle: the wrap is invisible
+  lv_anim_start(&a);
+  return dot;
 }
 
 }  // namespace pono

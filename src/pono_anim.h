@@ -71,5 +71,13 @@ void busy_hide();
 void omega_status_show(const char *text);
 void omega_status_hide();
 
+// Make Pono orbit: a single amber porch-lamp glow tracing an elliptical round of
+// the Tune options at 60 fps, an unbroken loop. Ambient identity ONLY - it is not
+// a progress signal (the narration and the real bar carry state). Frameless: an
+// lv_anim drives angle -> (x,y), so there is no baked flipbook and no int8 frame
+// cap. Drawn behind its siblings so the light grazes the panel without covering
+// text. LVGL auto-stops the anim when the returned object is deleted.
+lv_obj_t *tune_orbit_create(lv_obj_t *parent);
+
 }  // namespace pono
 #endif
