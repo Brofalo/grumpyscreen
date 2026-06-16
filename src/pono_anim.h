@@ -79,5 +79,17 @@ void omega_status_hide();
 // text. LVGL auto-stops the anim when the returned object is deleted.
 lv_obj_t *tune_orbit_create(lv_obj_t *parent);
 
+// Make Pono narration: a bottom "logbook" box that carries the live calibration
+// state honestly. NOW = the step running (phosphor), NEXT = what is coming (dim),
+// a real progress bar from done/total, and an always-reachable STOP. When the
+// run goes silent (fault=true) the NOW line turns to a lost-contact alarm and
+// STOP stays put - the inversion of the 2026-06-11 frozen-banner-no-stop
+// failure. Built once on lv_layer_top; same lv_lock contract as
+// omega_status_show. The STOP tap is wired to stop_cb (the app provides it; it
+// fires the stop gcode) on first build. NULL now/next render as blanks.
+void cal_log_show(const char *now, const char *next, int done, int total,
+                  bool fault, lv_event_cb_t stop_cb, void *stop_ud);
+void cal_log_hide();
+
 }  // namespace pono
 #endif

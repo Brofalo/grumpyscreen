@@ -195,4 +195,109 @@ lv_obj_t *tune_orbit_create(lv_obj_t *parent) {
   return dot;
 }
 
+namespace {
+// Make Pono narration "logbook" box, lazily built on lv_layer_top.
+lv_obj_t *g_callog = nullptr, *g_callog_now = nullptr, *g_callog_next = nullptr;
+lv_obj_t *g_callog_count = nullptr, *g_callog_bar = nullptr, *g_callog_rule = nullptr;
+lv_obj_t *g_callog_stop = nullptr;
+bool g_callog_stop_wired = false;
+}  // namespace
+
+void cal_log_show(const char *now, const char *next, int done, int total,
+                  bool fault, lv_event_cb_t stop_cb, void *stop_ud) {
+  if (g_callog == nullptr) {
+    const lv_coord_t H = 70, Y = 272 - H;
+    g_callog = lv_obj_create(lv_layer_top());
+    lv_obj_remove_style_all(g_callog);
+    lv_obj_set_pos(g_callog, 0, Y);
+    lv_obj_set_size(g_callog, 480, H);
+    lv_obj_set_style_bg_color(g_callog, color_surface_raised, 0);
+    lv_obj_set_style_bg_opa(g_callog, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(g_callog, LV_OBJ_FLAG_SCROLLABLE);
+    // top hairline (the lamp's edge; turns alarm on a lost-contact fault)
+    g_callog_rule = lv_obj_create(g_callog);
+    lv_obj_remove_style_all(g_callog_rule);
+    lv_obj_set_pos(g_callog_rule, 0, 0);
+    lv_obj_set_size(g_callog_rule, 480, 2);
+    lv_obj_set_style_bg_opa(g_callog_rule, LV_OPA_COVER, 0);
+    // "MAKE PONO" caps tag (instrument lettering)
+    lv_obj_t *tg = lv_label_create(g_callog);
+    lv_obj_set_style_text_color(tg, color_accent_secondary, 0);
+    lv_obj_set_style_text_font(tg, font_micro, 0);
+    lv_obj_set_style_text_letter_space(tg, 1, 0);
+    lv_label_set_text(tg, "MAKE PONO");
+    lv_obj_set_pos(tg, 12, 10);
+    // count "5/40"
+    g_callog_count = lv_label_create(g_callog);
+    lv_obj_set_style_text_color(g_callog_count, color_accent_primary, 0);
+    lv_obj_set_style_text_font(g_callog_count, font_caption, 0);
+    lv_obj_align(g_callog_count, LV_ALIGN_TOP_RIGHT, -12, 10);
+    // NOW (the running step) - phosphor, the live readout
+    g_callog_now = lv_label_create(g_callog);
+    lv_obj_set_style_text_font(g_callog_now, font_body, 0);
+    lv_label_set_long_mode(g_callog_now, LV_LABEL_LONG_DOT);
+    lv_obj_set_width(g_callog_now, 348);
+    lv_obj_set_pos(g_callog_now, 12, 26);
+    // NEXT (what is coming) - dim
+    g_callog_next = lv_label_create(g_callog);
+    lv_obj_set_style_text_color(g_callog_next, color_text_secondary, 0);
+    lv_obj_set_style_text_font(g_callog_next, font_caption, 0);
+    lv_label_set_long_mode(g_callog_next, LV_LABEL_LONG_DOT);
+    lv_obj_set_width(g_callog_next, 348);
+    lv_obj_set_pos(g_callog_next, 12, 46);
+    // STOP - always reachable; friction goes on the dangerous act, never the exit
+    g_callog_stop = lv_obj_create(g_callog);
+    lv_obj_remove_style_all(g_callog_stop);
+    lv_obj_set_size(g_callog_stop, 84, 40);
+    lv_obj_align(g_callog_stop, LV_ALIGN_RIGHT_MID, -12, 4);
+    lv_obj_set_style_bg_color(g_callog_stop, color_surface_base, 0);
+    lv_obj_set_style_bg_opa(g_callog_stop, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(g_callog_stop, radius_sm, 0);
+    lv_obj_set_style_border_color(g_callog_stop, color_state_error, 0);
+    lv_obj_set_style_border_width(g_callog_stop, 1, 0);
+    lv_obj_set_style_border_opa(g_callog_stop, LV_OPA_COVER, 0);
+    lv_obj_add_flag(g_callog_stop, LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_t *sl = lv_label_create(g_callog_stop);
+    lv_obj_set_style_text_color(sl, color_state_error, 0);
+    lv_obj_set_style_text_font(sl, font_caption, 0);
+    lv_obj_set_style_text_letter_space(sl, 1, 0);
+    lv_label_set_text(sl, "STOP");
+    lv_obj_center(sl);
+    // progress bar along the bottom edge
+    g_callog_bar = lv_obj_create(g_callog);
+    lv_obj_remove_style_all(g_callog_bar);
+    lv_obj_set_style_bg_color(g_callog_bar, color_accent_primary, 0);
+    lv_obj_set_style_bg_opa(g_callog_bar, LV_OPA_COVER, 0);
+    lv_obj_set_pos(g_callog_bar, 0, H - 3);
+    lv_obj_set_size(g_callog_bar, 0, 3);
+  }
+  // Wire STOP once (the app owns the stop gcode; pono_anim has no ws handle).
+  if (!g_callog_stop_wired && stop_cb != nullptr) {
+    lv_obj_add_event_cb(g_callog_stop, stop_cb, LV_EVENT_CLICKED, stop_ud);
+    g_callog_stop_wired = true;
+  }
+  // NOW: the running step, or the lost-contact alarm on a fault.
+  lv_obj_set_style_bg_color(g_callog_rule, fault ? color_state_error : color_accent_primary, 0);
+  lv_obj_set_style_text_color(g_callog_now, fault ? color_state_error : color_accent_secondary, 0);
+  lv_label_set_text(g_callog_now, now != nullptr ? now : "");
+  lv_label_set_text(g_callog_next, next != nullptr ? next : "");
+  if (total > 0) {
+    if (done < 0) done = 0;
+    if (done > total) done = total;
+    lv_label_set_text_fmt(g_callog_count, "%d/%d", done, total);
+    lv_obj_set_size(g_callog_bar, (lv_coord_t)((480 * done) / total), 3);
+    lv_obj_clear_flag(g_callog_bar, LV_OBJ_FLAG_HIDDEN);
+  } else {
+    lv_label_set_text(g_callog_count, "");
+    lv_obj_add_flag(g_callog_bar, LV_OBJ_FLAG_HIDDEN);
+  }
+  lv_obj_clear_flag(g_callog, LV_OBJ_FLAG_HIDDEN);
+  lv_obj_move_foreground(g_callog);
+}
+
+void cal_log_hide() {
+  if (g_callog == nullptr) return;
+  lv_obj_add_flag(g_callog, LV_OBJ_FLAG_HIDDEN);
+}
+
 }  // namespace pono
