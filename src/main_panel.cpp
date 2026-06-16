@@ -178,6 +178,23 @@ void MainPanel::check_stale() {
     pono::home_set_stale(&home_h, -1);
     stale_shown_ = false;
   }
+  // Make Pono lost-contact: during a run, the silence that wedges the dashboard
+  // means the machine could be executing driverless (the 2026-06-11 freeze).
+  // Flip the logbook to the alarm so the operator knows to hit STOP instead of a
+  // frozen-cheerful banner; restore the live line the moment contact resumes.
+  if (callog_shown_) {
+    const int64_t cage = ws.ms_since_status_update();
+    if (cage >= STALE_AFTER_MS) {
+      std::string m = "no word from the machine for " + std::to_string((int)(cage / 1000)) + "s";
+      pono::cal_log_show(m.c_str(), "tap STOP if it does not clear",
+                         callog_done_, callog_total_, true, &MainPanel::_callog_stop, this);
+      callog_fault_ = true;
+    } else if (callog_fault_) {
+      pono::cal_log_show(callog_now_.c_str(), callog_next_.empty() ? nullptr : callog_next_.c_str(),
+                         callog_done_, callog_total_, false, &MainPanel::_callog_stop, this);
+      callog_fault_ = false;
+    }
+  }
 }
 
 // Parse the cal step text "Make Pono X/N: now | next" (or "Full Cal X/N: now")
@@ -437,18 +454,18 @@ void MainPanel::consume(json &j) {
                    (cal_msg_.rfind("Make Pono", 0) == 0 || cal_msg_.rfind("Full Cal", 0) == 0);
     if (cal_run) {
       if (!callog_shown_ || cal_msg_ != callog_text_) {
-        std::string cn, cx; int cd = 0, ct = 0;
-        parse_cal_msg(cal_msg_, cn, cx, cd, ct);
-        pono::cal_log_show(cn.c_str(), cx.empty() ? nullptr : cx.c_str(),
-                           cd, ct, false, &MainPanel::_callog_stop, this);
+        parse_cal_msg(cal_msg_, callog_now_, callog_next_, callog_done_, callog_total_);
+        pono::cal_log_show(callog_now_.c_str(), callog_next_.empty() ? nullptr : callog_next_.c_str(),
+                           callog_done_, callog_total_, false, &MainPanel::_callog_stop, this);
         callog_shown_ = true;
         callog_text_ = cal_msg_;
-        callog_change_ms_ = lv_tick_get();
+        callog_fault_ = false;
       }
     } else if (callog_shown_) {
       pono::cal_log_hide();
       callog_shown_ = false;
       callog_text_.clear();
+      callog_fault_ = false;
     }
   }
 }
@@ -538,6 +555,7 @@ void MainPanel::reset_overlay_state() {
   pono::cal_log_hide();       // a link drop mid-Make-Pono must not strand the logbook
   callog_shown_ = false;
   callog_text_.clear();
+  callog_fault_ = false;
   prompt_panel.reset();       // a prompt up at link-loss never gets prompt_end -> showing_ would stay true and suppress the cal overlay all session
   busy_ = false;
 }

@@ -144,8 +144,10 @@ class MainPanel : public NotifyConsumer {
   bool omega_banner_ = false;     // is the OMEGA print banner currently shown (Phase B/C prints)
   std::string omega_banner_text_; // text currently on the OMEGA banner (skip redundant redraws)
   bool callog_shown_ = false;       // is the Make Pono narration logbook currently shown
-  std::string callog_text_;         // step text on the logbook now (skip redundant redraws)
-  uint32_t callog_change_ms_ = 0;   // lv_tick when callog_text_ last changed (lost-contact watchdog)
+  std::string callog_text_;         // raw step text on the logbook now (skip redundant redraws)
+  std::string callog_now_, callog_next_;    // last parsed NOW/NEXT (watchdog restores them on resume)
+  int callog_done_ = 0, callog_total_ = 0;  // last parsed count (kept on the lost-contact alarm)
+  bool callog_fault_ = false;       // is the logbook currently showing the lost-contact alarm
   double home_progress_ = 0.0;    // last-seen virtual_sdcard progress (survives Moonraker deltas)
   double home_duration_ = 0.0;    // last-seen print_stats.print_duration (survives Moonraker deltas)
   int home_nozzle_ = 0, home_nozzle_set_ = 0;   // cached temps (survive deltas; feed the rebuild model)
