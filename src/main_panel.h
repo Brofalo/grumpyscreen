@@ -110,6 +110,7 @@ class MainPanel : public NotifyConsumer {
   void render_bed_mesh(const json &bm);   // draw the heatmap from a bed_mesh status object
   void populate_files();                  // query Moonraker, fill the Files list
   static void _sub_tap(lv_event_t *e);    // sub-screen button -> gcode action
+  static void _callog_stop(lv_event_t *e);  // Make Pono STOP -> CANCEL_PRINT (frictionless exit)
   static void _fan_slider_cb(lv_event_t *e);
   static void _file_row_cb(lv_event_t *e);
   static void _tabview_event_cb(lv_event_t *e);
@@ -142,6 +143,9 @@ class MainPanel : public NotifyConsumer {
   bool cal_overlay_ = false;      // is the cal progress overlay currently shown
   bool omega_banner_ = false;     // is the OMEGA print banner currently shown (Phase B/C prints)
   std::string omega_banner_text_; // text currently on the OMEGA banner (skip redundant redraws)
+  bool callog_shown_ = false;       // is the Make Pono narration logbook currently shown
+  std::string callog_text_;         // step text on the logbook now (skip redundant redraws)
+  uint32_t callog_change_ms_ = 0;   // lv_tick when callog_text_ last changed (lost-contact watchdog)
   double home_progress_ = 0.0;    // last-seen virtual_sdcard progress (survives Moonraker deltas)
   double home_duration_ = 0.0;    // last-seen print_stats.print_duration (survives Moonraker deltas)
   int home_nozzle_ = 0, home_nozzle_set_ = 0;   // cached temps (survive deltas; feed the rebuild model)
