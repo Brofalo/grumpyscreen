@@ -178,6 +178,52 @@ void MainPanel::check_stale() {
     pono::home_set_stale(&home_h, -1);
     stale_shown_ = false;
   }
+  // Make Pono lost-contact: during a run, the silence that wedges the dashboard
+  // means the machine could be executing driverless (the 2026-06-11 freeze).
+  // Flip the logbook to the alarm so the operator knows to hit STOP instead of a
+  // frozen-cheerful banner; restore the live line the moment contact resumes.
+  if (callog_shown_) {
+    const int64_t cage = ws.ms_since_status_update();
+    if (cage >= STALE_AFTER_MS) {
+      std::string m = "no word from the machine for " + std::to_string((int)(cage / 1000)) + "s";
+      pono::cal_log_show(m.c_str(), "tap STOP if it does not clear",
+                         callog_done_, callog_total_, true, &MainPanel::_callog_stop, this);
+      callog_fault_ = true;
+    } else if (callog_fault_) {
+      pono::cal_log_show(callog_now_.c_str(), callog_next_.empty() ? nullptr : callog_next_.c_str(),
+                         callog_done_, callog_total_, false, &MainPanel::_callog_stop, this);
+      callog_fault_ = false;
+    }
+  }
+}
+
+// Parse the cal step text "Make Pono X/N: now | next" (or "Full Cal X/N: now")
+// into the logbook fields. done/total from the X/N; now = after ':' up to '|';
+// next = after '|' (optional). Robust to a bare prefix with no count or steps.
+static void parse_cal_msg(const std::string &m, std::string &now,
+                          std::string &next, int &done, int &total) {
+  done = total = 0; now.clear(); next.clear();
+  size_t slash = m.find('/');
+  if (slash != std::string::npos && slash > 0) {
+    size_t a = slash;     while (a > 0 && m[a-1] >= '0' && m[a-1] <= '9') a--;
+    size_t e = slash + 1; while (e < m.size() && m[e] >= '0' && m[e] <= '9') e++;
+    if (a < slash && e > slash + 1) {
+      try { done = std::stoi(m.substr(a, slash - a));
+            total = std::stoi(m.substr(slash + 1, e - slash - 1)); } catch (...) {}
+    }
+  }
+  size_t colon = m.find(':');
+  if (colon == std::string::npos) return;
+  std::string body = m.substr(colon + 1);
+  auto trim = [](const std::string &s) -> std::string {
+    size_t i = s.find_first_not_of(" \t");
+    if (i == std::string::npos) return std::string();
+    size_t jj = s.find_last_not_of(" \t");
+    return s.substr(i, jj - i + 1);
+  };
+  size_t bar = body.find('|');
+  if (bar != std::string::npos) { now = trim(body.substr(0, bar)); next = trim(body.substr(bar + 1)); }
+  else now = trim(body);
 }
 
 void MainPanel::consume(json &j) {
@@ -398,22 +444,28 @@ void MainPanel::consume(json &j) {
       cal_overlay_text_.clear();
     }
 
-    // --- Full Calibration print banner ------------------------------------
-    // The cal overlay above is gated to !printing, so during Phase B/C test
-    // prints (print_stats=="printing") every campaign cue would vanish. Carry
-    // the live step + running grade on a thin top banner through each print so
-    // the operator watches the run without a laptop on the runner.
-    bool omega_printing = printing && cal_msg_.rfind("Full Cal", 0) == 0;
-    if (omega_printing) {
-      if (!omega_banner_ || cal_msg_ != omega_banner_text_) {
-        pono::omega_status_show(cal_msg_.c_str());
-        omega_banner_ = true;
-        omega_banner_text_ = cal_msg_;
+    // --- Make Pono narration ----------------------------------------------
+    // The campaign (machine cals then test prints) announces each step via
+    // SET_DISPLAY_TEXT as "Make Pono X/N: now | next" ("Full Cal X/N" from the
+    // older macro is accepted too). Carry it on the honest logbook box through
+    // the whole run, in either state, with an always-reachable STOP. Replaces
+    // the thin OMEGA top banner.
+    bool cal_run = (busy_ || printing) &&
+                   (cal_msg_.rfind("Make Pono", 0) == 0 || cal_msg_.rfind("Full Cal", 0) == 0);
+    if (cal_run) {
+      if (!callog_shown_ || cal_msg_ != callog_text_) {
+        parse_cal_msg(cal_msg_, callog_now_, callog_next_, callog_done_, callog_total_);
+        pono::cal_log_show(callog_now_.c_str(), callog_next_.empty() ? nullptr : callog_next_.c_str(),
+                           callog_done_, callog_total_, false, &MainPanel::_callog_stop, this);
+        callog_shown_ = true;
+        callog_text_ = cal_msg_;
+        callog_fault_ = false;
       }
-    } else if (omega_banner_) {
-      pono::omega_status_hide();
-      omega_banner_ = false;
-      omega_banner_text_.clear();
+    } else if (callog_shown_) {
+      pono::cal_log_hide();
+      callog_shown_ = false;
+      callog_text_.clear();
+      callog_fault_ = false;
     }
   }
 }
@@ -500,11 +552,23 @@ void MainPanel::hide_busy_overlay() {
 // the cal overlay re-shows on reconnect if the cal is still running.
 void MainPanel::reset_overlay_state() {
   hide_busy_overlay();
-  pono::omega_status_hide();  // a link drop mid-OMEGA-print must not strand the banner
-  omega_banner_ = false;
-  omega_banner_text_.clear();
+  pono::cal_log_hide();       // a link drop mid-Make-Pono must not strand the logbook
+  callog_shown_ = false;
+  callog_text_.clear();
+  callog_fault_ = false;
   prompt_panel.reset();       // a prompt up at link-loss never gets prompt_end -> showing_ would stay true and suppress the cal overlay all session
   busy_ = false;
+}
+
+// Make Pono STOP: cancel the run now. The exit stays frictionless (no confirm) -
+// friction belongs on the dangerous action, not the operator's way out (the
+// 2026-06-11 freeze had no way out at all). CANCEL_PRINT is the safe stop for
+// the test-print phase; a PONO_CAL_STOP macro for the machine-cal phase is the
+// bench-gated companion.
+void MainPanel::_callog_stop(lv_event_t *e) {
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
+  s->ws.gcode_script("CANCEL_PRINT");
 }
 
 // Cockpit tile taps route to the existing (proven) control panels, which
@@ -872,6 +936,15 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == tp.bd_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>120?120:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", n)); }); s->numpad.foreground_reset(); return; }
   // Fans (quick)
   // Tune
+  // Safety interlock (the 2026-06-11 Full Cal incident, audit 2026-06-15): never
+  // start a calibration on top of a live job. Standard/Make Pono and the Bed Mesh
+  // + Input Shaper tiles all home, move, and heat; firing them mid-print would be
+  // a crash. Refuse on the device trigger - the gap the host watch cannot close.
+  if ((t == tu.standard || t == tu.omega || t == tu.cals[0] || t == tu.cals[3]) &&
+      (s->home_printing_ || s->home_paused_)) {
+    s->confirm("A job is loaded. Finish or cancel it before calibrating.", []{});
+    return;
+  }
   // Fire-and-navigate: a run parks the operator on the cockpit, where the cal
   // overlay / OMEGA banner carry progress. Staying on this selector reads as
   // "nothing happened" for the minutes before the runner's first announce.

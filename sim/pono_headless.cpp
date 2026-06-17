@@ -212,6 +212,14 @@ int main(int argc, char **argv) {
     // Working overlay demo: scrim + comet spinner + status over the idle home.
     pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
     pono::busy_show("Homing all axes");
+  } else if (screen == "makepono") {
+    // Make Pono narration box: the honest NOW/NEXT logbook + a true bar + STOP.
+    pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
+    pono::cal_log_show("Finding true Z", "next  bed mesh, then input shaping", 5, 40, false, nullptr, nullptr);
+  } else if (screen == "makepono_fault") {
+    // The lost-contact state: no word from the machine -> alarm + STOP stays put.
+    pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
+    pono::cal_log_show("no word from the machine for 14s", "tap STOP if it does not clear", 5, 40, true, nullptr, nullptr);
   } else {
     pono::build_home(lv_scr_act(), pono::demo_home_model());
   }
