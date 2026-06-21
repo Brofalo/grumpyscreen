@@ -57,6 +57,7 @@ InitPanel::InitPanel(MainPanel &mp, std::mutex& l)
 }
 
 InitPanel::~InitPanel() {
+  std::lock_guard<std::mutex> lock(lv_lock);  // don't race the render loop on teardown
   if (joke_timer_) { lv_timer_del(joke_timer_); joke_timer_ = nullptr; }
   if (cont != NULL) {
     lv_obj_del(cont);   // frees the flag/joke/status/bar children too
@@ -120,7 +121,8 @@ void InitPanel::connected(KWebSocketClient &ws) {
   reveal_progress();   // Act 2: real loading begins, phase the progress bar in
   set_stage(22, "Connecting to Moonraker...");
 
-  ws.send_jsonrpc("printer.objects.list", [this, &ws](json& d) {
+  const unsigned epoch = conn_epoch_;  // this connection's generation
+  ws.send_jsonrpc("printer.objects.list", [this, &ws, epoch](json& d) {
     State *state = State::get_instance();
 	  state->set_data("printer_objs", d, "/result");
 
@@ -140,10 +142,14 @@ void InitPanel::connected(KWebSocketClient &ws) {
       State::get_instance()->set_data("server_info", j, "/result");
 
       auto &components = j["/result/components"_json_pointer];
-      if (!components.is_null()) {
-        const auto &has_spoolman = components.template get<std::vector<std::string>>();
-        if (std::find(has_spoolman.begin(), has_spoolman.end(), "spoolman") != has_spoolman.end()) {
-          this->main_panel.enable_spoolman();
+      if (components.is_array()) {
+        // Element-wise + is_string instead of get<vector<string>>(): a single
+        // non-string entry there would otherwise throw out of the ws callback.
+        for (auto &c : components) {
+          if (c.is_string() && c.template get<std::string>() == "spoolman") {
+            this->main_panel.enable_spoolman();
+            break;
+          }
         }
       }
     });
@@ -173,22 +179,32 @@ void InitPanel::connected(KWebSocketClient &ws) {
 
       json subs = {{ "objects", sub_objs }};
       LOG_DEBUG("subscribing to {}", subs.dump());
-      ws.send_jsonrpc("printer.objects.subscribe", subs, [this](json &data) {
+      ws.send_jsonrpc("printer.objects.subscribe", subs, [this, epoch](json &data) {
         State::get_instance()->set_data("printer_state", data, "/result/status");
         this->main_panel.init(data);
         LOG_DEBUG("done init");
         std::lock_guard<std::mutex> lock(this->lv_lock);
+        // If the link dropped (and maybe came back) since this connect began, a
+        // newer disconnect already re-raised the boot screen. Don't let this
+        // stale reply hide it and leave a cockpit sitting over a dead link.
+        if (epoch != this->conn_epoch_) return;
         pono::boot_set_progress(&boot_, 100, "Ready");
         lv_obj_add_flag(this->cont, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_background(this->cont);
         this->main_panel.show_home();  // bring the native cockpit forward
       });
+    } else {
+      // Empty/missing objects list (a malformed reply, or an error instead of a
+      // result): without this the boot bar sticks at 78% forever with no word.
+      // Surface it; a reconnect re-runs the whole connect handshake.
+      this->set_stage(55, "Waiting for printer...");
     }
   });
 }
 
 void InitPanel::disconnected(KWebSocketClient &ws) {
   LOG_DEBUG("init panel disconnected");
+  conn_epoch_++;   // invalidate any in-flight connect callbacks from the dead link
   std::lock_guard<std::mutex> lock(lv_lock);
   // disconnected() runs on the websocket thread; every LVGL write here must hold
   // lv_lock against the render loop (guppyscreen.cpp loop).

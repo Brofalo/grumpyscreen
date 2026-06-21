@@ -31,6 +31,7 @@ class InitPanel {
   size_t joke_idx_ = 0;
   lv_timer_t *joke_timer_ = nullptr;  // rotates the joke while we wait
   bool progress_shown_ = false;       // Act 2 latch (reveal once, on first connect)
+  unsigned conn_epoch_ = 0;           // bumped on disconnect; a stale in-flight connect reply checks it before hiding boot
   MainPanel &main_panel;
   std::mutex &lv_lock;
 };
