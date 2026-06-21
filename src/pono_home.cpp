@@ -506,6 +506,7 @@ void build_tune(lv_obj_t *parent, TuneHandles *h) {
   lv_obj_t *sl = lv_slider_create(parent);
   lv_obj_set_pos(sl, 12, 244);
   lv_obj_set_size(sl, 456, 10);
+  lv_obj_set_ext_click_area(sl, 16);  // a 10px track is too thin to grab on a resistive panel
   lv_slider_set_range(sl, 50, 200);
   lv_slider_set_value(sl, 100, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(sl, color_surface_elevated, LV_PART_MAIN);
@@ -1123,6 +1124,7 @@ void build_fans(lv_obj_t *parent, FansHandles *h) {
     if (settable[i]) {
       lv_obj_t *sl = lv_slider_create(c);
       lv_obj_set_size(sl, 188, 8);
+      lv_obj_set_ext_click_area(sl, 16);  // an 8px track is too thin to grab on a resistive panel
       lv_obj_align(sl, LV_ALIGN_CENTER, 30, 0);
       lv_slider_set_range(sl, 0, 100);
       lv_slider_set_value(sl, 0, LV_ANIM_OFF);

@@ -761,7 +761,7 @@ void MainPanel::populate_system() {
     if (system_h_.uptime) lv_label_set_text(system_h_.uptime, fmt::format("{}h {}m", hh, mm).c_str()); }
 
   { std::ifstream f("/sys/class/thermal/thermal_zone0/temp"); long mdeg = -1; f >> mdeg;
-    if (system_h_.mcu) lv_label_set_text(system_h_.mcu, mdeg > 0 ? fmt::format("{:.1f} C", mdeg / 1000.0).c_str() : "--"); }
+    if (system_h_.mcu) lv_label_set_text(system_h_.mcu, mdeg > 0 ? fmt::format("{:.1f}C", mdeg / 1000.0).c_str() : "--"); }
 
   check_update();
 }
@@ -1024,7 +1024,7 @@ void MainPanel::_sub_tap(lv_event_t *e) {
         pono::busy_hide();
         if (s->system_h_.update_status) {
           lv_label_set_text(s->system_h_.update_status,
-            rc == 0 ? "rebooting..." : "FAULT: update failed");
+            rc == 0 ? "rebooting..." : "update failed (see log)");
           lv_obj_set_style_text_color(s->system_h_.update_status,
             rc == 0 ? pono::color_accent_primary : pono::color_state_error, 0);
           lv_obj_align(s->system_h_.update_status, LV_ALIGN_RIGHT_MID, -12, 0);
