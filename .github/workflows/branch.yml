@@ -90,7 +90,7 @@ jobs:
     # Banked as a workflow flake 2026-05-22.
     - name: branch release
       if: github.event_name == 'push'
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
       with:
         name: ${{ github.ref_name }}
         tag_name: ${{ github.ref_name }}
