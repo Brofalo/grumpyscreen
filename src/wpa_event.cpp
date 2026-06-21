@@ -85,6 +85,9 @@ void WpaEvent::init_wpa() {
   
   if (io == NULL) {
     LOG_TRACE("failed to poll wpa supplicant monitor socket");
+    // Was falling through to hio_set_context(NULL, ...) -> guaranteed crash.
+    wpa_ctrl_close(mon_conn);
+    return;
   }
   hio_set_context(io, this);
   hio_setcb_read(io, WpaEvent::_handle_wpa_events);

@@ -46,48 +46,77 @@ int KWebSocketClient::connect(const char* url,
     connected();
   };
   onmessage = [this, connected, disconnected](const std::string &msg) {
-    auto j = json::parse(msg);
-
-    if (j.contains("id")) {
-      // XXX: get rid of consumers and use function ptrs for callback
-      const auto &entry = consumers.find(j["id"]);
-      if (entry != consumers.end()) {
-        entry->second->consume(j);
-        consumers.erase(entry);
-      }
-
-      const auto &cb_entry = callbacks.find(j["id"]);
-      if (cb_entry != callbacks.end()) {
-        cb_entry->second(j);
-        callbacks.erase(cb_entry);
-      }
+    json j;
+    try {
+      j = json::parse(msg);
+    } catch (const std::exception &e) {
+      // A malformed/truncated frame (e.g. a still-starting Moonraker) must
+      // never abort the ws thread.
+      LOG_ERROR("ws: dropping unparseable message: {}", e.what());
+      return;
     }
 
-    if (j.contains("method")) {
-      std::string method = j["method"].template get<std::string>();
-      if ("notify_status_update" == method) {
-        last_status_ms_.store(mono_ms(), std::memory_order_relaxed);
-        for (const auto &entry : notify_consumers) {
-          entry->consume(j);
+    try {
+      if (j.contains("id")) {
+        // Copy the matching consumer/callback OUT under the lock and erase it
+        // BEFORE invoking: the callback can re-enter send_jsonrpc and mutate
+        // these maps, which would invalidate a held iterator. Invoke unlocked
+        // so consume()/cb can take lv_lock without inverting lock order.
+        NotifyConsumer *consumer = nullptr;
+        std::function<void(json&)> cb;
+        uint32_t rid = j["id"].template get<uint32_t>();
+        {
+          std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
+          auto entry = consumers.find(rid);
+          if (entry != consumers.end()) { consumer = entry->second; consumers.erase(entry); }
+          auto cb_entry = callbacks.find(rid);
+          if (cb_entry != callbacks.end()) { cb = cb_entry->second; callbacks.erase(cb_entry); }
         }
-      } else if ("notify_klippy_disconnected" == method) {
-        LOG_DEBUG("klippy disconnected");
-        disconnected();
-      } else if ("notify_klippy_shutdown" == method) {
-        LOG_DEBUG("klippy shutdown");
-        disconnected();
-      } else if ("notify_klippy_ready" == method) {
-        LOG_DEBUG("klippy connected");
-        connected();
+        if (consumer) consumer->consume(j);
+        if (cb) cb(j);
       }
 
-      for (const auto &entry : method_resp_cbs) {
-        if (method == entry.first) {
-          for (const auto &handler_entry : entry.second) {
-            handler_entry.second(j);
+      if (j.contains("method")) {
+        std::string method = j["method"].template get<std::string>();
+        if ("notify_status_update" == method) {
+          last_status_ms_.store(mono_ms(), std::memory_order_relaxed);
+          std::vector<NotifyConsumer*> snapshot;
+          {
+            std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
+            snapshot = notify_consumers;
+          }
+          for (const auto &entry : snapshot) {
+            entry->consume(j);
+          }
+        } else if ("notify_klippy_disconnected" == method) {
+          LOG_DEBUG("klippy disconnected");
+          disconnected();
+        } else if ("notify_klippy_shutdown" == method) {
+          LOG_DEBUG("klippy shutdown");
+          disconnected();
+        } else if ("notify_klippy_ready" == method) {
+          LOG_DEBUG("klippy connected");
+          connected();
+        }
+
+        std::vector<std::function<void(json&)>> handlers;
+        {
+          std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
+          auto entry = method_resp_cbs.find(method);
+          if (entry != method_resp_cbs.end()) {
+            for (const auto &handler_entry : entry->second) {
+              handlers.push_back(handler_entry.second);
+            }
           }
         }
+        for (auto &handler : handlers) {
+          handler(j);
+        }
       }
+    } catch (const std::exception &e) {
+      // Any get<>()/handler throw on the ws thread is contained here instead
+      // of terminating the process.
+      LOG_ERROR("ws: error handling message: {}", e.what());
     }
   };
 
@@ -118,56 +147,45 @@ int64_t KWebSocketClient::ms_since_status_update() const {
 int KWebSocketClient::send_jsonrpc(const std::string &method,
 				   const json &params,
 				   std::function<void(json&)> cb) {
-  const auto &entry = callbacks.find(id);
-  if (entry == callbacks.end()) {
-    // LOG_DEBUG("registering consume %d, %x\n", id, consumer);
-    callbacks.insert({id, cb});
-    // XXX: check success, remove consumer if send is unsuccessfull
-    return send_jsonrpc(method, params);
-  } else {
-    // LOG_DEBUG("WARN: id %d is already register with a consumer\n", id);
-  }
-
-  return 0;
+  // Hold the lock across register + send so the callback is keyed on exactly
+  // the id this rpc carries, with no interleaving id++ from the ws thread.
+  std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
+  callbacks[id] = cb;
+  return send_jsonrpc(method, params);
 }
 
 int KWebSocketClient::send_jsonrpc(const std::string &method, std::function<void(json&)> cb) {
-  const auto &entry = callbacks.find(id);
-  if (entry == callbacks.end()) {
-    // LOG_DEBUG("registering consume %d, %x\n", id, consumer);
-    callbacks.insert({id, cb});
-    // XXX: check success, remove consumer if send is unsuccessfull
-    return send_jsonrpc(method);
-  } else {
-    // LOG_DEBUG("WARN: id %d is already register with a consumer\n", id);
-  }
-  return 0;
+  std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
+  callbacks[id] = cb;
+  return send_jsonrpc(method);
 }
 
 int KWebSocketClient::send_jsonrpc(const std::string &method, const json &params, NotifyConsumer *consumer) {
-  const auto &entry = consumers.find(id);
-  if (entry == consumers.end()) {
-    consumers.insert({id, consumer});
-    return send_jsonrpc(method, params);
-  }
-  return 0;
+  std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
+  consumers[id] = consumer;
+  return send_jsonrpc(method, params);
 }
 
 void KWebSocketClient::register_notify_update(NotifyConsumer *consumer) {
+  std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
   if (std::find(notify_consumers.begin(), notify_consumers.end(), consumer) == std::end(notify_consumers)) {
     notify_consumers.push_back(consumer);
   }
 }
 
 void KWebSocketClient::unregister_notify_update(NotifyConsumer *consumer) {
+  std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
+  // Two-arg erase: remove_if returns end() when nothing matches, and
+  // erase(end()) alone is undefined behavior. The range form is the fix.
   notify_consumers.erase(std::remove_if(
     notify_consumers.begin(), notify_consumers.end(),
     [consumer](NotifyConsumer *c) {
       return c == consumer;
-    }));
+    }), notify_consumers.end());
 }
 
 int KWebSocketClient::send_jsonrpc(const std::string &method, const json &params) {
+  std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
   json rpc;
   rpc["jsonrpc"] = "2.0";
   rpc["method"] = method;
@@ -179,6 +197,7 @@ int KWebSocketClient::send_jsonrpc(const std::string &method, const json &params
 }
 
 int KWebSocketClient::send_jsonrpc(const std::string &method) {
+  std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
   json rpc;
   rpc["jsonrpc"] = "2.0";
   rpc["method"] = method;
@@ -206,6 +225,7 @@ int KWebSocketClient::gcode_script(const std::string &gcode, std::function<void(
 void KWebSocketClient::register_method_callback(std::string resp_method,
 						std::string handler_name,
 						std::function<void(json&)> cb) {
+  std::lock_guard<std::recursive_mutex> lk(rpc_mutex_);
   const auto &entry = method_resp_cbs.find(resp_method);
   if (entry == method_resp_cbs.end()) {
     LOG_DEBUG("registering new method {}, handler {}", resp_method, handler_name);

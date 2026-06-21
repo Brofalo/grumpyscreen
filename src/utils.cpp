@@ -86,8 +86,10 @@ namespace KUtils {
 
   std::vector<std::string> get_interfaces() {
     std::vector<std::string> ifaces;
-    struct ifaddrs *addrs;
-    getifaddrs(&addrs);
+    struct ifaddrs *addrs = nullptr;
+    if (getifaddrs(&addrs) != 0 || addrs == nullptr) {
+      return ifaces;  // on failure addrs is indeterminate; don't walk it
+    }
     for (struct ifaddrs *addr = addrs; addr != nullptr; addr = addr->ifa_next) {
       if (addr->ifa_addr && addr->ifa_addr->sa_family == AF_PACKET) {
         ifaces.push_back(addr->ifa_name);
@@ -100,15 +102,18 @@ namespace KUtils {
 
   std::string interface_ip(const std::string &interface) {
     int fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_IP);
+    if (fd < 0) {
+      return "";
+    }
 
     struct ifreq ifr{};
-    strcpy(ifr.ifr_name, interface.c_str());
-    ioctl(fd, SIOCGIFADDR, &ifr);
+    strncpy(ifr.ifr_name, interface.c_str(), sizeof(ifr.ifr_name) - 1);
+    std::string result;
+    if (ioctl(fd, SIOCGIFADDR, &ifr) == 0) {
+      result = inet_ntoa(((sockaddr_in *) &ifr.ifr_addr)->sin_addr);
+    }
     close(fd);
-
-    char ip[INET_ADDRSTRLEN];
-    strcpy(ip, inet_ntoa(((sockaddr_in *) &ifr.ifr_addr)->sin_addr));
-    return ip;
+    return result;  // "" on ioctl failure -> caller treats as no IP
   }
 
   std::string get_wifi_interface() {

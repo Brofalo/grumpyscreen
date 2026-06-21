@@ -149,7 +149,10 @@ void SpoolmanPanel::populate_spools(std::vector<json> &sorted_spools) {
     size_t row_idx = 1;
     for (auto &el : sorted_spools) {
       LOG_TRACE("spool {}", el.dump());
-      bool is_archived = el["archived"].template get<bool>();
+      // Guard like every sibling field: a record missing/!bool "archived"
+      // (older Spoolman, custom DB) must not throw out of the ws callback.
+      auto archived_json = el["/archived"_json_pointer];
+      bool is_archived = archived_json.is_boolean() ? archived_json.template get<bool>() : false;
       if (skip_archive && is_archived) {
 	      continue;
       }

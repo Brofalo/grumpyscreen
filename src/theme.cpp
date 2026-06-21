@@ -26,7 +26,18 @@ void ThemeConfig::init(const std::string config_path) {
   struct stat buffer;
 
   if (stat(config_path.c_str(), &buffer) == 0) {
-    data = json::parse(std::ifstream(config_path));
+    try {
+      data = json::parse(std::ifstream(config_path));
+    } catch (const std::exception &e) {
+      // A present-but-corrupt theme (truncated / empty / partial OTA write)
+      // must not abort boot before a single pixel is drawn. Fall back to the
+      // same defaults used when the file is missing.
+      LOG_ERROR("Theme file {} is not valid JSON ({}); using defaults", config_path, e.what());
+      data = {
+        {"primary_color", "0x2196F3"},
+        {"secondary_color", "0xF44336"}
+      };
+    }
   } else {
     LOG_ERROR("Theme file not found: {}", config_path);
     data = {
