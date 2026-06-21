@@ -149,7 +149,10 @@ void SpoolmanPanel::populate_spools(std::vector<json> &sorted_spools) {
     size_t row_idx = 1;
     for (auto &el : sorted_spools) {
       LOG_TRACE("spool {}", el.dump());
-      bool is_archived = el["archived"].template get<bool>();
+      // Guard like every sibling field: a record missing/!bool "archived"
+      // (older Spoolman, custom DB) must not throw out of the ws callback.
+      auto archived_json = el["/archived"_json_pointer];
+      bool is_archived = archived_json.is_boolean() ? archived_json.template get<bool>() : false;
       if (skip_archive && is_archived) {
 	      continue;
       }
@@ -397,16 +400,20 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
 
       if (row != 0 && col == 3) {
         const char *spool_id = lv_table_get_cell_value(spool_table, row, 0);
-        uint32_t id = std::stoi(spool_id);
-        const auto &spool = spools.find(id);
+        // Empty/non-numeric cell mid-rebuild must not throw out of the draw path.
+        uint32_t id = 0;
+        bool id_ok = spool_id && *spool_id;
+        if (id_ok) { try { id = (uint32_t)std::stoul(spool_id); } catch (...) { id_ok = false; } }
+        const auto spool = id_ok ? spools.find(id) : spools.end();
 	      if (spool != spools.end()) {
 	        auto &c = spool->second["/filament/color_hex"_json_pointer];
           if (!c.is_null()) {
             // Documented data-driven exception: spool color comes from
             // Spoolman DB as a user-defined hex string. Cannot tokenize
             // user input. Runtime parse stays on lv_color_hex(stoul()).
-            dsc->rect_dsc->bg_color = lv_color_hex(std::stoul(c.template get<std::string>(),
-                          nullptr, 16));
+            try {
+              dsc->rect_dsc->bg_color = lv_color_hex((uint32_t)std::stoul(c.template get<std::string>(), nullptr, 16));
+            } catch (...) {}  // malformed user hex string: leave the default cell color
           }
 	      }
       }

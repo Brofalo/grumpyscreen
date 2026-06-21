@@ -287,8 +287,7 @@ void LedPanel::handle_led_update(lv_event_t *event) {
       if (obj == l.second->get_slider()) {
 	      std::string led_name = KUtils::get_obj_name(l.first);
       	LOG_DEBUG("update led {}", led_name);
-      	// TODO - I think this double fmt:format is intentional
-        ws.gcode_script(fmt::format(fmt::format("SET_PIN PIN={} VALUE={}", led_name, pct)));
+        ws.gcode_script(fmt::format("SET_PIN PIN={} VALUE={}", led_name, pct));
         break;
       }
     }
@@ -325,8 +324,7 @@ void LedPanel::handle_led_update_generic(lv_event_t *event) {
       if (obj == l.second->get_slider()) {
 	      std::string led_name = KUtils::get_obj_name(l.first);
       	LOG_DEBUG("update led {}", led_name);
-      	// TODO - I think this double fmt:format is intentional
-        ws.gcode_script(fmt::format(fmt::format("SET_LED LED={} WHITE={}", led_name, pct)));
+        ws.gcode_script(fmt::format("SET_LED LED={} WHITE={}", led_name, pct));
         break;
       }
     }

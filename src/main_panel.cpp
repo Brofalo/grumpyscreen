@@ -579,8 +579,10 @@ void MainPanel::_home_tap(lv_event_t *e) {
   lv_obj_t *t = lv_event_get_target(e);
   pono::HomeHandles &h = s->home_h;
   if (t == h.btn_pausestop) {                           // Resume (paused) / Pause (printing) / Print->Files (idle)
-    if (s->home_paused_)        s->ws.gcode_script("RESUME");
-    else if (s->home_printing_) s->ws.gcode_script("PAUSE");
+    // Show the action in flight: PAUSE parks the head and RESUME unparks, each
+    // a few seconds during which the button alone would read as a dead tap.
+    if (s->home_paused_)        { pono::busy_show("Resuming..."); s->ws.gcode_script("RESUME", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); }
+    else if (s->home_printing_) { pono::busy_show("Pausing...");  s->ws.gcode_script("PAUSE",  [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); }
     else { s->populate_files(); s->show_pono(s->files_scr_); }
   }
   else if (t == h.btn_cancel) {                         // abort the running/paused job (confirmed)
@@ -629,7 +631,7 @@ void MainPanel::create_pono_screens() {
     move_h_.back, move_h_.xplus, move_h_.xminus, move_h_.yplus, move_h_.yminus,
     move_h_.zplus, move_h_.zminus, move_h_.home_xy, move_h_.home_all, move_h_.motors_off,
     move_h_.step[0], move_h_.step[1], move_h_.step[2], move_h_.step[3],
-    fil_h_.back, fil_h_.load, fil_h_.unload, fil_h_.extrude, fil_h_.retract,
+    fil_h_.back, fil_h_.load, fil_h_.unload, fil_h_.extrude, fil_h_.retract, fil_h_.temp,
     fil_h_.preset[0], fil_h_.preset[1], fil_h_.preset[2], fil_h_.cooldown,
     temp_h_.back, temp_h_.nz_preset[0], temp_h_.nz_preset[1], temp_h_.nz_preset[2], temp_h_.nz_off,
     temp_h_.bd_preset[0], temp_h_.bd_preset[1], temp_h_.bd_preset[2], temp_h_.bd_off,
@@ -734,6 +736,12 @@ void MainPanel::populate_system() {
   }
   if (system_h_.version) lv_label_set_text(system_h_.version, ver.c_str());
 
+  // Firmware-integrity badge: the OS boot check writes /run/pono-integrity with
+  // "signed" (image came from a verified signed install) or "modified" (flashed
+  // some other way, e.g. owner-open FEL/USB). Absent -> badge stays "unverified".
+  { std::ifstream f("/run/pono-integrity"); std::string st; std::getline(f, st);
+    pono::system_set_integrity(&system_h_, st.c_str()); }
+
   std::string host = "pono-print";
   { std::ifstream f("/proc/sys/kernel/hostname"); std::getline(f, host); }
   if (system_h_.host) lv_label_set_text(system_h_.host, host.c_str());
@@ -759,7 +767,7 @@ void MainPanel::populate_system() {
     if (system_h_.uptime) lv_label_set_text(system_h_.uptime, fmt::format("{}h {}m", hh, mm).c_str()); }
 
   { std::ifstream f("/sys/class/thermal/thermal_zone0/temp"); long mdeg = -1; f >> mdeg;
-    if (system_h_.mcu) lv_label_set_text(system_h_.mcu, mdeg > 0 ? fmt::format("{:.1f} C", mdeg / 1000.0).c_str() : "--"); }
+    if (system_h_.mcu) lv_label_set_text(system_h_.mcu, mdeg > 0 ? fmt::format("{:.1f}C", mdeg / 1000.0).c_str() : "--"); }
 
   check_update();
 }
@@ -900,10 +908,24 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // Load/Unload run at the selected material's temp; Load also carries the
   // slider's purge length (LOAD_FILAMENT chunks it under the 120mm/move cap).
   static const int kFilTemp[3] = {220, 240, 260};  // PLA / PETG / PA-CF
+  static const int kMinExtrudeTemp = 170;          // Klipper min_extrude_temp floor
   if (t == fl.load)    { pono::busy_show(fmt::format("Loading {}mm at {}C", s->fil_len_, kFilTemp[s->fil_mat_]).c_str()); s->ws.gcode_script(fmt::format("LOAD_FILAMENT EXTRUDER_TEMP={} LENGTH={}", kFilTemp[s->fil_mat_], s->fil_len_), [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
   if (t == fl.unload)  { pono::busy_show(fmt::format("Unloading at {}C", kFilTemp[s->fil_mat_]).c_str()); s->ws.gcode_script(fmt::format("UNLOAD_FILAMENT EXTRUDER_TEMP={}", kFilTemp[s->fil_mat_]), [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
-  if (t == fl.extrude) { s->ws.gcode_script("M83\nG1 E25 F300"); return; }
-  if (t == fl.retract) { s->ws.gcode_script("M83\nG1 E-25 F1800"); return; }
+  // Extrude/Retract are raw G1 E with no temperature of their own: gate on a hot
+  // nozzle so a stray tap can't grind cold filament / strip the drive gear, and
+  // show that it is running (the move takes several seconds).
+  if (t == fl.extrude) {
+    if (s->home_nozzle_ < kMinExtrudeTemp) { s->confirm(fmt::format("Heat the nozzle to at least {}C before extruding.", kMinExtrudeTemp).c_str(), []{}); return; }
+    pono::busy_show("Extruding 25mm");
+    s->ws.gcode_script("M83\nG1 E25 F300", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); });
+    return;
+  }
+  if (t == fl.retract) {
+    if (s->home_nozzle_ < kMinExtrudeTemp) { s->confirm(fmt::format("Heat the nozzle to at least {}C before retracting.", kMinExtrudeTemp).c_str(), []{}); return; }
+    pono::busy_show("Retracting 25mm");
+    s->ws.gcode_script("M83\nG1 E-25 F1800", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); });
+    return;
+  }
   // Material segments: select (drives Load/Unload temps) + preheat in one tap.
   for (int i = 0; i < 3; i++) {
     if (t == fl.preset[i]) {
@@ -914,6 +936,9 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     }
   }
   if (t == fl.cooldown)  { s->ws.gcode_script("TURN_OFF_HEATERS"); return; }
+  // Tap the nozzle readout to type an exact target (the presets stay; this is
+  // the manual override). Mirrors the Temps keypad, clamped to the same cap.
+  if (t == fl.temp) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>300?300:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}", n)); }); s->numpad.foreground_reset(); return; }
   // Temps
   if (t == tp.nz_preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=220"); return; }
   if (t == tp.nz_preset[1]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=240"); return; }
@@ -926,13 +951,13 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // Temps manual steppers: nudge the live target by 5 C (clamped to safe range)
   {
     auto clampi = [](int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); };
-    if (t == tp.nz_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ - 5, 0, 330))); return; }
-    if (t == tp.nz_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ + 5, 0, 330))); return; }
+    if (t == tp.nz_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ - 5, 0, 300))); return; }
+    if (t == tp.nz_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ + 5, 0, 300))); return; }
     if (t == tp.bd_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ - 5, 0, 120))); return; }
     if (t == tp.bd_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ + 5, 0, 120))); return; }
   }
   // Temps keypad: tap the big number to type an exact target (clamped to heater limits)
-  if (t == tp.nz_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>330?330:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  n)); }); s->numpad.foreground_reset(); return; }
+  if (t == tp.nz_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>300?300:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  n)); }); s->numpad.foreground_reset(); return; }
   if (t == tp.bd_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>120?120:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", n)); }); s->numpad.foreground_reset(); return; }
   // Fans (quick)
   // Tune
@@ -948,8 +973,11 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // Fire-and-navigate: a run parks the operator on the cockpit, where the cal
   // overlay / OMEGA banner carry progress. Staying on this selector reads as
   // "nothing happened" for the minutes before the runner's first announce.
-  if (t == tu.standard) { s->ws.gcode_script("PONO_CAL_STANDARD"); s->back_to_home(); return; }
-  if (t == tu.omega)    { s->ws.gcode_script("PONO_CAL_OMEGA"); s->back_to_home(); return; }
+  // Show a provisional overlay the instant we fire: the cockpit's cal overlay
+  // only appears on the macro's first SET_DISPLAY_TEXT, so without this the
+  // glass reads "Ready" for the seconds the bed heats and the head homes.
+  if (t == tu.standard) { pono::busy_show("Starting calibration..."); s->ws.gcode_script("PONO_CAL_STANDARD"); s->back_to_home(); return; }
+  if (t == tu.omega)    { pono::busy_show("Starting calibration..."); s->ws.gcode_script("PONO_CAL_OMEGA"); s->back_to_home(); return; }
   // Individual calibrations (tiles: Bed Mesh, Pressure Adv, Flow, Input Shaper,
   // Z-Offset). Mesh + shaper are real one-shot machine cals: run the proven
   // CALIBRATE_ALL fragments inline, reusing the firmware's GUI safety net
@@ -1002,7 +1030,7 @@ void MainPanel::_sub_tap(lv_event_t *e) {
         pono::busy_hide();
         if (s->system_h_.update_status) {
           lv_label_set_text(s->system_h_.update_status,
-            rc == 0 ? "rebooting..." : "FAULT: update failed");
+            rc == 0 ? "rebooting..." : "update failed (see log)");
           lv_obj_set_style_text_color(s->system_h_.update_status,
             rc == 0 ? pono::color_accent_primary : pono::color_state_error, 0);
           lv_obj_align(s->system_h_.update_status, LV_ALIGN_RIGHT_MID, -12, 0);
@@ -1014,10 +1042,13 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     return;
   }
   // Power actions
-  if (t == s->power_h_.restart_klipper) { s->confirm("Restart Klipper?",       [s]{ s->ws.gcode_script("RESTART"); }); return; }
-  if (t == s->power_h_.restart_fw)      { s->confirm("Restart firmware?",      [s]{ s->ws.gcode_script("FIRMWARE_RESTART"); }); return; }
-  if (t == s->power_h_.reboot)          { s->confirm("Reboot the printer?",    [s]{ s->ws.send_jsonrpc("machine.reboot"); }); return; }
-  if (t == s->power_h_.shutdown)        { s->confirm("Shut down the printer?", [s]{ s->ws.send_jsonrpc("machine.shutdown"); }); return; }
+  // These all drop the link, so the operator would otherwise see nothing
+  // happen until the screen reconnects. Show what's underway; reset_overlay on
+  // disconnect (or the watchdog) clears it.
+  if (t == s->power_h_.restart_klipper) { s->confirm("Restart Klipper?",       [s]{ pono::busy_show("Restarting Klipper..."); s->ws.gcode_script("RESTART"); }); return; }
+  if (t == s->power_h_.restart_fw)      { s->confirm("Restart firmware?",      [s]{ pono::busy_show("Restarting firmware..."); s->ws.gcode_script("FIRMWARE_RESTART"); }); return; }
+  if (t == s->power_h_.reboot)          { s->confirm("Reboot the printer?",    [s]{ pono::busy_show("Rebooting..."); s->ws.send_jsonrpc("machine.reboot"); }); return; }
+  if (t == s->power_h_.shutdown)        { s->confirm("Shut down the printer?", [s]{ pono::busy_show("Shutting down..."); s->ws.send_jsonrpc("machine.shutdown"); }); return; }
   // Lights (SET_LED white channel) - fire the command AND move the highlight
   // to the chosen level so the active selection is visible.
   pono::LightsHandles &li = s->lights_h_;
@@ -1085,8 +1116,19 @@ void MainPanel::_file_row_cb(lv_event_t *e) {
     if (base.size() > 38) base = base.substr(0, 36) + "..";
     s->confirm(fmt::format("Print {}?", base).c_str(), [s, fn]{
       json p = {{"filename", fn}};
-      s->ws.send_jsonrpc("printer.print.start", p, [](json &) {});
-      s->back_to_home();
+      // Don't claim success blindly: return home only when the start is
+      // accepted; on a Moonraker error (file gone, not ready, already
+      // printing) stay put and show why, instead of cheerfully going to an
+      // idle-looking home as if the print began.
+      s->ws.send_jsonrpc("printer.print.start", p, [s](json &resp) {
+        std::lock_guard<std::mutex> lk(s->lv_lock);
+        if (resp.contains("error")) {
+          auto m = resp["/error/message"_json_pointer];
+          s->confirm(m.is_string() ? m.template get<std::string>().c_str() : "Could not start print", []{});
+        } else {
+          s->back_to_home();
+        }
+      });
     });
   }
 }

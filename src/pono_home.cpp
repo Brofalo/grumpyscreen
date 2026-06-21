@@ -21,6 +21,7 @@
 #include "pono_anim.h"   // Hawaii flag asset + comet spinner for the boot screen
 
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 
 namespace pono {
@@ -506,6 +507,7 @@ void build_tune(lv_obj_t *parent, TuneHandles *h) {
   lv_obj_t *sl = lv_slider_create(parent);
   lv_obj_set_pos(sl, 12, 244);
   lv_obj_set_size(sl, 456, 10);
+  lv_obj_set_ext_click_area(sl, 16);  // a 10px track is too thin to grab on a resistive panel
   lv_slider_set_range(sl, 50, 200);
   lv_slider_set_value(sl, 100, LV_ANIM_OFF);
   lv_obj_set_style_bg_color(sl, color_surface_elevated, LV_PART_MAIN);
@@ -730,6 +732,8 @@ void build_filament(lv_obj_t *parent, FilamentHandles *h) {
   lv_obj_align(tn, LV_ALIGN_LEFT_MID, 60, 0);
   lv_obj_t *tv = lbl(tc, "-- / --", font_num_small, color_accent_secondary, 0, 0);
   lv_obj_align(tv, LV_ALIGN_RIGHT_MID, -14, 0);
+  lv_obj_add_flag(tv, LV_OBJ_FLAG_CLICKABLE);   // tap the nozzle temp to type an exact target
+  lv_obj_set_ext_click_area(tv, 18);            // fat-finger touch target
   if (h) h->temp = tv;
 
   // Material select (doubles as preheat): the picked tier is the temp Load /
@@ -986,7 +990,24 @@ void build_system(lv_obj_t *parent, SystemHandles *h) {
     lv_obj_align(v, LV_ALIGN_RIGHT_MID, -12, 0);
     return v;
   };
-  lv_obj_t *fw = inforow("FIRMWARE");
+  // FIRMWARE row, with a small image-integrity badge just right of the label.
+  // Tells the operator at a glance whether the running image is an official
+  // signed build or has been modified (we do not block unsigned flashes, the
+  // owner-open FEL/USB paths stay open, so we surface the state instead).
+  lv_obj_t *fr = lv_obj_create(list);
+  lv_obj_remove_style_all(fr);
+  lv_obj_set_size(fr, lv_pct(100), 27);
+  lv_obj_set_style_bg_color(fr, color_surface_raised, 0);
+  lv_obj_set_style_bg_opa(fr, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(fr, radius_sm, 0);
+  hairline(fr);
+  lv_obj_clear_flag(fr, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *frn = tag(fr, "FIRMWARE", color_text_tertiary, 0, 0);
+  lv_obj_align(frn, LV_ALIGN_LEFT_MID, 12, 0);
+  lv_obj_t *intg = lbl(fr, "unverified", font_micro, color_text_tertiary, 0, 0);
+  lv_obj_align(intg, LV_ALIGN_LEFT_MID, 92, 0);
+  lv_obj_t *fw = lbl(fr, "--", font_caption, color_text_primary, 0, 0);
+  lv_obj_align(fw, LV_ALIGN_RIGHT_MID, -12, 0);
 
   // Update row: live status on the right; the Install chip appears between
   // when a newer build is published (the app reveals it).
@@ -1020,7 +1041,21 @@ void build_system(lv_obj_t *parent, SystemHandles *h) {
 
   if (h) {
     h->version = fw; h->host = hn; h->ip = ip; h->uptime = up; h->mcu = mc;
-    h->update_status = us; h->btn_install = ub;
+    h->update_status = us; h->btn_install = ub; h->integrity = intg;
+  }
+}
+
+void system_set_integrity(SystemHandles *h, const char *state) {
+  if (!h || !h->integrity) return;
+  if (state && strcmp(state, "signed") == 0) {
+    lv_label_set_text(h->integrity, "signed");
+    lv_obj_set_style_text_color(h->integrity, color_accent_secondary, 0);  // phosphor, quiet
+  } else if (state && strcmp(state, "modified") == 0) {
+    lv_label_set_text(h->integrity, "MODIFIED");
+    lv_obj_set_style_text_color(h->integrity, color_state_warning, 0);     // amber caution
+  } else {
+    lv_label_set_text(h->integrity, "unverified");
+    lv_obj_set_style_text_color(h->integrity, color_text_tertiary, 0);     // dim
   }
 }
 
@@ -1121,6 +1156,7 @@ void build_fans(lv_obj_t *parent, FansHandles *h) {
     if (settable[i]) {
       lv_obj_t *sl = lv_slider_create(c);
       lv_obj_set_size(sl, 188, 8);
+      lv_obj_set_ext_click_area(sl, 16);  // an 8px track is too thin to grab on a resistive panel
       lv_obj_align(sl, LV_ALIGN_CENTER, 30, 0);
       lv_slider_set_range(sl, 0, 100);
       lv_slider_set_value(sl, 0, LV_ANIM_OFF);
@@ -1164,6 +1200,8 @@ void files_add_row(lv_obj_t *list, const char *name, const char *meta) {
   lv_obj_align(ic, LV_ALIGN_LEFT_MID, 18, 0);
   // child 2: name, child 3: meta
   lv_obj_t *nm = lbl(r, name, font_caption, color_text_primary, 0, 0);
+  lv_obj_set_width(nm, 360);                      // clamp so a long name can't run through the play icon
+  lv_label_set_long_mode(nm, LV_LABEL_LONG_DOT);  // ellipsize instead of overflowing the row
   lv_obj_align(nm, LV_ALIGN_LEFT_MID, 62, -8);
   lv_obj_t *mt = lbl(r, meta, font_micro, color_text_secondary, 0, 0);
   lv_obj_align(mt, LV_ALIGN_LEFT_MID, 62, 10);

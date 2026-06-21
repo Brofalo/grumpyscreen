@@ -164,7 +164,11 @@ int main(int argc, char **argv) {
   } else if (screen == "mesh") {
     pono::build_mesh(lv_scr_act());
   } else if (screen == "system") {
-    pono::build_system(lv_scr_act());
+    pono::SystemHandles sh; pono::build_system(lv_scr_act(), &sh);
+    pono::system_set_integrity(&sh, "signed");
+  } else if (screen == "system_modified") {
+    pono::SystemHandles sh; pono::build_system(lv_scr_act(), &sh);
+    pono::system_set_integrity(&sh, "modified");
   } else if (screen == "power") {
     pono::build_power(lv_scr_act());
   } else if (screen == "lights") {

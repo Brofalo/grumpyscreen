@@ -10,6 +10,7 @@ namespace {
 lv_obj_t *g_busy = nullptr;
 lv_obj_t *g_busy_spinner = nullptr;
 lv_obj_t *g_busy_label = nullptr;
+lv_timer_t *g_busy_watchdog = nullptr;  // force-drops a stranded "working" scrim
 }  // namespace
 
 namespace pono {
@@ -71,6 +72,18 @@ lv_obj_t *boot_flag_create(lv_obj_t *parent) {
   return a;
 }
 
+// A blocking op whose completion reply never arrives (a Klipper error on a
+// still-open socket, a macro that never returns) would otherwise leave the
+// scrim up forever. busy_show arms a one-shot watchdog that force-drops it;
+// busy_hide (the normal completion path, and the disconnect reset) cancels it.
+static void busy_cancel_watchdog() {
+  if (g_busy_watchdog) { lv_timer_del(g_busy_watchdog); g_busy_watchdog = nullptr; }
+}
+static void busy_watchdog_cb(lv_timer_t *) {
+  g_busy_watchdog = nullptr;  // LVGL auto-frees this finished one-shot timer
+  busy_hide();
+}
+
 void busy_show(const char *text) {
   if (g_busy == nullptr) {
     g_busy = lv_obj_create(lv_layer_top());
@@ -85,15 +98,26 @@ void busy_show(const char *text) {
     lv_obj_set_style_text_color(g_busy_label, color_text_primary, 0);
     lv_obj_set_style_text_font(g_busy_label, font_body, 0);
     lv_obj_set_style_text_align(g_busy_label, LV_TEXT_ALIGN_CENTER, 0);
+    // Wrap long status lines instead of letting them run off the 480px panel.
+    lv_obj_set_width(g_busy_label, 440);
+    lv_label_set_long_mode(g_busy_label, LV_LABEL_LONG_WRAP);
     lv_obj_align(g_busy_label, LV_ALIGN_CENTER, 0, 50);
   }
   lv_label_set_text(g_busy_label, text != nullptr ? text : "Working");
+  lv_obj_align(g_busy_label, LV_ALIGN_CENTER, 0, 50);  // re-center after (re)wrap
   lv_animimg_start(g_busy_spinner);  // re-arm (busy_hide stopped it)
   lv_obj_clear_flag(g_busy, LV_OBJ_FLAG_HIDDEN);
   lv_obj_move_foreground(g_busy);
+  // (Re)arm the stranded-scrim watchdog. 180s comfortably outlasts the longest
+  // real blocking op here (a full-length filament load), so it only fires on a
+  // genuine hang and never cuts a healthy op short.
+  busy_cancel_watchdog();
+  g_busy_watchdog = lv_timer_create(busy_watchdog_cb, 180000, nullptr);
+  lv_timer_set_repeat_count(g_busy_watchdog, 1);
 }
 
 void busy_hide() {
+  busy_cancel_watchdog();
   if (g_busy == nullptr) return;
   lv_anim_del(g_busy_spinner, nullptr);  // stop the loop -> zero cost while idle
   lv_obj_add_flag(g_busy, LV_OBJ_FLAG_HIDDEN);

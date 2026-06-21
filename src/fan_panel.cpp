@@ -140,8 +140,7 @@ void FanPanel::handle_fan_update(lv_event_t *event) {
       if (obj == f.second->get_slider()) {
 	      std::string fan_name = KUtils::get_obj_name(f.first);
       	LOG_DEBUG("update fan {}", fan_name);
-        // TODO - I think this double fmt:format is intentional
-	      ws.gcode_script(fmt::format(fmt::format("SET_PIN PIN={} VALUE={}", fan_name, pct)));
+	      ws.gcode_script(fmt::format("SET_PIN PIN={} VALUE={}", fan_name, pct));
 	      break;
       }
     }
@@ -174,7 +173,7 @@ void FanPanel::handle_fan_update_part_fan(lv_event_t *event) {
     LOG_DEBUG("updating part fan speed to {}", pct);
     for (auto &f : fans) {
       if (obj == f.second->get_slider()) {
-        ws.gcode_script(fmt::format(fmt::format("M106 S{}", pct)));
+        ws.gcode_script(fmt::format("M106 S{}", pct));
         break;
       }
     }
@@ -209,8 +208,7 @@ void FanPanel::handle_fan_update_generic(lv_event_t *event) {
       if (obj == f.second->get_slider()) {
 	      std::string fan_name = KUtils::get_obj_name(f.first);
       	LOG_DEBUG("update fan {}", fan_name);
-      	// TODO - I think this double fmt:format is intentional
-        ws.gcode_script(fmt::format(fmt::format("SET_FAN_SPEED FAN={} SPEED={}", fan_name, pct)));
+        ws.gcode_script(fmt::format("SET_FAN_SPEED FAN={} SPEED={}", fan_name, pct));
         break;
       }
     }

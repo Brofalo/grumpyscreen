@@ -9,6 +9,7 @@
 #include <vector>
 #include <atomic>
 #include <functional>
+#include <mutex>
 
 using json = nlohmann::json;
 
@@ -54,6 +55,13 @@ class KWebSocketClient : public hv::WebSocketClient {
   std::map<std::string, std::map<std::string, std::function<void(json&)>>> method_resp_cbs;
   std::atomic_uint64_t id;
   std::atomic<int64_t> last_status_ms_{-1};  // steady-clock stamp of the last status notify
+  // Guards callbacks/consumers/notify_consumers/method_resp_cbs and id
+  // allocation across the ws thread (onmessage) and the UI thread (taps ->
+  // gcode_script). Recursive because the cb send_jsonrpc variants call the
+  // bare variant while holding it. ALWAYS released before invoking any
+  // callback so consume()/cb may take lv_lock without inverting lock order
+  // (the UI order is always lv_lock -> rpc_mutex_).
+  std::recursive_mutex rpc_mutex_;
 };
 
 #endif //__KWEBSOCKET_CLIENT_H__

@@ -99,6 +99,7 @@ void ConsolePanel::handle_macro_response(json &j) {
   if (j.contains("params")) {
     std::lock_guard<std::mutex> lock(lv_lock);
     for (auto &l : j["params"]) {
+      if (!l.is_string()) continue;  // a non-string param would throw out of the ws callback
       std::string v = l.template get<std::string>() + "\n";
       if (klipper_is_temp_report(v.c_str())) {
           // Ignore TEMPERATURE_WAIT spam (skip this line only, not the rest of the batch)

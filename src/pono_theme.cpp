@@ -36,7 +36,7 @@ const lv_color_t color_state_warning    = LV_COLOR_MAKE(0xc9, 0x92, 0x3f);
 const lv_color_t color_state_intel      = LV_COLOR_MAKE(0x6f, 0xae, 0x8c);
 const lv_color_t color_text_primary     = LV_COLOR_MAKE(0xe8, 0xe2, 0xd6);
 const lv_color_t color_text_secondary   = LV_COLOR_MAKE(0x92, 0x8b, 0x7c);
-const lv_color_t color_text_tertiary    = LV_COLOR_MAKE(0x6a, 0x64, 0x57);
+const lv_color_t color_text_tertiary    = LV_COLOR_MAKE(0x86, 0x7f, 0x70);  // raised from 6a6457 (3.34:1, unreadable at 10px) to ~4.6:1 for the nav/section/system labels
 
 // ---- Border alpha tokens ----
 // Hairlines are ink over the room: 9% rest, 18% defined, 25% emphasized.
