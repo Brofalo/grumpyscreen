@@ -1166,6 +1166,8 @@ void files_add_row(lv_obj_t *list, const char *name, const char *meta) {
   lv_obj_align(ic, LV_ALIGN_LEFT_MID, 18, 0);
   // child 2: name, child 3: meta
   lv_obj_t *nm = lbl(r, name, font_caption, color_text_primary, 0, 0);
+  lv_obj_set_width(nm, 360);                      // clamp so a long name can't run through the play icon
+  lv_label_set_long_mode(nm, LV_LABEL_LONG_DOT);  // ellipsize instead of overflowing the row
   lv_obj_align(nm, LV_ALIGN_LEFT_MID, 62, -8);
   lv_obj_t *mt = lbl(r, meta, font_micro, color_text_secondary, 0, 0);
   lv_obj_align(mt, LV_ALIGN_LEFT_MID, 62, 10);

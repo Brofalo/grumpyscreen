@@ -44,15 +44,22 @@ namespace KUtils {
       auto scaled_width = scale * 300;
       LOG_DEBUG("using thumb at scaled width {}", scaled_width);
       uint32_t closest_index = 0;
-      auto width = thumbs.at(0)["width"].is_number()
-	        ? thumbs.at(0)["width"].template get<int>()
-	        : std::stoi(thumbs.at(0)["width"].template get<std::string>());
+      // width may be a number or a numeric string; a malformed value must never
+      // throw out of the per-file metadata callback on the ws thread.
+      auto parse_w = [](const json &t) -> int {
+        try {
+          if (!t.contains("width")) return 0;
+          const auto &w = t.at("width");
+          if (w.is_number()) return w.template get<int>();
+          if (w.is_string()) return std::stoi(w.template get<std::string>());
+        } catch (...) {}
+        return 0;
+      };
+      int width = parse_w(thumbs.at(0));
       int closest = std::abs(scaled_width - width);
       size_t thumb_width = width;  // init to first thumb; loop narrows it (was 0 -> div-by-zero when index 0 won)
       for (int i = 0; i < thumbs.size(); i++) {
-	      width = thumbs.at(i)["width"].is_number()
-	        ? thumbs.at(i)["width"].template get<int>()
-	        : std::stoi(thumbs.at(i)["width"].template get<std::string>());
+	      width = parse_w(thumbs.at(i));
 	      int cur_diff = std::abs(scaled_width - width);
         if (cur_diff < closest) {
           closest = cur_diff;
