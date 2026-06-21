@@ -579,8 +579,10 @@ void MainPanel::_home_tap(lv_event_t *e) {
   lv_obj_t *t = lv_event_get_target(e);
   pono::HomeHandles &h = s->home_h;
   if (t == h.btn_pausestop) {                           // Resume (paused) / Pause (printing) / Print->Files (idle)
-    if (s->home_paused_)        s->ws.gcode_script("RESUME");
-    else if (s->home_printing_) s->ws.gcode_script("PAUSE");
+    // Show the action in flight: PAUSE parks the head and RESUME unparks, each
+    // a few seconds during which the button alone would read as a dead tap.
+    if (s->home_paused_)        { pono::busy_show("Resuming..."); s->ws.gcode_script("RESUME", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); }
+    else if (s->home_printing_) { pono::busy_show("Pausing...");  s->ws.gcode_script("PAUSE",  [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); }
     else { s->populate_files(); s->show_pono(s->files_scr_); }
   }
   else if (t == h.btn_cancel) {                         // abort the running/paused job (confirmed)
@@ -629,7 +631,7 @@ void MainPanel::create_pono_screens() {
     move_h_.back, move_h_.xplus, move_h_.xminus, move_h_.yplus, move_h_.yminus,
     move_h_.zplus, move_h_.zminus, move_h_.home_xy, move_h_.home_all, move_h_.motors_off,
     move_h_.step[0], move_h_.step[1], move_h_.step[2], move_h_.step[3],
-    fil_h_.back, fil_h_.load, fil_h_.unload, fil_h_.extrude, fil_h_.retract,
+    fil_h_.back, fil_h_.load, fil_h_.unload, fil_h_.extrude, fil_h_.retract, fil_h_.temp,
     fil_h_.preset[0], fil_h_.preset[1], fil_h_.preset[2], fil_h_.cooldown,
     temp_h_.back, temp_h_.nz_preset[0], temp_h_.nz_preset[1], temp_h_.nz_preset[2], temp_h_.nz_off,
     temp_h_.bd_preset[0], temp_h_.bd_preset[1], temp_h_.bd_preset[2], temp_h_.bd_off,
@@ -928,6 +930,9 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     }
   }
   if (t == fl.cooldown)  { s->ws.gcode_script("TURN_OFF_HEATERS"); return; }
+  // Tap the nozzle readout to type an exact target (the presets stay; this is
+  // the manual override). Mirrors the Temps keypad, clamped to the same cap.
+  if (t == fl.temp) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>300?300:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}", n)); }); s->numpad.foreground_reset(); return; }
   // Temps
   if (t == tp.nz_preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=220"); return; }
   if (t == tp.nz_preset[1]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=240"); return; }
@@ -1031,10 +1036,13 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     return;
   }
   // Power actions
-  if (t == s->power_h_.restart_klipper) { s->confirm("Restart Klipper?",       [s]{ s->ws.gcode_script("RESTART"); }); return; }
-  if (t == s->power_h_.restart_fw)      { s->confirm("Restart firmware?",      [s]{ s->ws.gcode_script("FIRMWARE_RESTART"); }); return; }
-  if (t == s->power_h_.reboot)          { s->confirm("Reboot the printer?",    [s]{ s->ws.send_jsonrpc("machine.reboot"); }); return; }
-  if (t == s->power_h_.shutdown)        { s->confirm("Shut down the printer?", [s]{ s->ws.send_jsonrpc("machine.shutdown"); }); return; }
+  // These all drop the link, so the operator would otherwise see nothing
+  // happen until the screen reconnects. Show what's underway; reset_overlay on
+  // disconnect (or the watchdog) clears it.
+  if (t == s->power_h_.restart_klipper) { s->confirm("Restart Klipper?",       [s]{ pono::busy_show("Restarting Klipper..."); s->ws.gcode_script("RESTART"); }); return; }
+  if (t == s->power_h_.restart_fw)      { s->confirm("Restart firmware?",      [s]{ pono::busy_show("Restarting firmware..."); s->ws.gcode_script("FIRMWARE_RESTART"); }); return; }
+  if (t == s->power_h_.reboot)          { s->confirm("Reboot the printer?",    [s]{ pono::busy_show("Rebooting..."); s->ws.send_jsonrpc("machine.reboot"); }); return; }
+  if (t == s->power_h_.shutdown)        { s->confirm("Shut down the printer?", [s]{ pono::busy_show("Shutting down..."); s->ws.send_jsonrpc("machine.shutdown"); }); return; }
   // Lights (SET_LED white channel) - fire the command AND move the highlight
   // to the chosen level so the active selection is visible.
   pono::LightsHandles &li = s->lights_h_;
@@ -1102,8 +1110,19 @@ void MainPanel::_file_row_cb(lv_event_t *e) {
     if (base.size() > 38) base = base.substr(0, 36) + "..";
     s->confirm(fmt::format("Print {}?", base).c_str(), [s, fn]{
       json p = {{"filename", fn}};
-      s->ws.send_jsonrpc("printer.print.start", p, [](json &) {});
-      s->back_to_home();
+      // Don't claim success blindly: return home only when the start is
+      // accepted; on a Moonraker error (file gone, not ready, already
+      // printing) stay put and show why, instead of cheerfully going to an
+      // idle-looking home as if the print began.
+      s->ws.send_jsonrpc("printer.print.start", p, [s](json &resp) {
+        std::lock_guard<std::mutex> lk(s->lv_lock);
+        if (resp.contains("error")) {
+          auto m = resp["/error/message"_json_pointer];
+          s->confirm(m.is_string() ? m.template get<std::string>().c_str() : "Could not start print", []{});
+        } else {
+          s->back_to_home();
+        }
+      });
     });
   }
 }

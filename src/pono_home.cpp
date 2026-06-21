@@ -730,6 +730,8 @@ void build_filament(lv_obj_t *parent, FilamentHandles *h) {
   lv_obj_align(tn, LV_ALIGN_LEFT_MID, 60, 0);
   lv_obj_t *tv = lbl(tc, "-- / --", font_num_small, color_accent_secondary, 0, 0);
   lv_obj_align(tv, LV_ALIGN_RIGHT_MID, -14, 0);
+  lv_obj_add_flag(tv, LV_OBJ_FLAG_CLICKABLE);   // tap the nozzle temp to type an exact target
+  lv_obj_set_ext_click_area(tv, 18);            // fat-finger touch target
   if (h) h->temp = tv;
 
   // Material select (doubles as preheat): the picked tier is the temp Load /
