@@ -736,6 +736,12 @@ void MainPanel::populate_system() {
   }
   if (system_h_.version) lv_label_set_text(system_h_.version, ver.c_str());
 
+  // Firmware-integrity badge: the OS boot check writes /run/pono-integrity with
+  // "signed" (image came from a verified signed install) or "modified" (flashed
+  // some other way, e.g. owner-open FEL/USB). Absent -> badge stays "unverified".
+  { std::ifstream f("/run/pono-integrity"); std::string st; std::getline(f, st);
+    pono::system_set_integrity(&system_h_, st.c_str()); }
+
   std::string host = "pono-print";
   { std::ifstream f("/proc/sys/kernel/hostname"); std::getline(f, host); }
   if (system_h_.host) lv_label_set_text(system_h_.host, host.c_str());

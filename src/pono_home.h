@@ -240,8 +240,12 @@ struct SystemHandles {
   lv_obj_t *back = nullptr, *version = nullptr, *ip = nullptr, *host = nullptr, *uptime = nullptr, *mcu = nullptr;
   lv_obj_t *update_status = nullptr;  // "checking..." / "up to date" / "alpha.NNN available"
   lv_obj_t *btn_install = nullptr;    // lamp chip, hidden until an update is available
+  lv_obj_t *integrity = nullptr;      // small badge on the FIRMWARE row: signed / MODIFIED / unverified
 };
 void build_system(lv_obj_t *parent, SystemHandles *h = nullptr);
+// Set the firmware-integrity badge from the OS check (/run/pono-integrity):
+// "signed" -> quiet phosphor, "modified" -> amber MODIFIED, anything else -> dim unverified.
+void system_set_integrity(SystemHandles *h, const char *state);
 
 // Power screen: restart Klipper, restart firmware, reboot, shutdown.
 struct PowerHandles {

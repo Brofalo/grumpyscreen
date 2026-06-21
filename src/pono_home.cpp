@@ -21,6 +21,7 @@
 #include "pono_anim.h"   // Hawaii flag asset + comet spinner for the boot screen
 
 #include <cstdio>
+#include <cstring>
 #include <ctime>
 
 namespace pono {
@@ -989,7 +990,24 @@ void build_system(lv_obj_t *parent, SystemHandles *h) {
     lv_obj_align(v, LV_ALIGN_RIGHT_MID, -12, 0);
     return v;
   };
-  lv_obj_t *fw = inforow("FIRMWARE");
+  // FIRMWARE row, with a small image-integrity badge just right of the label.
+  // Tells the operator at a glance whether the running image is an official
+  // signed build or has been modified (we do not block unsigned flashes, the
+  // owner-open FEL/USB paths stay open, so we surface the state instead).
+  lv_obj_t *fr = lv_obj_create(list);
+  lv_obj_remove_style_all(fr);
+  lv_obj_set_size(fr, lv_pct(100), 27);
+  lv_obj_set_style_bg_color(fr, color_surface_raised, 0);
+  lv_obj_set_style_bg_opa(fr, LV_OPA_COVER, 0);
+  lv_obj_set_style_radius(fr, radius_sm, 0);
+  hairline(fr);
+  lv_obj_clear_flag(fr, LV_OBJ_FLAG_SCROLLABLE);
+  lv_obj_t *frn = tag(fr, "FIRMWARE", color_text_tertiary, 0, 0);
+  lv_obj_align(frn, LV_ALIGN_LEFT_MID, 12, 0);
+  lv_obj_t *intg = lbl(fr, "unverified", font_micro, color_text_tertiary, 0, 0);
+  lv_obj_align(intg, LV_ALIGN_LEFT_MID, 92, 0);
+  lv_obj_t *fw = lbl(fr, "--", font_caption, color_text_primary, 0, 0);
+  lv_obj_align(fw, LV_ALIGN_RIGHT_MID, -12, 0);
 
   // Update row: live status on the right; the Install chip appears between
   // when a newer build is published (the app reveals it).
@@ -1023,7 +1041,21 @@ void build_system(lv_obj_t *parent, SystemHandles *h) {
 
   if (h) {
     h->version = fw; h->host = hn; h->ip = ip; h->uptime = up; h->mcu = mc;
-    h->update_status = us; h->btn_install = ub;
+    h->update_status = us; h->btn_install = ub; h->integrity = intg;
+  }
+}
+
+void system_set_integrity(SystemHandles *h, const char *state) {
+  if (!h || !h->integrity) return;
+  if (state && strcmp(state, "signed") == 0) {
+    lv_label_set_text(h->integrity, "signed");
+    lv_obj_set_style_text_color(h->integrity, color_accent_secondary, 0);  // phosphor, quiet
+  } else if (state && strcmp(state, "modified") == 0) {
+    lv_label_set_text(h->integrity, "MODIFIED");
+    lv_obj_set_style_text_color(h->integrity, color_state_warning, 0);     // amber caution
+  } else {
+    lv_label_set_text(h->integrity, "unverified");
+    lv_obj_set_style_text_color(h->integrity, color_text_tertiary, 0);     // dim
   }
 }
 
