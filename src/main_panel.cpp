@@ -900,10 +900,24 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // Load/Unload run at the selected material's temp; Load also carries the
   // slider's purge length (LOAD_FILAMENT chunks it under the 120mm/move cap).
   static const int kFilTemp[3] = {220, 240, 260};  // PLA / PETG / PA-CF
+  static const int kMinExtrudeTemp = 170;          // Klipper min_extrude_temp floor
   if (t == fl.load)    { pono::busy_show(fmt::format("Loading {}mm at {}C", s->fil_len_, kFilTemp[s->fil_mat_]).c_str()); s->ws.gcode_script(fmt::format("LOAD_FILAMENT EXTRUDER_TEMP={} LENGTH={}", kFilTemp[s->fil_mat_], s->fil_len_), [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
   if (t == fl.unload)  { pono::busy_show(fmt::format("Unloading at {}C", kFilTemp[s->fil_mat_]).c_str()); s->ws.gcode_script(fmt::format("UNLOAD_FILAMENT EXTRUDER_TEMP={}", kFilTemp[s->fil_mat_]), [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); }); return; }
-  if (t == fl.extrude) { s->ws.gcode_script("M83\nG1 E25 F300"); return; }
-  if (t == fl.retract) { s->ws.gcode_script("M83\nG1 E-25 F1800"); return; }
+  // Extrude/Retract are raw G1 E with no temperature of their own: gate on a hot
+  // nozzle so a stray tap can't grind cold filament / strip the drive gear, and
+  // show that it is running (the move takes several seconds).
+  if (t == fl.extrude) {
+    if (s->home_nozzle_ < kMinExtrudeTemp) { s->confirm(fmt::format("Heat the nozzle to at least {}C before extruding.", kMinExtrudeTemp).c_str(), []{}); return; }
+    pono::busy_show("Extruding 25mm");
+    s->ws.gcode_script("M83\nG1 E25 F300", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); });
+    return;
+  }
+  if (t == fl.retract) {
+    if (s->home_nozzle_ < kMinExtrudeTemp) { s->confirm(fmt::format("Heat the nozzle to at least {}C before retracting.", kMinExtrudeTemp).c_str(), []{}); return; }
+    pono::busy_show("Retracting 25mm");
+    s->ws.gcode_script("M83\nG1 E-25 F1800", [s](json &) { std::lock_guard<std::mutex> lk(s->lv_lock); s->hide_busy_overlay(); });
+    return;
+  }
   // Material segments: select (drives Load/Unload temps) + preheat in one tap.
   for (int i = 0; i < 3; i++) {
     if (t == fl.preset[i]) {
@@ -926,13 +940,13 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // Temps manual steppers: nudge the live target by 5 C (clamped to safe range)
   {
     auto clampi = [](int v, int lo, int hi) { return v < lo ? lo : (v > hi ? hi : v); };
-    if (t == tp.nz_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ - 5, 0, 330))); return; }
-    if (t == tp.nz_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ + 5, 0, 330))); return; }
+    if (t == tp.nz_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ - 5, 0, 300))); return; }
+    if (t == tp.nz_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  clampi(s->home_nozzle_set_ + 5, 0, 300))); return; }
     if (t == tp.bd_minus) { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ - 5, 0, 120))); return; }
     if (t == tp.bd_plus)  { s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", clampi(s->home_bed_set_ + 5, 0, 120))); return; }
   }
   // Temps keypad: tap the big number to type an exact target (clamped to heater limits)
-  if (t == tp.nz_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>330?330:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  n)); }); s->numpad.foreground_reset(); return; }
+  if (t == tp.nz_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>300?300:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=extruder TARGET={}",  n)); }); s->numpad.foreground_reset(); return; }
   if (t == tp.bd_cur) { s->numpad.set_callback([s](double v){ int n=(int)(v+0.5); n=n<0?0:(n>120?120:n); s->ws.gcode_script(fmt::format("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET={}", n)); }); s->numpad.foreground_reset(); return; }
   // Fans (quick)
   // Tune
@@ -948,8 +962,11 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // Fire-and-navigate: a run parks the operator on the cockpit, where the cal
   // overlay / OMEGA banner carry progress. Staying on this selector reads as
   // "nothing happened" for the minutes before the runner's first announce.
-  if (t == tu.standard) { s->ws.gcode_script("PONO_CAL_STANDARD"); s->back_to_home(); return; }
-  if (t == tu.omega)    { s->ws.gcode_script("PONO_CAL_OMEGA"); s->back_to_home(); return; }
+  // Show a provisional overlay the instant we fire: the cockpit's cal overlay
+  // only appears on the macro's first SET_DISPLAY_TEXT, so without this the
+  // glass reads "Ready" for the seconds the bed heats and the head homes.
+  if (t == tu.standard) { pono::busy_show("Starting calibration..."); s->ws.gcode_script("PONO_CAL_STANDARD"); s->back_to_home(); return; }
+  if (t == tu.omega)    { pono::busy_show("Starting calibration..."); s->ws.gcode_script("PONO_CAL_OMEGA"); s->back_to_home(); return; }
   // Individual calibrations (tiles: Bed Mesh, Pressure Adv, Flow, Input Shaper,
   // Z-Offset). Mesh + shaper are real one-shot machine cals: run the proven
   // CALIBRATE_ALL fragments inline, reusing the firmware's GUI safety net
