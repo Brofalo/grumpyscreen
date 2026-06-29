@@ -298,7 +298,7 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   {
     lv_color_t sc = m.paused ? color_state_warning
                   : pr       ? color_accent_primary : color_accent_secondary;
-    lv_obj_t *pill = card(parent, CX1 - 104, TOP_Y, 104, TOP_H - 2, color_surface_raised);
+    lv_obj_t *pill = card(parent, CX1 - 160, TOP_Y, 90, TOP_H - 2, color_surface_raised);  // narrowed to clear the top-layer E-STOP at the right margin
     hairline_c(pill, sc, opa_border_strong);
     lv_obj_t *dot = card(pill, 0, 0, 8, 8, sc, 4);
     lv_obj_align(dot, LV_ALIGN_LEFT_MID, 11, 0);
@@ -449,6 +449,21 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
     out->def = gl_def; out->defpos = gl_pos; out->defn = gl_cnt;
   }
   return arc ? arc : hero;
+}
+
+// Persistent full-kill E-STOP. The one alarm lamp, always lit top-right above
+// every screen. Built on lv_layer_top() (NOT home_scr) so it survives
+// rebuild_home()'s lv_obj_clean and rides over every sub-screen. Solid alarm
+// fill, dark label, machined corner - the same treatment as the Shutdown card.
+// The app wires the tap to a confirm -> printer.emergency_stop (full halt).
+lv_obj_t *build_estop(lv_obj_t *parent) {
+  const int W = 64, H = 26, X = 480 - 12 - W, Y = 10;  // top-right, on the 12px outer margin
+  lv_obj_t *b = card(parent, X, Y, W, H, color_state_error);
+  lv_obj_t *l = lbl(b, "E-STOP", font_caption, color_surface_base, 0, 0);
+  lv_obj_center(l);
+  lv_obj_add_flag(b, LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_set_ext_click_area(b, 8);  // generous hit target on the resistive panel
+  return b;
 }
 
 // ---- Tune screen -----------------------------------------------------------
