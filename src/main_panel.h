@@ -107,6 +107,7 @@ class MainPanel : public NotifyConsumer {
   void check_update();                    // async: compare the firmware host's published build to /etc/pono-version
   void confirm(const char *msg, std::function<void()> action);  // modal confirm before destructive actions
   static void _confirm_tap(lv_event_t *e);
+  static void _estop_tap(lv_event_t *e);   // persistent E-STOP -> confirm -> printer.emergency_stop
   void render_bed_mesh(const json &bm);   // draw the heatmap from a bed_mesh status object
   void populate_files();                  // query Moonraker, fill the Files list
   static void _sub_tap(lv_event_t *e);    // sub-screen button -> gcode action
@@ -189,6 +190,7 @@ class MainPanel : public NotifyConsumer {
   int led_hot_level_ = 2;
   pono::ConfirmHandles confirm_h_;            // modal confirm dialog (on lv_layer_top)
   std::function<void()> pending_confirm_;     // action to run if the user confirms
+  lv_obj_t *estop_btn_ = nullptr;             // persistent full-kill E-STOP on lv_layer_top()
   std::vector<float> mesh_z_;      // flattened probed_matrix for the heatmap
   double move_step_ = 1.0;        // selected jog step (mm)
   std::vector<std::string> files_names_;  // index -> gcode filename for row taps

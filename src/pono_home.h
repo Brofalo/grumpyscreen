@@ -120,6 +120,11 @@ void home_set_gloss(HomeHandles *h, int ix);
 // targets so the app can update values and wire callbacks. Sim passes nullptr.
 lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out = nullptr);
 
+// Persistent full-kill E-STOP. Build on lv_layer_top() so it rides above the
+// cockpit and every sub-screen and survives rebuild_home(). Returns the button;
+// the app wires the tap to a confirm -> printer.emergency_stop.
+lv_obj_t *build_estop(lv_obj_t *parent);
+
 // Start/stop the small "alive" pulse on the PRINTING pill's dot. Call only on
 // the idle<->printing transition; a per-frame restart would stutter the beat.
 // Keeps the always-on idle dashboard at zero animation cost.
