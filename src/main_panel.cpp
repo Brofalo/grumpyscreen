@@ -665,6 +665,23 @@ void MainPanel::create_pono_screens() {
   if (confirm_h_.cancel)  lv_obj_add_event_cb(confirm_h_.cancel,  &MainPanel::_confirm_tap, LV_EVENT_CLICKED, this);
   if (confirm_h_.confirm) lv_obj_add_event_cb(confirm_h_.confirm, &MainPanel::_confirm_tap, LV_EVENT_CLICKED, this);
   if (confirm_h_.scrim)   lv_obj_add_event_cb(confirm_h_.scrim,   &MainPanel::_confirm_tap, LV_EVENT_CLICKED, this);
+
+  // Persistent full-kill E-STOP on the top layer: above the cockpit AND every
+  // sub-screen, surviving rebuild_home(). Built last so it sits on top; the
+  // confirm dialog still raises above it (confirm() move_foreground) so the
+  // kill is gated by a single yes/no.
+  estop_btn_ = pono::build_estop(lv_layer_top());
+  if (estop_btn_) lv_obj_add_event_cb(estop_btn_, &MainPanel::_estop_tap, LV_EVENT_CLICKED, this);
+}
+
+// Persistent E-STOP tap: gate the full kill behind one confirm, then fire
+// Moonraker's printer.emergency_stop (halts motion + heaters). The firmware
+// safety and the rear rocker remain the ultimate stop. Mirrors the legacy
+// emergency_btn path, surfaced on the always-on-top cockpit button.
+void MainPanel::_estop_tap(lv_event_t *e) {
+  if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
+  auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
+  s->confirm("Emergency stop the printer?", [s]{ s->ws.send_jsonrpc("printer.emergency_stop"); });
 }
 
 void MainPanel::confirm(const char *msg, std::function<void()> action) {
