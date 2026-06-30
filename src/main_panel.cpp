@@ -671,7 +671,16 @@ void MainPanel::create_pono_screens() {
   // confirm dialog still raises above it (confirm() move_foreground) so the
   // kill is gated by a single yes/no.
   estop_btn_ = pono::build_estop(lv_layer_top());
-  if (estop_btn_) lv_obj_add_event_cb(estop_btn_, &MainPanel::_estop_tap, LV_EVENT_CLICKED, this);
+  if (estop_btn_) {
+    lv_obj_add_event_cb(estop_btn_, &MainPanel::_estop_tap, LV_EVENT_CLICKED, this);
+    // Keep the kill switch reachable. The busy/cal/numpad scrims are full-screen
+    // children of lv_layer_top() that move_foreground over the E-STOP, burying it
+    // untappable during exactly the motion (homing, filament load, cal, value
+    // entry) when it is needed most. A light keepalive re-raises it above any
+    // such overlay - but never above the confirm dialog, which is the E-STOP's
+    // own yes/no and must stay on top to be answerable.
+    lv_timer_create(&MainPanel::_estop_keepalive, 300, this);
+  }
 }
 
 // Persistent E-STOP tap: gate the full kill behind one confirm, then fire
@@ -682,6 +691,20 @@ void MainPanel::_estop_tap(lv_event_t *e) {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
   auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
   s->confirm("Emergency stop the printer?", [s]{ s->ws.send_jsonrpc("printer.emergency_stop"); });
+}
+
+// Keep the E-STOP on top of any full-screen overlay (busy/cal/numpad scrim) so
+// it stays tappable during motion. Skip while the confirm dialog is up, since
+// that dialog must sit above the E-STOP to be answered. Cheap: only reorders
+// (and redraws its 64x26) when something is actually covering it.
+void MainPanel::_estop_keepalive(lv_timer_t *t) {
+  auto *s = static_cast<MainPanel *>(t->user_data);
+  if (!s->estop_btn_) return;
+  if (s->confirm_h_.card && !lv_obj_has_flag(s->confirm_h_.card, LV_OBJ_FLAG_HIDDEN)) return;
+  lv_obj_t *top = lv_layer_top();
+  uint32_t n = lv_obj_get_child_cnt(top);
+  if (n && lv_obj_get_child(top, n - 1) != s->estop_btn_)
+    lv_obj_move_foreground(s->estop_btn_);
 }
 
 void MainPanel::confirm(const char *msg, std::function<void()> action) {

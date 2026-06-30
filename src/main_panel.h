@@ -108,6 +108,7 @@ class MainPanel : public NotifyConsumer {
   void confirm(const char *msg, std::function<void()> action);  // modal confirm before destructive actions
   static void _confirm_tap(lv_event_t *e);
   static void _estop_tap(lv_event_t *e);   // persistent E-STOP -> confirm -> printer.emergency_stop
+  static void _estop_keepalive(lv_timer_t *t);  // re-raise E-STOP above busy/cal/numpad scrims (never above the confirm)
   void render_bed_mesh(const json &bm);   // draw the heatmap from a bed_mesh status object
   void populate_files();                  // query Moonraker, fill the Files list
   static void _sub_tap(lv_event_t *e);    // sub-screen button -> gcode action
