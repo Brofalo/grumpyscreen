@@ -1019,8 +1019,10 @@ void build_system(lv_obj_t *parent, SystemHandles *h) {
   lv_obj_clear_flag(fr, LV_OBJ_FLAG_SCROLLABLE);
   lv_obj_t *frn = tag(fr, "FIRMWARE", color_text_tertiary, 0, 0);
   lv_obj_align(frn, LV_ALIGN_LEFT_MID, 12, 0);
-  lv_obj_t *intg = lbl(fr, "unverified", font_micro, color_text_tertiary, 0, 0);
+  lv_obj_t *intg = lbl(fr, "unknown", font_micro, color_text_tertiary, 0, 0);
   lv_obj_align(intg, LV_ALIGN_LEFT_MID, 92, 0);
+  lv_obj_add_flag(intg, LV_OBJ_FLAG_CLICKABLE);  // tap re-reads the unofficial notice
+  lv_obj_set_ext_click_area(intg, 10);           // micro label, fat finger
   lv_obj_t *fw = lbl(fr, "--", font_caption, color_text_primary, 0, 0);
   lv_obj_align(fw, LV_ALIGN_RIGHT_MID, -12, 0);
 
@@ -1060,17 +1062,29 @@ void build_system(lv_obj_t *parent, SystemHandles *h) {
   }
 }
 
-void system_set_integrity(SystemHandles *h, const char *state) {
+IntegrityState integrity_state_from_wire(const char *state) {
+  if (state && strcmp(state, "signed") == 0)   return IntegrityState::OfficialSigned;
+  if (state && strcmp(state, "modified") == 0) return IntegrityState::Unofficial;
+  // Fail closed: an absent, unreadable, or unrecognized provenance state
+  // renders unknown, never official.
+  return IntegrityState::Unknown;
+}
+
+void system_set_integrity(SystemHandles *h, IntegrityState state) {
   if (!h || !h->integrity) return;
-  if (state && strcmp(state, "signed") == 0) {
-    lv_label_set_text(h->integrity, "signed");
+  switch (state) {
+  case IntegrityState::OfficialSigned:
+    lv_label_set_text(h->integrity, "official-signed");
     lv_obj_set_style_text_color(h->integrity, color_accent_secondary, 0);  // phosphor, quiet
-  } else if (state && strcmp(state, "modified") == 0) {
-    lv_label_set_text(h->integrity, "MODIFIED");
+    break;
+  case IntegrityState::Unofficial:
+    lv_label_set_text(h->integrity, "UNOFFICIAL");
     lv_obj_set_style_text_color(h->integrity, color_state_warning, 0);     // amber caution
-  } else {
-    lv_label_set_text(h->integrity, "unverified");
+    break;
+  default:
+    lv_label_set_text(h->integrity, "unknown");
     lv_obj_set_style_text_color(h->integrity, color_text_tertiary, 0);     // dim
+    break;
   }
 }
 
@@ -1123,6 +1137,33 @@ void build_confirm(lv_obj_t *parent, ConfirmHandles *h) {
   lv_obj_center(lbl(confirm, "Confirm", font_body, color_surface_base, 0, 0));
 
   if (h) { h->scrim = scrim; h->card = cd; h->msg = msg; h->cancel = cancel; h->confirm = confirm; }
+}
+
+void build_notice(lv_obj_t *parent, NoticeHandles *h) {
+  // Mirrors build_confirm (scrim under card, both hidden until shown), but
+  // sized for paragraph-length copy the confirm card cannot hold (the B9
+  // unofficial-build notice) and with a single OK instead of Cancel/Confirm.
+  lv_obj_t *scrim = lv_obj_create(parent);
+  lv_obj_remove_style_all(scrim);
+  lv_obj_set_size(scrim, LV_PCT(100), LV_PCT(100));
+  lv_obj_set_style_bg_color(scrim, color_surface_base, 0);
+  lv_obj_set_style_bg_opa(scrim, LV_OPA_70, 0);
+  lv_obj_add_flag(scrim, LV_OBJ_FLAG_HIDDEN | LV_OBJ_FLAG_CLICKABLE);
+  lv_obj_clear_flag(scrim, LV_OBJ_FLAG_SCROLLABLE);
+
+  lv_obj_t *cd = card(parent, 40, 26, 400, 220, color_surface_raised);  // centered on 480x272
+  hairline(cd, opa_border_medium);
+  lv_obj_add_flag(cd, LV_OBJ_FLAG_HIDDEN);
+
+  lv_obj_t *msg = lbl(cd, "", font_caption, color_text_primary, 0, 0);
+  lv_label_set_long_mode(msg, LV_LABEL_LONG_WRAP);
+  lv_obj_set_width(msg, 368);
+  lv_obj_set_style_text_align(msg, LV_TEXT_ALIGN_CENTER, 0);
+  lv_obj_align(msg, LV_ALIGN_TOP_MID, 0, 18);
+
+  lv_obj_t *ok = tap_btn(cd, 125, 164, 150, 40, "OK", font_body, color_text_primary);
+
+  if (h) { h->scrim = scrim; h->card = cd; h->msg = msg; h->ok = ok; }
 }
 
 void build_lights(lv_obj_t *parent, LightsHandles *h) {
