@@ -642,7 +642,7 @@ void MainPanel::create_pono_screens() {
     tune_h_.back, tune_h_.standard, tune_h_.omega,
     tune_h_.cals[0], tune_h_.cals[1], tune_h_.cals[2], tune_h_.cals[3], tune_h_.cals[4],
     more_h_.back, more_h_.wifi, more_h_.expert, more_h_.mesh, more_h_.led, more_h_.system, more_h_.power,
-    mesh_h_.back, system_h_.back, system_h_.btn_install,
+    mesh_h_.back, system_h_.back, system_h_.btn_install, system_h_.integrity,
     lights_h_.back, lights_h_.case_off, lights_h_.case_50, lights_h_.case_full,
     lights_h_.hot_off, lights_h_.hot_50, lights_h_.hot_full,
     power_h_.back, power_h_.restart_klipper, power_h_.restart_fw, power_h_.reboot, power_h_.shutdown,
@@ -665,6 +665,12 @@ void MainPanel::create_pono_screens() {
   if (confirm_h_.cancel)  lv_obj_add_event_cb(confirm_h_.cancel,  &MainPanel::_confirm_tap, LV_EVENT_CLICKED, this);
   if (confirm_h_.confirm) lv_obj_add_event_cb(confirm_h_.confirm, &MainPanel::_confirm_tap, LV_EVENT_CLICKED, this);
   if (confirm_h_.scrim)   lv_obj_add_event_cb(confirm_h_.scrim,   &MainPanel::_confirm_tap, LV_EVENT_CLICKED, this);
+
+  // Informational notice modal (B9): paragraph-length copy the confirm card
+  // cannot hold (the unofficial-build notice). OK and the scrim both dismiss.
+  pono::build_notice(lv_layer_top(), &notice_h_);
+  if (notice_h_.ok)    lv_obj_add_event_cb(notice_h_.ok,    &MainPanel::_notice_tap, LV_EVENT_CLICKED, this);
+  if (notice_h_.scrim) lv_obj_add_event_cb(notice_h_.scrim, &MainPanel::_notice_tap, LV_EVENT_CLICKED, this);
 
   // Persistent full-kill E-STOP on the top layer: above the cockpit AND every
   // sub-screen, surviving rebuild_home(). Built last so it sits on top; the
@@ -689,6 +695,18 @@ void MainPanel::confirm(const char *msg, std::function<void()> action) {
   if (confirm_h_.msg) lv_label_set_text(confirm_h_.msg, msg);
   if (confirm_h_.scrim)  { lv_obj_clear_flag(confirm_h_.scrim, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(confirm_h_.scrim); }
   if (confirm_h_.card)   { lv_obj_clear_flag(confirm_h_.card,  LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(confirm_h_.card); }
+}
+
+void MainPanel::notice(const char *msg) {
+  if (notice_h_.msg) lv_label_set_text(notice_h_.msg, msg);
+  if (notice_h_.scrim) { lv_obj_clear_flag(notice_h_.scrim, LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(notice_h_.scrim); }
+  if (notice_h_.card)  { lv_obj_clear_flag(notice_h_.card,  LV_OBJ_FLAG_HIDDEN); lv_obj_move_foreground(notice_h_.card); }
+}
+
+void MainPanel::_notice_tap(lv_event_t *e) {
+  auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
+  if (s->notice_h_.card)  { lv_obj_add_flag(s->notice_h_.card,  LV_OBJ_FLAG_HIDDEN); lv_obj_move_background(s->notice_h_.card); }
+  if (s->notice_h_.scrim) { lv_obj_add_flag(s->notice_h_.scrim, LV_OBJ_FLAG_HIDDEN); lv_obj_move_background(s->notice_h_.scrim); }
 }
 
 void MainPanel::_confirm_tap(lv_event_t *e) {
@@ -753,11 +771,19 @@ void MainPanel::populate_system() {
   }
   if (system_h_.version) lv_label_set_text(system_h_.version, ver.c_str());
 
-  // Firmware-integrity badge: the OS boot check writes /run/pono-integrity with
-  // "signed" (image came from a verified signed install) or "modified" (flashed
-  // some other way, e.g. owner-open FEL/USB). Absent -> badge stays "unverified".
+  // Firmware-integrity badge (three states, fail closed): the OS boot check
+  // writes /run/pono-integrity with "signed" (verified signed install) or
+  // "modified" (flashed some other way, e.g. owner-open FEL/USB). Anything
+  // else - absent, unreadable, unrecognized - renders unknown, NEVER
+  // official. An unofficial image also gets the friendly notice, once per
+  // UI run here plus any time the badge is tapped.
   { std::ifstream f("/run/pono-integrity"); std::string st; std::getline(f, st);
-    pono::system_set_integrity(&system_h_, st.c_str()); }
+    integrity_ = pono::integrity_state_from_wire(st.c_str());
+    pono::system_set_integrity(&system_h_, integrity_);
+    if (integrity_ == pono::IntegrityState::Unofficial && !unofficial_notice_shown_) {
+      unofficial_notice_shown_ = true;
+      notice(pono::kUnofficialBuildNotice);
+    } }
 
   std::string host = "pono-print";
   { std::ifstream f("/proc/sys/kernel/hostname"); std::getline(f, host); }
@@ -787,6 +813,24 @@ void MainPanel::populate_system() {
     if (system_h_.mcu) lv_label_set_text(system_h_.mcu, mdeg > 0 ? fmt::format("{:.1f}C", mdeg / 1000.0).c_str() : "--"); }
 
   check_update();
+}
+
+// B9 friendly notice: update-pono-print classifies a swupdate refusal and
+// writes /run/pono-update-refused ("signature" on line 1, the notice text
+// after) ONLY when the SWU failed signature verification - an unofficial
+// build, never a corrupted download of an official one (that case keeps the
+// generic retry path). Returns the notice text; empty means no signature
+// refusal, or any read problem - either way the caller falls through to
+// today's plain-failure behavior, so this can never block anything.
+static std::string read_update_refusal() {
+  std::ifstream f("/run/pono-update-refused");
+  std::string cls;
+  if (!std::getline(f, cls) || cls != "signature") return "";
+  std::string text, line;
+  while (std::getline(f, line)) { if (!text.empty()) text += "\n"; text += line; }
+  // The OS file normally carries the copy; if it ever arrives bare, fall
+  // back to the twin constant vendored here (byte-identical by contract).
+  return text.empty() ? std::string(pono::kUnofficialSwuRefusedNotice) : text;
 }
 
 // Run a shell command, return trimmed stdout (empty on failure).
@@ -1031,6 +1075,13 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     pono::seg_highlight(hb, 3, s->led_hot_level_);
     s->show_pono(s->lights_scr_); return;
   }
+  // Firmware badge tap (B9): on an unofficial image, re-read the friendly
+  // notice. Any other state, the tap is inert.
+  if (t == s->system_h_.integrity) {
+    if (s->integrity_ == pono::IntegrityState::Unofficial)
+      s->notice(pono::kUnofficialBuildNotice);
+    return;
+  }
   // Update install: confirm, then run the device's own update path. On
   // success update-pono-print flashes the spare slot and reboots the machine
   // itself, so the busy overlay is honestly the last thing this boot shows.
@@ -1043,17 +1094,25 @@ void MainPanel::_sub_tap(lv_event_t *e) {
       std::thread([s]{
         int rc = system("update-pono-print >>/tmp/pono-update-ui.log 2>&1");
         // Reached only on failure (success ends in reboot). Surface the fault.
+        // B9: a signature-class refusal (unofficial SWU) gets the friendly
+        // notice instead of the bare failure line; read the classification
+        // before taking the lock, and fall through to the plain path if it
+        // yields nothing.
+        std::string refused = rc == 0 ? std::string() : read_update_refusal();
         std::lock_guard<std::mutex> lk(s->lv_lock);
         pono::busy_hide();
         if (s->system_h_.update_status) {
           lv_label_set_text(s->system_h_.update_status,
-            rc == 0 ? "rebooting..." : "update failed (see log)");
+            rc == 0 ? "rebooting..."
+                    : (!refused.empty() ? "not an official build" : "update failed (see log)"));
           lv_obj_set_style_text_color(s->system_h_.update_status,
-            rc == 0 ? pono::color_accent_primary : pono::color_state_error, 0);
+            rc == 0 ? pono::color_accent_primary
+                    : (!refused.empty() ? pono::color_state_warning : pono::color_state_error), 0);
           lv_obj_align(s->system_h_.update_status, LV_ALIGN_RIGHT_MID, -12, 0);
         }
         if (rc != 0 && s->system_h_.btn_install)
           lv_obj_add_flag(s->system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
+        if (!refused.empty()) s->notice(refused.c_str());
       }).detach();
     });
     return;

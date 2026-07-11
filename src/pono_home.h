@@ -237,6 +237,32 @@ struct MeshHandles {
 };
 void build_mesh(lv_obj_t *parent, MeshHandles *h = nullptr);
 
+// B9 friendly unofficial-firmware copy (Jack, 2026-07-08: signed-only
+// posture, refuse nicely, wish them luck; FEL/UART stay the sanctioned
+// tinkerer path). Single source for every surface in this repo. Draft copy,
+// Jack redlines later - kUnofficialSwuRefusedNotice must stay byte-identical
+// to PONO_UNOFFICIAL_NOTICE in pono-print-os
+// (meta-opencentauri/recipes-data/update-scripts/files/update-pono-print).
+// The draft's em dashes are rendered as spaced hyphens: the Plex faces are
+// built ASCII-only (tools/regen_pono_fonts.sh), so U+2014 draws a tofu box
+// on glass (verified on the headless render).
+inline constexpr const char *kUnofficialBuildNotice =
+    "Unofficial build - good luck out there. This isn't a Pono-signed image, "
+    "so updates and support work differently. FEL/UART got you here; it'll "
+    "get you back.";
+inline constexpr const char *kUnofficialSwuRefusedNotice =
+    "This build isn't signed by Pono, so it won't install over the updater. "
+    "If you're rolling your own - good luck, have fun! Just know it's not an "
+    "official Pono Print build, and unofficial builds are yours to support. "
+    "(The serial console is your friend.)";
+
+// Firmware-integrity badge state (B9). The wire values in /run/pono-integrity
+// stay "signed" / "modified" / "unverified" (images already in the field keep
+// working); this maps them to the UI's three states. Fail closed: anything
+// absent, unreadable, or unrecognized is Unknown -- never official.
+enum class IntegrityState { OfficialSigned, Unofficial, Unknown };
+IntegrityState integrity_state_from_wire(const char *state);
+
 // System info screen: firmware version, update lane, network, uptime (app
 // fills the values). The update row carries a live status ("up to date" /
 // "alpha.174 available") and an Install chip the app reveals when a newer
@@ -245,12 +271,12 @@ struct SystemHandles {
   lv_obj_t *back = nullptr, *version = nullptr, *ip = nullptr, *host = nullptr, *uptime = nullptr, *mcu = nullptr;
   lv_obj_t *update_status = nullptr;  // "checking..." / "up to date" / "alpha.NNN available"
   lv_obj_t *btn_install = nullptr;    // lamp chip, hidden until an update is available
-  lv_obj_t *integrity = nullptr;      // small badge on the FIRMWARE row: signed / MODIFIED / unverified
+  lv_obj_t *integrity = nullptr;      // small badge on the FIRMWARE row: official-signed / UNOFFICIAL / unknown
 };
 void build_system(lv_obj_t *parent, SystemHandles *h = nullptr);
-// Set the firmware-integrity badge from the OS check (/run/pono-integrity):
-// "signed" -> quiet phosphor, "modified" -> amber MODIFIED, anything else -> dim unverified.
-void system_set_integrity(SystemHandles *h, const char *state);
+// Set the firmware-integrity badge: OfficialSigned -> quiet phosphor,
+// Unofficial -> amber UNOFFICIAL, Unknown -> dim unknown.
+void system_set_integrity(SystemHandles *h, IntegrityState state);
 
 // Power screen: restart Klipper, restart firmware, reboot, shutdown.
 struct PowerHandles {
@@ -277,6 +303,15 @@ struct ConfirmHandles {
            *cancel = nullptr, *confirm = nullptr;
 };
 void build_confirm(lv_obj_t *parent, ConfirmHandles *h = nullptr);
+
+// Informational notice modal (scrim + card + paragraph + OK). Like the
+// confirm dialog but sized for paragraph-length copy (the B9 unofficial-
+// build notice) and with a single dismiss. Built once onto lv_layer_top by
+// the app; the app sets the message and wires OK + scrim to hide it.
+struct NoticeHandles {
+  lv_obj_t *scrim = nullptr, *card = nullptr, *msg = nullptr, *ok = nullptr;
+};
+void build_notice(lv_obj_t *parent, NoticeHandles *h = nullptr);
 
 // Re-render the heatmap from a row-major z matrix (rows x cols, mm), color-
 // mapped across [zmin,zmax]. Front row drawn at the bottom. Safe to call live.

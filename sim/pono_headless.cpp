@@ -165,10 +165,28 @@ int main(int argc, char **argv) {
     pono::build_mesh(lv_scr_act());
   } else if (screen == "system") {
     pono::SystemHandles sh; pono::build_system(lv_scr_act(), &sh);
-    pono::system_set_integrity(&sh, "signed");
+    pono::system_set_integrity(&sh, pono::integrity_state_from_wire("signed"));
   } else if (screen == "system_modified") {
     pono::SystemHandles sh; pono::build_system(lv_scr_act(), &sh);
-    pono::system_set_integrity(&sh, "modified");
+    pono::system_set_integrity(&sh, pono::integrity_state_from_wire("modified"));
+  } else if (screen == "notice") {
+    // B9 unofficial-build notice modal over the System screen, as the app
+    // shows it on an unofficial image (auto once per run + badge tap).
+    pono::SystemHandles sh; pono::build_system(lv_scr_act(), &sh);
+    pono::system_set_integrity(&sh, pono::integrity_state_from_wire("modified"));
+    pono::NoticeHandles nh;
+    pono::build_notice(lv_scr_act(), &nh);
+    lv_label_set_text(nh.msg, pono::kUnofficialBuildNotice);
+    lv_obj_clear_flag(nh.scrim, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(nh.card, LV_OBJ_FLAG_HIDDEN);
+  } else if (screen == "notice_refused") {
+    // The SWU-refusal flavor (the longer copy the update row surfaces).
+    pono::SystemHandles sh; pono::build_system(lv_scr_act(), &sh);
+    pono::NoticeHandles nh;
+    pono::build_notice(lv_scr_act(), &nh);
+    lv_label_set_text(nh.msg, pono::kUnofficialSwuRefusedNotice);
+    lv_obj_clear_flag(nh.scrim, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(nh.card, LV_OBJ_FLAG_HIDDEN);
   } else if (screen == "power") {
     pono::build_power(lv_scr_act());
   } else if (screen == "lights") {
