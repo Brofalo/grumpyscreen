@@ -110,6 +110,7 @@ class MainPanel : public NotifyConsumer {
   void notice(const char *msg);            // informational modal: paragraph copy + OK (B9 unofficial notice)
   static void _notice_tap(lv_event_t *e);  // OK / scrim -> dismiss the notice
   static void _estop_tap(lv_event_t *e);   // persistent E-STOP -> confirm -> printer.emergency_stop
+  static void _estop_keepalive(lv_timer_t *t);  // re-raise E-STOP above busy/cal/numpad scrims (never above the confirm)
   void render_bed_mesh(const json &bm);   // draw the heatmap from a bed_mesh status object
   void populate_files();                  // query Moonraker, fill the Files list
   static void _sub_tap(lv_event_t *e);    // sub-screen button -> gcode action
@@ -136,6 +137,7 @@ class MainPanel : public NotifyConsumer {
   bool home_paused_ = false;      // last-known paused state (Resume vs Pause button)
   bool home_pulsing_ = false;     // is the state-dot pulse currently running
   lv_timer_t *stale_timer_ = nullptr;  // T6: periodic readout-staleness check (notifies can stop; a timer cannot)
+  lv_timer_t *estop_keepalive_timer_ = nullptr;  // re-raises the E-STOP above full-screen scrims; owned here, cancelled in the dtor
   bool stale_shown_ = false;           // is the stale flag currently visible (touched only under lv_lock)
   int gloss_ix_ = -1;             // dictionary-entry position once the operator advances it (-1 = today's)
   bool update_checking_ = false;  // a version check is in flight (guard re-entry)

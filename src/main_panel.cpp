@@ -90,6 +90,10 @@ MainPanel::~MainPanel() {
     lv_timer_del(stale_timer_);
     stale_timer_ = nullptr;
   }
+  if (estop_keepalive_timer_ != nullptr) {
+    lv_timer_del(estop_keepalive_timer_);
+    estop_keepalive_timer_ = nullptr;
+  }
   if (tabview != NULL) {
     lv_obj_del(tabview);
     tabview = NULL;
@@ -681,7 +685,17 @@ void MainPanel::create_pono_screens() {
   // confirm dialog still raises above it (confirm() move_foreground) so the
   // kill is gated by a single yes/no.
   estop_btn_ = pono::build_estop(lv_layer_top());
-  if (estop_btn_) lv_obj_add_event_cb(estop_btn_, &MainPanel::_estop_tap, LV_EVENT_CLICKED, this);
+  if (estop_btn_) {
+    lv_obj_add_event_cb(estop_btn_, &MainPanel::_estop_tap, LV_EVENT_CLICKED, this);
+    // Keep the kill switch reachable. The busy/cal/numpad scrims are full-screen
+    // children of lv_layer_top() that move_foreground over the E-STOP, leaving it
+    // untappable during exactly the motion (homing, filament load, cal, value
+    // entry) when it is needed most. A light keepalive re-raises it above any
+    // such overlay - but never above the confirm dialog, which is the E-STOP's
+    // own yes/no and must stay on top to be answerable. Owned + cancelled in the
+    // dtor so a torn-down panel cannot leave the timer dereferencing freed self.
+    estop_keepalive_timer_ = lv_timer_create(&MainPanel::_estop_keepalive, 300, this);
+  }
 }
 
 // Persistent E-STOP tap: gate the full kill behind one confirm, then fire
@@ -692,6 +706,20 @@ void MainPanel::_estop_tap(lv_event_t *e) {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
   auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
   s->confirm("Emergency stop the printer?", [s]{ s->ws.send_jsonrpc("printer.emergency_stop"); });
+}
+
+// Keep the E-STOP on top of any full-screen overlay (busy/cal/numpad scrim) so
+// it stays tappable during motion. Skip while the confirm dialog is up, since
+// that dialog must sit above the E-STOP to be answered. Cheap: only reorders
+// (and redraws its small button) when something is actually covering it.
+void MainPanel::_estop_keepalive(lv_timer_t *t) {
+  auto *s = static_cast<MainPanel *>(t->user_data);
+  if (!s->estop_btn_) return;
+  if (s->confirm_h_.card && !lv_obj_has_flag(s->confirm_h_.card, LV_OBJ_FLAG_HIDDEN)) return;
+  lv_obj_t *top = lv_layer_top();
+  uint32_t n = lv_obj_get_child_cnt(top);
+  if (n && lv_obj_get_child(top, n - 1) != s->estop_btn_)
+    lv_obj_move_foreground(s->estop_btn_);
 }
 
 void MainPanel::confirm(const char *msg, std::function<void()> action) {
@@ -737,8 +765,13 @@ void MainPanel::back_to_home() {
 }
 
 void MainPanel::render_bed_mesh(const json &bm) {
-  auto pm = bm[json::json_pointer("/probed_matrix")];
-  if (pm.is_array() && pm.size() > 0 && pm[0].is_array()) {
+  // bm is a const delta. operator[](json_pointer) on a const json THROWS when a
+  // field is absent, and a bed_mesh delta that changes only profile_name carries
+  // no probed_matrix. find() keeps a partial delta a no-op instead of a throw the
+  // ws thread has to catch (which would drop the rest of that status update).
+  auto pm_it = bm.find("probed_matrix");
+  if (pm_it != bm.end() && pm_it->is_array() && pm_it->size() > 0 && (*pm_it)[0].is_array()) {
+    const auto &pm = *pm_it;
     int rows = (int)pm.size(), cols = (int)pm[0].size();
     mesh_z_.clear();
     float zmin = 1e9f, zmax = -1e9f;
@@ -755,9 +788,9 @@ void MainPanel::render_bed_mesh(const json &bm) {
         lv_label_set_text(mesh_h_.range, fmt::format("Range: {:.2f} .. {:.2f} mm", zmin, zmax).c_str());
     }
   }
-  auto pn = bm[json::json_pointer("/profile_name")];
-  if (!pn.is_null() && mesh_h_.profile)
-    lv_label_set_text(mesh_h_.profile, fmt::format("Profile: {}", pn.template get<std::string>()).c_str());
+  auto pn_it = bm.find("profile_name");
+  if (pn_it != bm.end() && pn_it->is_string() && mesh_h_.profile)
+    lv_label_set_text(mesh_h_.profile, fmt::format("Profile: {}", pn_it->template get<std::string>()).c_str());
 }
 
 void MainPanel::populate_system() {
@@ -1060,11 +1093,16 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // five tiles silently ran the full standard cal.
   if (t == tu.cals[0]) {  // Bed Mesh
     s->confirm("Calibrate bed mesh? Heats the bed to 60C and probes the surface.", [s]{
+      // TOCTOU: the tap-time job interlock is stale here; a job can start while
+      // the confirm is open. Re-check at dispatch so G28 + probe never lands on
+      // a live print (the 2026-06-11 Full Cal crash class).
+      if (s->home_printing_ || s->home_paused_) { s->notice("A job started. Calibration cancelled."); return; }
       s->ws.gcode_script("SET_DISPLAY_TEXT MSG=\"Calibrating Bed Mesh\"\nG28\nG90\nG1 X128 Y128 F6000\nBED_MESH_CALIBRATE_WITH_WIPE BED_TEMP=60\n_SAVE_CONFIG_PROMPT"); });
     return;
   }
   if (t == tu.cals[3]) {  // Input Shaper
     s->confirm("Calibrate input shaper? The screen pauses while it measures resonance.", [s]{
+      if (s->home_printing_ || s->home_paused_) { s->notice("A job started. Calibration cancelled."); return; }
       s->ws.gcode_script("SET_DISPLAY_TEXT MSG=\"Calibrating Input Shaper - screen pauses briefly\"\nG4 P1500\nUPDATE_DELAYED_GCODE ID=_SHAPER_CAL_GUI_RESTORE DURATION=180\nRUN_SHELL_COMMAND CMD=CAMERA_STOP\nRUN_SHELL_COMMAND CMD=GUI_STOP\nG28\nM400\nSHAPER_CALIBRATE AXIS=X\nG4 P1000\nSHAPER_CALIBRATE AXIS=Y\nG4 P1000\nUPDATE_DELAYED_GCODE ID=_SHAPER_CAL_GUI_RESTORE DURATION=0\nRUN_SHELL_COMMAND CMD=CAMERA_START\nRUN_SHELL_COMMAND CMD=GUI_START\n_SAVE_CONFIG_PROMPT"); });
     return;
   }
@@ -1101,6 +1139,11 @@ void MainPanel::_sub_tap(lv_event_t *e) {
     std::string msg = "Install " + s->update_avail_ +
                       "? The printer flashes the spare slot and reboots itself.";
     s->confirm(msg.c_str(), [s]{
+      // TOCTOU: the tap-time gate above is stale by the time this fires. A print
+      // can start (remotely, over Moonraker) while the confirm is open, so
+      // re-validate at dispatch before flashing + rebooting. This runs on the UI
+      // thread under lv_lock, the same lock consume() writes the flags under.
+      if (s->home_printing_ || s->home_paused_) { s->notice("A print started. Update cancelled."); return; }
       pono::busy_show("Updating - do not power off");
       std::thread([s]{
         int rc = system("update-pono-print >>/tmp/pono-update-ui.log 2>&1");
@@ -1132,10 +1175,18 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // These all drop the link, so the operator would otherwise see nothing
   // happen until the screen reconnects. Show what's underway; reset_overlay on
   // disconnect (or the watchdog) clears it.
-  if (t == s->power_h_.restart_klipper) { s->confirm("Restart Klipper?",       [s]{ pono::busy_show("Restarting Klipper..."); s->ws.gcode_script("RESTART"); }); return; }
-  if (t == s->power_h_.restart_fw)      { s->confirm("Restart firmware?",      [s]{ pono::busy_show("Restarting firmware..."); s->ws.gcode_script("FIRMWARE_RESTART"); }); return; }
-  if (t == s->power_h_.reboot)          { s->confirm("Reboot the printer?",    [s]{ pono::busy_show("Rebooting..."); s->ws.send_jsonrpc("machine.reboot"); }); return; }
-  if (t == s->power_h_.shutdown)        { s->confirm("Shut down the printer?", [s]{ pono::busy_show("Shutting down..."); s->ws.send_jsonrpc("machine.shutdown"); }); return; }
+  // Power actions all abort a running job and drop motion control. They are
+  // operator-initiated, so the confirm stands, but warn plainly when a print is
+  // live so the tap is informed (the message copies into the label at once, so a
+  // temporary is safe).
+  auto pw = [s](const char *m) {
+    return (s->home_printing_ || s->home_paused_)
+             ? std::string("A print is running - this stops it. ") + m : std::string(m);
+  };
+  if (t == s->power_h_.restart_klipper) { s->confirm(pw("Restart Klipper?").c_str(),       [s]{ pono::busy_show("Restarting Klipper..."); s->ws.gcode_script("RESTART"); }); return; }
+  if (t == s->power_h_.restart_fw)      { s->confirm(pw("Restart firmware?").c_str(),      [s]{ pono::busy_show("Restarting firmware..."); s->ws.gcode_script("FIRMWARE_RESTART"); }); return; }
+  if (t == s->power_h_.reboot)          { s->confirm(pw("Reboot the printer?").c_str(),    [s]{ pono::busy_show("Rebooting..."); s->ws.send_jsonrpc("machine.reboot"); }); return; }
+  if (t == s->power_h_.shutdown)        { s->confirm(pw("Shut down the printer?").c_str(), [s]{ pono::busy_show("Shutting down..."); s->ws.send_jsonrpc("machine.shutdown"); }); return; }
   // Lights (SET_LED white channel) - fire the command AND move the highlight
   // to the chosen level so the active selection is visible.
   pono::LightsHandles &li = s->lights_h_;
