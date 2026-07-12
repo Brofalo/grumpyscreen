@@ -318,6 +318,10 @@ void MainPanel::consume(json &j) {
       home_printing_ = printing;
       home_paused_   = paused;
       rebuild_home();                 // swap to the matching layout (Ready / printing / paused)
+      // D: a print (or pause) starting must not leave a flash+reboot chip live.
+      // Hide it on the flip; it reappears when System is next opened idle.
+      if ((home_printing_ || home_paused_) && system_h_.btn_install)
+        lv_obj_add_flag(system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
     } else {
       // temps update in both states: big number + heat color, target "/ N" or "off"
       // Repaint temps only when a value actually changed (see render shadows):
@@ -910,8 +914,14 @@ void MainPanel::check_update() {
       lv_obj_align(system_h_.update_status, LV_ALIGN_RIGHT_MID, avail ? -106 : -12, 0);
     }
     if (system_h_.btn_install) {
-      if (avail) lv_obj_clear_flag(system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
-      else       lv_obj_add_flag(system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
+      // D: never offer a firmware flash + reboot mid-print. Show the Install
+      // chip only when an update is available AND the machine is idle. Read of
+      // home_printing_/paused_ is safe here: this runs under lv_lock, the same
+      // lock consume() takes when it writes them.
+      if (avail && !home_printing_ && !home_paused_)
+        lv_obj_clear_flag(system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
+      else
+        lv_obj_add_flag(system_h_.btn_install, LV_OBJ_FLAG_HIDDEN);
     }
     update_checking_ = false;
   }).detach();
@@ -1087,6 +1097,7 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // itself, so the busy overlay is honestly the last thing this boot shows.
   if (t == s->system_h_.btn_install) {
     if (s->update_avail_.empty()) return;
+    if (s->home_printing_ || s->home_paused_) return;  // D safety belt: never flash + reboot mid-print (the chip is already hidden while printing)
     std::string msg = "Install " + s->update_avail_ +
                       "? The printer flashes the spare slot and reboots itself.";
     s->confirm(msg.c_str(), [s]{
