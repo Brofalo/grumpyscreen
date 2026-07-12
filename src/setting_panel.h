@@ -41,6 +41,12 @@ class SettingPanel {
   ButtonContainer guppy_update_btn;
   ButtonContainer switch_to_stock_btn;
   ButtonContainer factory_reset_btn;
+
+  // Factory-reset defers its (blocking) command on a one-shot timer so the
+  // dialog renders first. The panel OWNS that timer and cancels it in
+  // ~SettingPanel, so it can never fire against a destroyed panel.
+  lv_timer_t *reset_timer_ = nullptr;
+  static void run_factory_reset_cb(lv_timer_t *t);
 };
 
 #endif // __SETTING_PANEL_H__

@@ -17,23 +17,29 @@ LV_IMG_DECLARE(print);
 LV_IMG_DECLARE(sd_img);
 
 struct reset_ctx {
-    lv_obj_t * mbox;
+    SettingPanel *panel;
     std::string cmd;
 };
 
-static void run_factory_reset_cb(lv_timer_t * t) {
+// Owned by the SettingPanel (stored in reset_timer_, cancelled in the dtor) so
+// it can never fire against a torn-down panel - that deferred-callback-outlives-
+// its-owner pattern was the use-after-free. On fire it clears the panel handle
+// so the dtor does not double-free, and it no longer touches the screen-owned
+// "Initiated" dialog (a second raw pointer that could outlive its object).
+void SettingPanel::run_factory_reset_cb(lv_timer_t * t) {
     reset_ctx * ctx = (reset_ctx *)t->user_data;
+    SettingPanel * self = ctx->panel;
 
     int ret = sp::call(ctx->cmd);
 
     if (ret != 0) {
-        simple_dialog_close(ctx->mbox);
         create_simple_dialog(lv_scr_act(),
                              "Factory Reset Failed",
                              "Failed to initiate factory reset.",
                              true);
     }
 
+    self->reset_timer_ = nullptr;
     delete ctx;
     lv_timer_del(t);
 }
@@ -77,18 +83,17 @@ SettingPanel::SettingPanel(KWebSocketClient &c, std::mutex &l, lv_obj_t *parent)
             true)
   , factory_reset_btn(cont, &emergency, "Factory\nReset", &SettingPanel::_handle_callback, this,
     		  "**WARNING** **WARNING** **WARNING**\n\nAre you sure you want factory reset?\n\nThis will reset all printer setting but it will stay using Pono Print, it will not switch back to stock.",
-          [](){
+          [this](){
             LOG_INFO("factory reset pressed");
-            lv_obj_t *mbox  = create_simple_dialog(lv_scr_act(), "Factory Reset Initiated", "Your printer will restart shortly!", false);
+            create_simple_dialog(lv_scr_act(), "Factory Reset Initiated", "Your printer will restart shortly!", false);
 
             Config *conf = Config::get_instance();
             auto cmd = conf->get<std::string>("/commands/factory_reset_cmd");
 
-            reset_ctx * ctx = new reset_ctx{ mbox, cmd };
+            reset_ctx * ctx = new reset_ctx{ this, cmd };
 
-            lv_timer_t * timer =
-                lv_timer_create(run_factory_reset_cb, 5000, ctx);
-            lv_timer_set_repeat_count(timer, 1);
+            reset_timer_ = lv_timer_create(&SettingPanel::run_factory_reset_cb, 5000, ctx);
+            lv_timer_set_repeat_count(reset_timer_, 1);
           },
           true)
 {
@@ -133,6 +138,14 @@ SettingPanel::SettingPanel(KWebSocketClient &c, std::mutex &l, lv_obj_t *parent)
 }
 
 SettingPanel::~SettingPanel() {
+  // Cancel a still-pending factory-reset timer so it cannot fire against this
+  // freed panel (the use-after-free class). If it already fired it nulled the
+  // handle, so this runs only when the timer is genuinely still armed.
+  if (reset_timer_ != nullptr) {
+    delete (reset_ctx *)reset_timer_->user_data;
+    lv_timer_del(reset_timer_);
+    reset_timer_ = nullptr;
+  }
   if (cont != NULL) {
     lv_obj_del(cont);
     cont = NULL;
