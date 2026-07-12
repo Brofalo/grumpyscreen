@@ -47,17 +47,17 @@ SettingPanel::SettingPanel(KWebSocketClient &c, std::mutex &l, lv_obj_t *parent)
   , restart_firmware_btn(cont, &refresh_img, "Restart\nFirmware", &SettingPanel::_handle_callback, this)
   , guppy_restart_btn(cont, &refresh_img, "Restart GUI", &SettingPanel::_handle_callback, this)
   , support_zip_btn(cont, &sd_img, "Create\nSupport ZIP", &SettingPanel::_handle_callback, this)
-  , guppy_update_btn(cont, &update_img, "Update COSMOS", &SettingPanel::_handle_callback, this,
-    "Are you sure you want to update COSMOS?\n\nThis will download and update to the latest version of COSMOS!",
+  , guppy_update_btn(cont, &update_img, "Update Pono Print", &SettingPanel::_handle_callback, this,
+    "Are you sure you want to update Pono Print?\n\nThis will download and update to the latest version of Pono Print!",
             [](){
-              LOG_INFO("update cosmos pressed");
+              LOG_INFO("update pono print pressed");
               Config *conf = Config::get_instance();
-              auto switch_to_stock_cmd = conf->get<std::string>("/commands/cosmos_update_cmd");
-              auto ret = sp::call(switch_to_stock_cmd);
+              auto update_cmd = conf->get<std::string>("/commands/pono-print_update_cmd");
+              auto ret = sp::call(update_cmd);
               if (ret == 0) {
-                create_simple_dialog(lv_scr_act(), "Update COSMOS Initiated", "Your printer will restart shortly!", false);
+                create_simple_dialog(lv_scr_act(), "Update Pono Print Initiated", "Your printer will restart shortly!", false);
               } else {
-                create_simple_dialog(lv_scr_act(), "Update COSMOS Failed", "Failed to initiate update COSMOS!", true);
+                create_simple_dialog(lv_scr_act(), "Update Pono Print Failed", "Failed to initiate update Pono Print!", true);
               }
             },
             true)
@@ -76,7 +76,7 @@ SettingPanel::SettingPanel(KWebSocketClient &c, std::mutex &l, lv_obj_t *parent)
             },
             true)
   , factory_reset_btn(cont, &emergency, "Factory\nReset", &SettingPanel::_handle_callback, this,
-    		  "**WARNING** **WARNING** **WARNING**\n\nAre you sure you want factory reset?\n\nThis will reset all printer setting but it will stay using COSMOS, it will not switch back to stock.",
+    		  "**WARNING** **WARNING** **WARNING**\n\nAre you sure you want factory reset?\n\nThis will reset all printer setting but it will stay using Pono Print, it will not switch back to stock.",
           [](){
             LOG_INFO("factory reset pressed");
             lv_obj_t *mbox  = create_simple_dialog(lv_scr_act(), "Factory Reset Initiated", "Your printer will restart shortly!", false);
@@ -96,7 +96,7 @@ SettingPanel::SettingPanel(KWebSocketClient &c, std::mutex &l, lv_obj_t *parent)
   lv_obj_set_size(cont, LV_PCT(100), LV_PCT(100));
 
   Config *conf = Config::get_instance();
-  auto update_script = conf->get<std::string>("/commands/cosmos_update_cmd");
+  auto update_script = conf->get<std::string>("/commands/pono-print_update_cmd");
   if (update_script == "") {
     guppy_update_btn.disable();
   }

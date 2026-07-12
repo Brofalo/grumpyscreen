@@ -19,10 +19,10 @@ This is the UI binary that ships in the Pono Print SWU build.
 
 ## Quick build (printer target via Yocto)
 
-The Yocto recipe lives in the cosmos-staging repo at `meta-opencentauri/recipes-apps/grumyscreen/`. It pins this fork's `pono` branch via bbappend override.
+The Yocto recipe lives in the pono-print-os repo at `meta-opencentauri/recipes-apps/grumyscreen/`. It pins this fork's `pono` branch via bbappend override.
 
 ```sh
-# In the cosmos build env
+# In the pono-print build env
 bitbake -c clean grumpyscreen && bitbake grumpyscreen
 ```
 
@@ -40,7 +40,7 @@ Full simulator + CI screenshot regression instructions in [sim/README.md](sim/RE
 
 ## Design spec
 
-The complete UI/UX spec lives in the cosmos-staging repo at `docs/design/pono-print-ui-design.md` (Phase A-G full design) and `docs/design/pono-print-phase-a-technical-brief.md` (Phase A bring-up plan). All implementation in this fork tracks those documents.
+The complete UI/UX spec lives in the pono-print-os repo at `docs/design/pono-print-ui-design.md` (Phase A-G full design) and `docs/design/pono-print-phase-a-technical-brief.md` (Phase A bring-up plan). All implementation in this fork tracks those documents.
 
 ## Phase status
 
