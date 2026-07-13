@@ -146,7 +146,9 @@ void GuppyScreen::loop() {
     lv_timer_handler();
     lv_lock.unlock();
 
-    if (display_sleep != -1) {
+    // display_sleep_sec was multiplied by 1000 above, so the -1 "never sleep"
+    // sentinel is now -1000; treat any negative value as never-sleep.
+    if (display_sleep >= 0) {
       if (lv_disp_get_inactive_time(NULL) > display_sleep) {
         if (!is_sleeping.load()) {
           LOG_DEBUG("putting display to sleeping");
