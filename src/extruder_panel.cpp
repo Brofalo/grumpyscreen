@@ -82,6 +82,7 @@ ExtruderPanel::ExtruderPanel(KWebSocketClient &websocket_client,
 }
 
 ExtruderPanel::~ExtruderPanel() {
+  ws.unregister_notify_update(this);  // drop the consumer before teardown (was a dangling-pointer UAF)
   if (panel_cont != NULL) {
     lv_obj_del(panel_cont);
     panel_cont = NULL;

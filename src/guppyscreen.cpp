@@ -58,8 +58,15 @@ GuppyScreen *GuppyScreen::init(std::function<void(lv_color_t, lv_color_t)> hal_i
   auto theme_primary_color = theme_conf->get<std::string>("/primary_color");
   auto theme_secondary_color = theme_conf->get<std::string>("/secondary_color");
 
-  auto primary_color = lv_color_hex(std::stoul(theme_primary_color, nullptr, 16));
-  auto secondary_color = lv_color_hex(std::stoul(theme_secondary_color, nullptr, 16));
+  // A theme JSON that is present but omits/misformats these keys yields "" from
+  // ThemeConfig::get, and std::stoul("") throws on the boot path; fall back to the
+  // ThemeConfig defaults (blue / red) rather than aborting before the first paint.
+  auto parse_hex = [](const std::string &s, unsigned long dflt) -> unsigned long {
+    try { return std::stoul(s, nullptr, 16); }
+    catch (const std::exception &) { return dflt; }
+  };
+  auto primary_color = lv_color_hex(parse_hex(theme_primary_color, 0x2196F3));
+  auto secondary_color = lv_color_hex(parse_hex(theme_secondary_color, 0xF44336));
 
   LOG_INFO("GrumpyScreen Version: {}-{}", GUPPYSCREEN_BRANCH, GUPPYSCREEN_VERSION);
 
