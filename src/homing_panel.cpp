@@ -72,6 +72,8 @@ HomingPanel::HomingPanel(KWebSocketClient &websocket_client, std::mutex &lock)
 }
 
 HomingPanel::~HomingPanel() {
+  ws.unregister_notify_update(this);  // drop the consumer before teardown (was a dangling-pointer UAF)
+  lv_obj_del(homing_cont);
 }
 
 void HomingPanel::consume(json &j) {

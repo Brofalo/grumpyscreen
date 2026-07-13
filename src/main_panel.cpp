@@ -86,6 +86,7 @@ MainPanel::MainPanel(KWebSocketClient &websocket,
 }
 
 MainPanel::~MainPanel() {
+  ws.unregister_notify_update(this);  // drop the consumer before teardown (was a dangling-pointer UAF)
   if (stale_timer_ != nullptr) {
     lv_timer_del(stale_timer_);
     stale_timer_ = nullptr;
