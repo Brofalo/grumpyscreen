@@ -50,9 +50,15 @@ on:
       semgrep_config:
         type: string
         default: 'p/default'
+      # Defaulted to true to match gatekeeper. It was false here, and since no
+      # caller set it, the required gate/tell_check context printed
+      # "tell_check disabled, passing" and reported success having run nothing.
       run_tell_check:
         type: boolean
-        default: false
+        default: true
+      # Optional. Left empty the step runs the built-in scan below, which is
+      # what a public repo needs, since the in-house ai-tells action is private
+      # and unreachable from here.
       tell_check_cmd:
         type: string
         default: ''
@@ -154,9 +160,13 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
-          # depth 2 so the PR base (first parent of the merge ref) is local
-          # for --baseline-commit without persisted credentials.
-          fetch-depth: 2
+          # Full history so the baseline sha is ALWAYS local without persisted
+          # credentials. Depth 2 was enough for a pull request but missed
+          # merge_group base shas on the second and later queue entries, and
+          # the in-action fetch cannot authenticate, so the scan silently
+          # degraded to a full-tree run: the latent-debt ambush the baseline
+          # exists to prevent. gatekeeper v0.4.0 carries the same fix.
+          fetch-depth: 0
       - name: semgrep
         env:
           RUN: ${{ inputs.run_semgrep }}
@@ -189,14 +199,63 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
+          # Full history, for the same reason as the semgrep job above: without
+          # it the base sha is not local, the scan falls back to the whole tree,
+          # and every pull request is judged against this fork's inherited text
+          # rather than against what the change added. That is how the first
+          # attempt at this reddened on an audit document from June.
+          fetch-depth: 0
       - name: tell_check
         env:
           RUN: ${{ inputs.run_tell_check }}
           CMD: ${{ inputs.tell_check_cmd }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha || '' }}
         run: |
           set -euo pipefail
           if [ "$RUN" != "true" ]; then echo "tell_check disabled, passing"; exit 0; fi
-          if [ -n "$CMD" ]; then eval "$CMD"; else echo "run_tell_check set but tell_check_cmd empty"; exit 1; fi
+          # ${CMD:-} rather than $CMD: set -u is on, and an unset variable here
+          # would abort the step before the scan with a shell error, which is a
+          # failure mode that looks nothing like what it is.
+          if [ -n "${CMD:-}" ]; then eval "$CMD"; exit 0; fi
+          # No command: run the built-in scan, the same one the org profile
+          # repo carries. The in-house ai-tells linter is a private action and
+          # unreachable from a public repo, so this covers the mechanical half
+          # of the house style: em dash, en dash and unicode arrows. Judgement
+          # calls stay with review.
+          #
+          # On a pull request or a merge group it reads ADDED lines only, so
+          # the dashes this fork inherited from upstream do not redden an
+          # unrelated change; a dispatch with no base scans the whole tree.
+          #
+          # The pattern is literal UTF-8 bytes built with printf rather than a
+          # -P hex class, because grep -P '[\x{2014}]' needs a UTF-8 locale and
+          # exits 2 under LC_ALL=C, which a swallowed status would read as a
+          # clean tree. An exit above 1 fails the job.
+          pat="$(printf '\xe2\x80\x94\|\xe2\x80\x93\|\xe2\x86\x92\|\xe2\x86\x90\|\xe2\x87\x92')"
+          if [ -z "$BASE" ] || ! git cat-file -e "$BASE" 2>/dev/null; then
+            echo "no usable base ref; scanning the whole tree"
+            set +e
+            target="$(git grep -n -e "$pat" -- .)"
+            rc=$?
+            set -e
+          else
+            set +e
+            target="$(git diff --unified=0 "$BASE" HEAD -- . \
+              | grep '^+' | grep -v '^+++' \
+              | grep -n "$pat")"
+            rc=$?
+            set -e
+          fi
+          if [ "$rc" -gt 1 ]; then
+            echo "::error::tell_check could not run its scan (exit $rc); refusing to report clean."
+            exit 1
+          fi
+          if [ -n "$target" ]; then
+            echo "$target"
+            echo "::error::em dash, en dash or unicode arrow found. House style uses commas, periods and hyphens."
+            exit 1
+          fi
+          echo "tell_check: clean"
 
   dependency-review:
     runs-on: ${{ fromJSON(inputs.runner_labels) }}
