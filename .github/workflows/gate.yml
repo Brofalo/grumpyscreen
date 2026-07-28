@@ -7,8 +7,34 @@ permissions:
   contents: read
 jobs:
   gate:
+    # Local, not PONOdata/gatekeeper: this repo is public and gatekeeper is
+    # private, and a public repo cannot call a private repo's reusable
+    # workflow. The local copy is the workaround, not drift. It has to be kept
+    # in step with gatekeeper by hand, because no tag reaches it.
     uses: ./.github/workflows/reusable-ci.yml
     with:
+      runner_labels: '["ubuntu-latest"]'
+      # All four were blank, and the vendored copy above used to treat a blank
+      # command as a pass. It no longer does, so each gate is now either armed
+      # or named here with a reason.
+      #
+      # build and test: this is a cross-compiled LVGL C++ binary. branch.yml
+      # builds it, and it needs two things the shared gate's checkout does not
+      # provide: recursive submodules (lvgl, libhv, lv_drivers and the rest
+      # are submodules, and the gate checks out without them) and the
+      # pellcorp/guppydev cross-compile container. Arming build here would run
+      # a make against a tree whose submodules are empty directories, which
+      # fails for a reason that has nothing to do with the change under
+      # review. branch.yml still builds all three targets on every push.
+      #
+      # Wiring build properly means teaching this caller to check out
+      # submodules before the gate runs, which the reusable does not currently
+      # expose. That is the follow-up; declaring it is honest in the meantime.
+      #
+      # lint: the C++ here is upstream guppyscreen's layout with a `fmt`
+      # script rather than a checked-in clang-format gate, and the handful of
+      # python files are tooling rather than shipped code.
+      # typecheck: not applicable to C++.
+      unconfigured_ok: "lint,typecheck,test,build"
       run_semgrep: true
       run_dependency_review: true
-      runner_labels: '["ubuntu-latest"]'
