@@ -160,9 +160,13 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
-          # depth 2 so the PR base (first parent of the merge ref) is local
-          # for --baseline-commit without persisted credentials.
-          fetch-depth: 2
+          # Full history so the baseline sha is ALWAYS local without persisted
+          # credentials. Depth 2 was enough for a pull request but missed
+          # merge_group base shas on the second and later queue entries, and
+          # the in-action fetch cannot authenticate, so the scan silently
+          # degraded to a full-tree run: the latent-debt ambush the baseline
+          # exists to prevent. gatekeeper v0.4.0 carries the same fix.
+          fetch-depth: 0
       - name: semgrep
         env:
           RUN: ${{ inputs.run_semgrep }}
@@ -195,6 +199,12 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
+          # Full history, for the same reason as the semgrep job above: without
+          # it the base sha is not local, the scan falls back to the whole tree,
+          # and every pull request is judged against this fork's inherited text
+          # rather than against what the change added. That is how the first
+          # attempt at this reddened on an audit document from June.
+          fetch-depth: 0
       - name: tell_check
         env:
           RUN: ${{ inputs.run_tell_check }}
