@@ -44,6 +44,17 @@ on:
       unconfigured_ok:
         type: string
         default: ''
+      # Passed straight to actions/checkout, so the values are its own: false,
+      # true, recursive. Default false leaves the other gates untouched. Only
+      # the four command jobs honour it; semgrep and tell_check judge this
+      # repo's own code and text, and third-party submodule trees in their
+      # scope would bury real findings under upstream noise. Mirrors the input
+      # added to gatekeeper's reusable in its Unreleased entry; this copy is
+      # vendored because a public repo cannot call a private reusable, so no
+      # tag reaches it and the edit is by hand.
+      checkout_submodules:
+        type: string
+        default: 'false'
       run_semgrep:
         type: boolean
         default: true
@@ -80,6 +91,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
+          submodules: ${{ inputs.checkout_submodules }}
       - name: lint
         env:
           CMD: ${{ inputs.lint_cmd }}
@@ -100,6 +112,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
+          submodules: ${{ inputs.checkout_submodules }}
       - name: typecheck
         env:
           CMD: ${{ inputs.typecheck_cmd }}
@@ -120,6 +133,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
+          submodules: ${{ inputs.checkout_submodules }}
       - name: test
         env:
           CMD: ${{ inputs.test_cmd }}
@@ -140,6 +154,7 @@ jobs:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
         with:
           persist-credentials: false
+          submodules: ${{ inputs.checkout_submodules }}
       - name: build
         env:
           CMD: ${{ inputs.build_cmd }}

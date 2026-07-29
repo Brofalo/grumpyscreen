@@ -18,24 +18,39 @@ jobs:
       # command as a pass. It no longer does, so each gate is now either armed
       # or named here with a reason.
       #
-      # build and test: this is a cross-compiled LVGL C++ binary. branch.yml
-      # builds it, and it needs two things the shared gate's checkout does not
-      # provide: recursive submodules (lvgl, libhv, lv_drivers and the rest
-      # are submodules, and the gate checks out without them) and the
-      # pellcorp/guppydev cross-compile container. Arming build here would run
-      # a make against a tree whose submodules are empty directories, which
-      # fails for a reason that has nothing to do with the change under
-      # review. branch.yml still builds all three targets on every push.
+      # build is ARMED. It needed two things the gate did not provide:
+      # recursive submodules (lvgl, libhv, lv_drivers and the rest), and the
+      # pellcorp/guppydev cross-compile toolchain. The vendored reusable now
+      # takes checkout_submodules, and the toolchain comes in as a container
+      # this step drives itself, since the reusable exposes no container: key.
       #
-      # Wiring build properly means teaching this caller to check out
-      # submodules before the gate runs, which the reusable does not currently
-      # expose. That is the follow-up; declaring it is honest in the meantime.
+      # One target, not the three branch.yml builds. That matrix still runs on
+      # every push and keeps the arch spread covered; this is the copy a merge
+      # is not allowed past, so it is sized to stay inside the gate's 30 minute
+      # budget rather than to be exhaustive. The same reasoning pono-kalico
+      # used for running one interpreter instead of six.
+      #
+      # --user 1001 matches what branch.yml passes the image. make wpaclient
+      # and make libhv.a come first for the same reason they do there: the
+      # main make depends on both.
+      #
+      # test stays declared: there is no test suite in this tree, only the
+      # build, and calling the build a test would be the same false green this
+      # migration removed.
       #
       # lint: the C++ here is upstream guppyscreen's layout with a `fmt`
       # script rather than a checked-in clang-format gate, and the handful of
       # python files are tooling rather than shipped code.
       # typecheck: not applicable to C++.
-      unconfigured_ok: "lint,typecheck,test,build"
+      checkout_submodules: recursive
+      build_cmd: >-
+        docker run --rm --user 1001 -v "$PWD":/work -w /work
+        -e CROSS_COMPILE=mipsel-buildroot-linux-musl-
+        -e CC=mipsel-buildroot-linux-musl-
+        -e CXX=mipsel-buildroot-linux-musl-
+        pellcorp/guppydev:latest
+        bash -c "make wpaclient && make libhv.a && make -j"
+      unconfigured_ok: "lint,typecheck,test"
       run_semgrep: true
       # Stated rather than inherited. gate/tell_check is a required context
       # here, and it had been reporting success while running nothing: the
