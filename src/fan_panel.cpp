@@ -68,7 +68,11 @@ void FanPanel::create_fans(json &f) {
   for (auto &fan : f.items()) {
     std::string key = fan.key();
     LOG_TRACE("create fan {}, {}", f.dump(), fan.value().dump());
-    std::string display_name = fan.value()["display_name"].template get<std::string>();
+    // Fall back to the key rather than throw on an absent or non-string
+    // display_name: create_fans runs inside the printer.objects.list callback,
+    // ahead of printer.objects.subscribe, so a throw here strands the boot
+    // screen at "Loading printer state...". Matches MainPanel::create_sensors.
+    std::string display_name = fan.value().value("display_name", key);
 
     lv_event_cb_t fan_cb = &FanPanel::_handle_fan_update;
     if (key == "fan") {

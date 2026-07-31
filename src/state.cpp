@@ -180,6 +180,14 @@ json State::get_display_sensors() {
   json sensors_by_id;
   if (!user_sensors.empty()) {
     for (auto &s : user_sensors) {
+      // A config entry with no string id cannot be matched to a printer object
+      // anyway, and throwing here is expensive out of proportion: these three
+      // getters are called from inside the printer.objects.list callback, and
+      // printer.objects.subscribe is issued AFTER them (init_panel). The ws
+      // dispatcher catches the throw, so the process survives, but the rest of
+      // that callback never runs and the boot screen sits on "Loading printer
+      // state..." forever with nothing subscribed. Skip the entry instead.
+      if (!s.contains("id") || !s["id"].is_string()) continue;
       sensors_by_id[s["id"].template get<std::string>()] = s;
     }
   }
@@ -217,6 +225,7 @@ json State::get_display_fans() {
   json fans_by_id;
   if (!user_fans.empty()) {
     for (auto &s : user_fans) {
+      if (!s.contains("id") || !s["id"].is_string()) continue;  // see get_display_sensors
       fans_by_id[s["id"].template get<std::string>()] = s;
     }
   }
@@ -247,6 +256,7 @@ json State::get_display_leds() {
   std::vector<std::string> user_led_ids;
   if (!user_leds.empty()) {
     for (auto &s : user_leds) {
+      if (!s.contains("id") || !s["id"].is_string()) continue;  // see get_display_sensors
       user_led_ids.push_back(s["id"].template get<std::string>());
     }
   }
@@ -270,6 +280,7 @@ json State::get_display_leds() {
 
   json display_leds;
   for (auto &s : user_leds) {
+    if (!s.contains("id") || !s["id"].is_string()) continue;  // see get_display_sensors
     auto id = s["id"].template get<std::string>();
     if (std::find(system_led_ids.begin(), system_led_ids.end(), id) != system_led_ids.end()) {
       display_leds.push_back(s);
