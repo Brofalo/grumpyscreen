@@ -34,9 +34,18 @@ jobs:
       # and make libhv.a come first for the same reason they do there: the
       # main make depends on both.
       #
-      # test stays declared: there is no test suite in this tree, only the
-      # build, and calling the build a test would be the same false green this
-      # migration removed.
+      # test is now ARMED. The previous note here said there is no test suite in
+      # this tree. That was wrong: the Makefile has had a `test` target all
+      # along, which compiles and runs tests/test_config.cpp over the ini
+      # parser, and nothing has ever called it. So `test` was a required context
+      # reporting success while running nothing, on a premise that was checkable
+      # and false. Same shape as the run_tell_check default noted below.
+      #
+      # It runs in the same guppydev container as build, for the same reason
+      # (make libhv.a populates libhv/include/hv, which the test's -I needs),
+      # but deliberately WITHOUT the CROSS_COMPILE env: the test binary has to
+      # execute on this machine, so it wants the container's host g++, not the
+      # mipsel cross-compiler.
       #
       # lint: the C++ here is upstream guppyscreen's layout with a `fmt`
       # script rather than a checked-in clang-format gate, and the handful of
@@ -50,7 +59,11 @@ jobs:
         -e CXX=mipsel-buildroot-linux-musl-
         pellcorp/guppydev:latest
         bash -c "make wpaclient && make libhv.a && make -j"
-      unconfigured_ok: "lint,typecheck,test"
+      test_cmd: >-
+        docker run --rm --user 1001 -v "$PWD":/work -w /work
+        pellcorp/guppydev:latest
+        bash -c "make libhv.a && make test"
+      unconfigured_ok: "lint,typecheck"
       run_semgrep: true
       # Stated rather than inherited. gate/tell_check is a required context
       # here, and it had been reporting success while running nothing: the
