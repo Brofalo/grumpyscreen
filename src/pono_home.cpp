@@ -293,8 +293,28 @@ lv_obj_t *build_home(lv_obj_t *parent, const HomeModel &m, HomeHandles *out) {
   }
   // Loaded material rides the top bar: a truthful instrument line, present in
   // both layouts so the hero stays free for the entry / the ring.
+  //
+  // Bounded to the gap between the flag mark and the state chip, and
+  // ellipsized. This was TOP_MID at its natural width, so it grew outward from
+  // the centre of the screen and ran under the chip, which is created after it
+  // and therefore painted on top: "0.25 diamond" lost the tail of its last
+  // glyph on every cockpit screen. Centre-aligning inside a fixed band keeps
+  // the optical centring and makes a longer line (a 0.4 hardened brass, a
+  // longer filament name) ellipsize honestly instead of vanishing under the
+  // chip a word at a time.
   lv_obj_t *mat = tag(parent, m.material ? m.material : "", color_text_tertiary, 0, 0);
-  lv_obj_align(mat, LV_ALIGN_TOP_MID, 0, TOP_Y + 7);
+  {
+    const int mat_x = CX0 + 54;                   // clear the 48px flag plus a gap
+    const int mat_w = (CX1 - 160) - mat_x - 8;    // stop short of the chip's left edge
+    // Height is pinned to a single line on purpose. LV_LABEL_LONG_DOT honours
+    // the object's height as well as its width, so with an auto height it wraps
+    // to a second line and spills into the content below instead of ellipsizing.
+    // One line high means the dots land on the line that is actually there.
+    lv_obj_set_size(mat, mat_w, lv_font_get_line_height(font_micro));
+    lv_label_set_long_mode(mat, LV_LABEL_LONG_DOT);
+    lv_obj_set_style_text_align(mat, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_set_pos(mat, mat_x, TOP_Y + 7);
+  }
   {
     lv_color_t sc = m.paused ? color_state_warning
                   : pr       ? color_accent_primary : color_accent_secondary;
