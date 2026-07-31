@@ -2,6 +2,7 @@
 #define __K_UTILS_H__
 
 #include "hv/json.hpp"
+#include "path_guard.h"
 #include <vector>
 #include <map>
 #include <functional>
@@ -25,6 +26,9 @@ using json = nlohmann::json;
 
 namespace KUtils {
   std::string get_root_path(const std::string root_name);
+
+  // safe_join_under lives in path_guard.h, included above: it is header-only so
+  // tests can reach it without building the rest of this translation unit.
 
   // path, width
   std::pair<std::string, size_t> get_thumbnail(const std::string &gcode_file, json &j, double scale);

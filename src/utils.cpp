@@ -4,6 +4,7 @@
 #include "state.h"
 #include "logger.h"
 #include "platform.h"
+#include "path_guard.h"
 
 #include <cmath>
 #include <time.h>
@@ -17,6 +18,7 @@
 #include <cstring>
 #include <experimental/filesystem>
 #include <regex>
+#include <vector>
 
 namespace fs = std::experimental::filesystem;
 
@@ -36,6 +38,7 @@ namespace KUtils {
 
     return "";
   }
+
 
   std::pair<std::string, size_t> get_thumbnail(const std::string &gcode_file, json &j, double scale) {
     auto &thumbs = j["/result/thumbnails"_json_pointer];
@@ -72,7 +75,15 @@ namespace KUtils {
       LOG_DEBUG("using thumb at index {}, {}", closest_index, thumbs.dump());
 
       // metadata thumbnail paths are relative to the current gcode file directory
-      std::string relative_path = thumb["relative_path"].template get<std::string>();
+      // Read it the same defensive way parse_w above reads width: this is inside
+      // the per-file metadata callback on the ws thread, and operator[] on a
+      // missing key inserts null, so the old .get<std::string>() threw straight
+      // out of the callback on any gcode whose metadata lacked the field.
+      auto rp = thumb.find("relative_path");
+      if (rp == thumb.end() || !rp->is_string()) {
+        return std::make_pair("", 0);
+      }
+      std::string relative_path = rp->template get<std::string>();
       size_t found = gcode_file.find_last_of("/\\");
       if (found != std::string::npos) {
 	      relative_path = gcode_file.substr(0, found + 1) + relative_path;
@@ -83,8 +94,18 @@ namespace KUtils {
       std::string fname = relative_path.substr(relative_path.find_last_of("/\\") + 1);
 
       // download thumbnail
+      // The caller hands this to lv_img_set_src as "A:" + path, so whatever
+      // comes out here is opened and decoded by LVGL on the UI thread. An
+      // unconfined path therefore means a crafted gcode can point the decoder at
+      // any file the process can open, and the process is root. The realistic
+      // damage is not disclosure, it is hanging or crashing the only local
+      // control surface, which carries the E-STOP.
       auto gcode_root = get_root_path("gcodes");
-      std::string fullpath = fmt::format("{}/{}", gcode_root, relative_path);
+      std::string fullpath = safe_join_under(gcode_root, relative_path);
+      if (fullpath.empty()) {
+        LOG_ERROR("refusing thumbnail path outside the gcode root: {}", relative_path);
+        return std::make_pair("", 0);
+      }
 
       return std::make_pair(fullpath, thumb_width);
     }
