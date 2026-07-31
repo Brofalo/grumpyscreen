@@ -37,6 +37,30 @@ namespace KUtils {
     return "";
   }
 
+  // A thumbnail path arrives inside gcode metadata, which anyone who can upload
+  // a file controls. It gets joined onto the gcodes root and handed to LVGL as
+  // an image source, so an unchecked value opens an arbitrary file on the box: a
+  // ".." component walks out of the root, a leading "/" ignores the root
+  // altogether, and a blocking special file would stall the thread that opens
+  // it. Require a plain relative path with no traversal.
+  //
+  // This is lexical containment only. A symlink planted inside the gcodes root
+  // still resolves wherever it points, which would need someone who already has
+  // write access to that directory, so it is not what this guard is for.
+  static bool safe_thumb_path(const std::string &p) {
+    if (p.empty() || p.size() > 512) return false;
+    if (p.front() == '/' || p.front() == '\\') return false;  // absolute, ignores the root
+    if (p.find('\0') != std::string::npos) return false;      // would truncate at c_str()
+    for (size_t start = 0; start <= p.size(); ) {
+      size_t sep = p.find_first_of("/\\", start);
+      size_t end = (sep == std::string::npos) ? p.size() : sep;
+      if (p.compare(start, end - start, "..") == 0) return false;
+      if (sep == std::string::npos) break;
+      start = sep + 1;
+    }
+    return true;
+  }
+
   std::pair<std::string, size_t> get_thumbnail(const std::string &gcode_file, json &j, double scale) {
     auto &thumbs = j["/result/thumbnails"_json_pointer];
     if (!thumbs.is_null() && !thumbs.empty()) {
@@ -58,12 +82,12 @@ namespace KUtils {
       int width = parse_w(thumbs.at(0));
       int closest = std::abs(scaled_width - width);
       size_t thumb_width = width;  // init to first thumb; loop narrows it (was 0 -> div-by-zero when index 0 won)
-      for (int i = 0; i < thumbs.size(); i++) {
+      for (size_t i = 0; i < thumbs.size(); i++) {
 	      width = parse_w(thumbs.at(i));
 	      int cur_diff = std::abs(scaled_width - width);
         if (cur_diff < closest) {
           closest = cur_diff;
-          closest_index = i;
+          closest_index = (uint32_t)i;
           thumb_width = width;
         }
       }
@@ -71,20 +95,49 @@ namespace KUtils {
       auto &thumb = thumbs.at(closest_index);
       LOG_DEBUG("using thumb at index {}, {}", closest_index, thumbs.dump());
 
-      // metadata thumbnail paths are relative to the current gcode file directory
-      std::string relative_path = thumb["relative_path"].template get<std::string>();
+      // metadata thumbnail paths are relative to the current gcode file directory.
+      // relative_path may be absent or a non-string, and operator[] on a missing
+      // key inserts a null that then throws on get<std::string>(). That throw
+      // would abort the whole per-file metadata callback, and the est-time and
+      // filament-type parsing runs after this call returns, so fail soft the same
+      // way parse_w does above.
+      std::string relative_path;
+      try {
+        if (thumb.contains("relative_path")) {
+          const auto &rp = thumb.at("relative_path");
+          if (rp.is_string()) relative_path = rp.template get<std::string>();
+        }
+      } catch (...) {}
+      if (relative_path.empty()) {
+        LOG_DEBUG("no usable relative_path in thumbnail metadata for {}", gcode_file);
+        return std::make_pair("", 0);
+      }
+
       size_t found = gcode_file.find_last_of("/\\");
       if (found != std::string::npos) {
 	      relative_path = gcode_file.substr(0, found + 1) + relative_path;
       }
 
-      Config *conf = Config::get_instance();
-      std::string moonraker_host = conf->get<std::string>("/moonraker/host");
-      std::string fname = relative_path.substr(relative_path.find_last_of("/\\") + 1);
+      // Validate the joined value, so a traversal coming from either the metadata
+      // or the gcode path itself is caught.
+      if (!safe_thumb_path(relative_path)) {
+        LOG_ERROR("rejecting unsafe thumbnail path from metadata: {}", relative_path);
+        return std::make_pair("", 0);
+      }
 
-      // download thumbnail
       auto gcode_root = get_root_path("gcodes");
+      if (gcode_root.empty()) {
+        LOG_DEBUG("no gcodes root yet, skipping thumbnail for {}", gcode_file);
+        return std::make_pair("", 0);
+      }
       std::string fullpath = fmt::format("{}/{}", gcode_root, relative_path);
+
+      // Belt and braces: whatever the join produced must still sit under the root.
+      const std::string prefix = gcode_root + "/";
+      if (fullpath.rfind(prefix, 0) != 0) {
+        LOG_ERROR("thumbnail path escaped the gcodes root: {}", fullpath);
+        return std::make_pair("", 0);
+      }
 
       return std::make_pair(fullpath, thumb_width);
     }
