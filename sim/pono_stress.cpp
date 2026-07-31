@@ -100,7 +100,7 @@ int main(int argc, char **argv) {
     lv_obj_t *scr = lv_scr_act();
     lv_obj_clean(scr);                 // tear down the previous screen's tree
 
-    switch (i % 14) {
+    switch (i % 22) {
       case 0: pono::build_home(scr, pono::demo_home_model()); break;
       case 1: pono::build_home(scr, pono::demo_home_idle_model()); break;
       case 2: pono::build_home(scr, pono::demo_home_paused_model()); break;
@@ -126,6 +126,34 @@ int main(int argc, char **argv) {
       case 11: pono::build_temps(scr); break;
       case 12: pono::build_files(scr); break;
       case 13: pono::build_tune(scr); break;
+      // The remaining sub-screens. These were built and torn down by the
+      // one-shot renderer but never soaked, so an assert or a leak in any of
+      // them survived the battery. The two modal builders get their scrim and
+      // card revealed, since a hidden card never exercises the layout.
+      case 14: { static pono::FansHandles fh; pono::build_fans(scr, &fh);
+                 const int demo[5] = {65, 100, 40, 38, 100};
+                 for (int k = 0; k < 5; k++) {
+                   char b[8]; snprintf(b, sizeof b, "%d%%", demo[k]);
+                   if (fh.val[k]) lv_label_set_text(fh.val[k], b);
+                   if (fh.slider[k]) lv_slider_set_value(fh.slider[k], demo[k], LV_ANIM_OFF);
+                 } } break;
+      case 15: pono::build_settings(scr); break;
+      case 16: pono::build_more(scr); break;
+      case 17: pono::build_mesh(scr); break;
+      case 18: pono::build_power(scr); break;
+      case 19: pono::build_lights(scr); break;
+      case 20: { static pono::ConfirmHandles ch; pono::build_confirm(scr, &ch);
+                 if (ch.msg) lv_label_set_text(ch.msg, "Shut down the printer?");
+                 if (ch.scrim) lv_obj_clear_flag(ch.scrim, LV_OBJ_FLAG_HIDDEN);
+                 if (ch.card)  lv_obj_clear_flag(ch.card,  LV_OBJ_FLAG_HIDDEN); } break;
+      case 21: { static pono::NoticeHandles nh; pono::build_notice(scr, &nh);
+                 // alternate the two flavours: the short unofficial-build note
+                 // and the longer SWU-refusal copy, which is the tallest card.
+                 if (nh.msg) lv_label_set_text(nh.msg, (i / 22) % 2
+                                 ? pono::kUnofficialSwuRefusedNotice
+                                 : pono::kUnofficialBuildNotice);
+                 if (nh.scrim) lv_obj_clear_flag(nh.scrim, LV_OBJ_FLAG_HIDDEN);
+                 if (nh.card)  lv_obj_clear_flag(nh.card,  LV_OBJ_FLAG_HIDDEN); } break;
     }
     advance(120);                       // drive glow pulse / ocean drift / one-shots
     lv_refr_now(disp);
