@@ -6,6 +6,48 @@
 LV_IMG_DECLARE(back);
 LV_IMG_DECLARE(refresh_img);
 
+// Spoolman fields are optional and nullable by design: a spool with no recorded
+// weight carries remaining_weight: null, and a filament with no vendor has no
+// /filament/vendor subtree at all. Reading those with get<T>() throws
+// json::type_error.
+//
+// Most of the reads below sit inside std::sort comparators, which is the bad
+// place for it. std::sort is not required to leave the range in any particular
+// order when a comparator throws, the ws dispatcher then swallows the exception,
+// and the visible result is a spool table that silently stops repopulating after
+// a sort tap. Sorting by weight on a spool with no weight recorded was enough.
+//
+// So read defensively: absent or wrong-typed values take the fallback and sort
+// consistently rather than throwing. Latent on Pono Print today, since the
+// panel is only initialised when Moonraker advertises a spoolman component and
+// ours does not, but it is one moonraker.conf line away from live.
+namespace {
+  double sp_num(const json &j, const char *ptr, double dflt = 0.0) {
+    const auto p = json::json_pointer(ptr);
+    if (!j.contains(p)) return dflt;
+    const auto &v = j.at(p);
+    return v.is_number() ? v.template get<double>() : dflt;
+  }
+  std::string sp_str(const json &j, const char *ptr) {
+    const auto p = json::json_pointer(ptr);
+    if (!j.contains(p)) return "";
+    const auto &v = j.at(p);
+    return v.is_string() ? v.template get<std::string>() : "";
+  }
+  // Spool ids are read both as ["id"] and as "/id"_json_pointer at the call
+  // sites; both mean the same field, so one accessor covers them.
+  uint32_t sp_id(const json &j) {
+    if (!j.contains("id")) return 0;
+    const auto &v = j.at("id");
+    if (v.is_number_unsigned()) return v.template get<uint32_t>();
+    if (v.is_number_integer()) {
+      const auto n = v.template get<int64_t>();
+      return n > 0 ? (uint32_t)n : 0;
+    }
+    return 0;
+  }
+}
+
 #define SORTED_BY_ID   1 << 0
 #define SORTED_BY_NAME 1 << 1
 #define SORTED_BY_MAT  1 << 2
@@ -96,15 +138,14 @@ void SpoolmanPanel::init() {
     if (!s.is_null() && !s.empty()) {
       spools.clear();
       for (auto &e : s) {
-        if (e.contains("id")) {
-          uint32_t spool_id = e["id"].template get<uint32_t>();
-          spools.insert({spool_id, e});
+        if (e.contains("id") && e["id"].is_number()) {
+          spools.insert({sp_id(e), e});
         }
       }
 
       std::vector<json> sorted_spools;
       KUtils::sort_map_values<uint32_t, json>(spools, sorted_spools, [](json &a, json &b) {
-	      return a["id"].template get<uint32_t>() < b["id"].template get<uint32_t>();
+	      return sp_id(a) < sp_id(b);
       });
       sorted_by = SORTED_BY_ID;
       
@@ -121,7 +162,7 @@ void SpoolmanPanel::init() {
 
       std::vector<json> sorted_spools;
       KUtils::sort_map_values<uint32_t, json>(spools, sorted_spools, [](json &a, json &b) {
-	      return a["id"].template get<uint32_t>() < b["id"].template get<uint32_t>();
+	      return sp_id(a) < sp_id(b);
       });
       sorted_by = SORTED_BY_ID;
       
@@ -157,25 +198,20 @@ void SpoolmanPanel::populate_spools(std::vector<json> &sorted_spools) {
 	      continue;
       }
       
-      auto id = el["/id"_json_pointer].template get<uint32_t>();
+      auto id = sp_id(el);
       bool is_active = id == active_id;
 
-      auto vendor_json = el["/filament/vendor/name"_json_pointer];
-      auto vendor = !vendor_json.is_null() ? vendor_json.template get<std::string>() : "";
-
-      auto filament_name_json =  el["/filament/name"_json_pointer];
-      auto filament_name = !filament_name_json.is_null() ? filament_name_json.template get<std::string>() : "";
-
-      auto material_json = el["/filament/material"_json_pointer];
-      auto material = !material_json.is_null() ? material_json.template get<std::string>(): "";
-
-      auto remaining_weight_json = el["/remaining_weight"_json_pointer];
-      auto remaining_weight = !remaining_weight_json.is_null() ? remaining_weight_json.template get<double>() : 0.0;
-
-      auto remaining_len_json = el["/remaining_length"_json_pointer];
-      auto remaining_len = !remaining_len_json.is_null()
-      	? remaining_len_json.template get<double>() / 1000 // mm to m;
-      	: 0.0;
+      // Through the accessors for two reasons. They check the TYPE and not just
+      // is_null, matching how MainPanel::create_sensors reads its own optional
+      // fields; and el is a non-const json&, so the old
+      // el["/filament/vendor/name"_json_pointer] INSERTED the whole missing
+      // subtree as null on every read of an absent field. That is the same
+      // insert-on-read State::get_data documents avoiding at state.cpp.
+      auto vendor = sp_str(el, "/filament/vendor/name");
+      auto filament_name = sp_str(el, "/filament/name");
+      auto material = sp_str(el, "/filament/material");
+      auto remaining_weight = sp_num(el, "/remaining_weight");
+      auto remaining_len = sp_num(el, "/remaining_length") / 1000;  // mm to m
 
       lv_table_set_cell_value(spool_table, row_idx, 0, std::to_string(id).c_str());
       lv_table_set_cell_value(spool_table, row_idx, 1,
@@ -221,7 +257,7 @@ void SpoolmanPanel::handle_active_id_update(json &j) {
 
     std::vector<json> sorted_spools;
     KUtils::sort_map_values<uint32_t, json>(spools, sorted_spools, [](json &a, json &b) {
-      return a["id"].template get<uint32_t>() < b["id"].template get<uint32_t>();
+      return sp_id(a) < sp_id(b);
     });
     sorted_by = SORTED_BY_ID;
 
@@ -248,7 +284,7 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
     if (clicked == show_archived) {
       std::vector<json> sorted_spools;
       KUtils::sort_map_values<uint32_t, json>(spools, sorted_spools, [](json &a, json &b) {
-	      return a["id"].template get<uint32_t>() < b["id"].template get<uint32_t>();
+	      return sp_id(a) < sp_id(b);
       });
       sorted_by = SORTED_BY_ID;
 
@@ -271,8 +307,8 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
         bool reversed = sorted_by & SORTED_BY_ID;
         std::vector<json> sorted_spools;
         KUtils::sort_map_values<uint32_t, json>(spools, sorted_spools, [reversed](json &a, json &b) {
-          auto x = a["/id"_json_pointer].template get<uint32_t>();
-          auto y = b["/id"_json_pointer].template get<uint32_t>();
+          auto x = sp_id(a);
+          auto y = sp_id(b);
 	        return reversed ? x > y : y > x;
 	      });
 
@@ -283,13 +319,10 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
         bool reversed = sorted_by & SORTED_BY_NAME;
         std::vector<json> sorted_spools;
         KUtils::sort_map_values<uint32_t, json>(spools, sorted_spools, [reversed](json &a, json &b) {
-          auto vendor = a["/filament/vendor/name"_json_pointer].template get<std::string>();
-          auto filament_name = a["/filament/name"_json_pointer].template get<std::string>();
-          auto x = fmt::format("{} - {}", vendor, filament_name);
-
-          vendor = b["/filament/vendor/name"_json_pointer].template get<std::string>();
-          filament_name = b["/filament/name"_json_pointer].template get<std::string>();
-          auto y = fmt::format("{} - {}", vendor, filament_name);
+          auto x = fmt::format("{} - {}", sp_str(a, "/filament/vendor/name"),
+                                          sp_str(a, "/filament/name"));
+          auto y = fmt::format("{} - {}", sp_str(b, "/filament/vendor/name"),
+                                          sp_str(b, "/filament/name"));
 
           return reversed ? x > y : y > x;
         });
@@ -300,8 +333,8 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
         bool reversed = sorted_by & SORTED_BY_MAT;
         std::vector<json> sorted_spools;
         KUtils::sort_map_values<uint32_t, json>(spools, sorted_spools, [reversed](json &a, json &b) {
-          auto x = a["/filament/material"_json_pointer].template get<std::string>();
-          auto y = b["/filament/material"_json_pointer].template get<std::string>();
+          auto x = sp_str(a, "/filament/material");
+          auto y = sp_str(b, "/filament/material");
 
           return reversed ? x > y : y > x;
         });
@@ -316,8 +349,8 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
         bool reversed = sorted_by & SORTED_BY_WT;
         std::vector<json> sorted_spools;
         KUtils::sort_map_values<uint32_t, json>(spools, sorted_spools, [reversed](json &a, json &b) {
-          auto x = a["/remaining_weight"_json_pointer].template get<double>();
-          auto y = b["/remaining_weight"_json_pointer].template get<double>();
+          auto x = sp_num(a, "/remaining_weight");
+          auto y = sp_num(b, "/remaining_weight");
 
           return reversed ? x > y : y > x;
         });
@@ -329,8 +362,8 @@ void SpoolmanPanel::handle_spoolman_action(lv_event_t *e) {
         bool reversed = sorted_by & SORTED_BY_LEN;
         std::vector<json> sorted_spools;
         KUtils::sort_map_values<uint32_t, json>(spools, sorted_spools, [reversed](json &a, json &b) {
-          auto x = a["/remaining_length"_json_pointer].template get<double>();
-          auto y = b["/remaining_length"_json_pointer].template get<double>();
+          auto x = sp_num(a, "/remaining_length");
+          auto y = sp_num(b, "/remaining_length");
           return reversed ? x > y : y > x;
         });
         sorted_by = (sorted_by ^ SORTED_BY_LEN) & SORTED_BY_LEN;
