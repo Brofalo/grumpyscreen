@@ -112,9 +112,31 @@ Every input already flows through the websocket client grumpyscreen runs, and
 `cal_active`. The new work is a panel and a parser for one response line. No new
 data path, no new dependency, no firmware change.
 
+## How this gets built, which is NOT on the printer and NOT on a laptop
+
+Jack, 2026-08-02: "NEVER BUILD on the box build on one of our runners lol."
+
+An earlier draft of this section said the build "wants the cross-compile
+toolchain and a device to look at, and this box has known traps in that loop".
+That was wrong, and it is the kind of wrong that sends the next person to
+install a toolchain they do not need.
+
+**`.github/workflows/branch.yml` already cross-compiles every target on a
+runner, on every push:** `ubuntu-22.04` with `container: pellcorp/guppydev:latest`,
+matrixed over `mipsel-buildroot-linux-musl-` (full and smallscreen) and
+`armv8-rpi3-linux-gnueabihf-`. The toolchain lives in that image. Nobody needs
+one locally, and nothing compiles on the printer.
+
+So the build path for this panel is: push the branch, read the run. Proven on
+this document's own PR, where `branch build` came back success while the text
+above still claimed a local toolchain was needed.
+
+The printer's role in the loop is to be LOOKED AT, not to compile. It is 2 cores
+and 114 MB running a real-time motion loop, and the standing rule is that heavy
+work goes to a Pi or a runner and only the result is sent over.
+
 ## Not built
 
 Specified only, 2026-08-02. Written while the first correctly-calibrated tune was
-running, so the measurements above are from a real run rather than a guess. The
-build is a grumpyscreen change and wants the cross-compile toolchain and a device
-to look at, and this box has known traps in that loop.
+running, so every measurement above is from a real run rather than a guess. What
+remains is the panel itself plus a parser for one response line; CI builds it.
