@@ -569,15 +569,28 @@ void MainPanel::reset_overlay_state() {
   busy_ = false;
 }
 
-// Make Pono STOP: cancel the run now. The exit stays frictionless (no confirm) -
-// friction belongs on the dangerous action, not the operator's way out (the
-// 2026-06-11 freeze had no way out at all). CANCEL_PRINT is the safe stop for
-// the test-print phase; a PONO_CAL_STOP macro for the machine-cal phase is the
-// bench-gated companion.
+// Make Pono STOP: stop the calibration. The exit stays frictionless (no confirm)
+// - friction belongs on the dangerous action, not the operator's way out (the
+// 2026-06-11 freeze had no way out at all).
+//
+// This used to send CANCEL_PRINT, which cancels a PRINT and does nothing during
+// a machine calibration: print_stats.state is standby the whole time, so there
+// is no job to cancel. The companion macro the old comment called "bench-gated"
+// was never written, so the one control the narration box advertises was inert.
+// PONO_CAL_STOP now exists in pono-print-os and this is its caller.
+//
+// The acknowledgement is local and immediate, and that is not cosmetic. Klipper
+// runs one gcode at a time, so the stop is ACCEPTED instantly and EXECUTED when
+// the running step returns, which for the bed mesh is around twenty minutes.
+// Measured on the machine 2026-08-04. Without a local reply the operator taps
+// STOP, sees the same screen for twenty minutes, and reasonably concludes the
+// button is dead - which is the exact impression the old inert button gave.
+// Saying how long is what keeps this honest rather than merely responsive.
 void MainPanel::_callog_stop(lv_event_t *e) {
   if (lv_event_get_code(e) != LV_EVENT_CLICKED) return;
   auto *s = static_cast<MainPanel *>(lv_event_get_user_data(e));
-  s->ws.gcode_script("CANCEL_PRINT");
+  s->ws.gcode_script("PONO_CAL_STOP");
+  s->notice("Stopping. The step now running has to finish first, and the bed mesh takes about twenty minutes. Nothing will be saved. To halt right now, use E-STOP.");
 }
 
 // Cockpit tile taps route to the existing (proven) control panels, which
@@ -1082,7 +1095,14 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   // only appears on the macro's first SET_DISPLAY_TEXT, so without this the
   // glass reads "Ready" for the seconds the bed heats and the head homes.
   if (t == tu.standard) { pono::busy_show("Starting calibration..."); s->ws.gcode_script("PONO_CAL_STANDARD"); s->back_to_home(); return; }
-  if (t == tu.omega)    { pono::busy_show("Starting calibration..."); s->ws.gcode_script("PONO_CAL_OMEGA"); s->back_to_home(); return; }
+  // Make Pono, the tile whose subtitle reads FULL CALIBRATION, runs the full
+  // calibration. It used to run PONO_CAL_OMEGA, which writes a request file for
+  // a runner on pono-pi that has been disabled since 2026-06-01 (measured
+  // 2026-08-04: disabled and inactive), then reported success. So the hero
+  // action on this screen calibrated nothing and said it had. PONO_CAL_FULL is
+  // the same proven on-device chain as Standard with the load cell forced
+  // rather than skipped, which is what makes "full" mean anything.
+  if (t == tu.omega)    { pono::busy_show("Starting calibration..."); s->ws.gcode_script("PONO_CAL_FULL"); s->back_to_home(); return; }
   // Individual calibrations (tiles: Bed Mesh, Pressure Adv, Flow, Input Shaper,
   // Z-Offset). Mesh + shaper are real one-shot machine cals: run the proven
   // CALIBRATE_ALL fragments inline, reusing the firmware's GUI safety net
