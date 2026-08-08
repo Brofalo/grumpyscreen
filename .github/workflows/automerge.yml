@@ -12,17 +12,84 @@ jobs:
   enable:
     if: ${{ github.event.pull_request.draft == false }}
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
     steps:
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7
         with:
           script: |
-            try {
-              await github.graphql(
-                `mutation($id: ID!) { enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: SQUASH }) { clientMutationId } }`,
-                { id: context.payload.pull_request.node_id }
-              );
-              core.info("auto-merge enabled");
-            } catch (e) {
-              core.info("auto-merge not enabled: " + e.message);
+            // GitHub refuses to arm auto-merge while a PR's mergeability is still settling,
+            // which is the ordinary state in the seconds after `opened`, the event this
+            // workflow fires on. The old code caught that, logged it with core.info and
+            // exited 0, so a green PR sat unmerged with a green enabler above it.
+            //
+            // The window has to outlast the gate checks, because the PR stays "unstable"
+            // until they settle. Measured on this repo 2026-08-08, they take roughly two
+            // minutes, and a 95 second window gave up while they were still running. This
+            // sums to about four and a half minutes and exits the moment arming succeeds.
+            const BACKOFF_MS = [5000, 10000, 20000, 30000, 45000, 60000, 60000, 60000];
+
+            const ENABLE_AUTO_MERGE = `mutation($id: ID!) {
+              enablePullRequestAutoMerge(input: { pullRequestId: $id, mergeMethod: SQUASH }) {
+                clientMutationId
+              }
+            }`;
+
+            async function enableAutoMerge({ github, context, core, backoff = BACKOFF_MS, sleep }) {
+              const pr = context.payload.pull_request;
+              const wait = sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+              const squash = () =>
+                github.rest.pulls.merge({
+                  ...context.repo,
+                  pull_number: pr.number,
+                  merge_method: "squash",
+                });
+              let last = "";
+
+              for (let attempt = 0; attempt <= backoff.length; attempt++) {
+                try {
+                  await github.graphql(ENABLE_AUTO_MERGE, { id: pr.node_id });
+                  core.info("auto-merge enabled");
+                  return "armed";
+                } catch (e) {
+                  last = e.message;
+                  core.info(`attempt ${attempt + 1}: ${last}`);
+
+                  // "clean status" means every required check has already passed, so there
+                  // is nothing for a queue to wait on and GitHub refuses to arm one. The PR
+                  // merges now or it never does. Merging here grants nothing extra: clean
+                  // is GitHub's own verdict that the required contexts are green, which is
+                  // the same condition auto-merge would have waited for.
+                  if (/clean status/i.test(last)) {
+                    await squash();
+                    core.info("required checks already green; merged directly");
+                    return "merged";
+                  }
+
+                  if (attempt < backoff.length) await wait(backoff[attempt]);
+                }
+              }
+
+              // Last resort: ask to merge outright. The branch ruleset is the gate, so this
+              // succeeds only if the required contexts are green and is refused otherwise,
+              // which means it cannot merge anything auto-merge would not have.
+              try {
+                await squash();
+                core.info("never armed, but the required checks were green; merged directly");
+                return "merged";
+              } catch (e) {
+                // Deliberately a warning and NOT core.setFailed. A red check on this job
+                // puts the PR in UNSTABLE, and GitHub refuses to arm auto-merge on an
+                // unstable PR, so failing loudly here poisons the very thing it reports on
+                // and no later attempt can recover it. Measured on #163 2026-08-08: the job
+                // went red, the PR sat UNSTABLE with all seven required contexts green, and
+                // it had to be merged by hand. A warning is visible in the checks UI and in
+                // the job annotations, and it leaves the PR armable.
+                core.warning(
+                  `auto-merge never armed and the PR is not mergeable yet, so it will NOT merge itself. ` +
+                    `Last arm refusal: ${last}. Merge refusal: ${e.message}`
+                );
+                return "unmerged";
+              }
             }
+
+            await enableAutoMerge({ github, context, core });
