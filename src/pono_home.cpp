@@ -857,7 +857,11 @@ void build_temps(lv_obj_t *parent, TempsHandles *h) {
   if (h) h->back = back;
   lv_obj_t *nz[8], *bd[8];
   temp_section(parent, 12, 224, "NOZZLE", "PLA 220", "PETG 240", "PA 260", nz);
-  temp_section(parent, 244, 224, "BED", "PLA 60", "PETG 80", "PA 75", bd);
+  // PA 45, not 75. The Sunlu Easy-PA profile we actually ship runs
+  // hot_plate_temp 45 (Easy-PA spec is 30-50C); 75 is generic raw-PA territory
+  // and would put the bed 30C over the validated value. The nozzle row's PA 260
+  // already matches its profile, which is why only this one moved.
+  temp_section(parent, 244, 224, "BED", "PLA 60", "PETG 80", "PA 45", bd);
   if (h) {
     h->nz_cur = nz[0]; h->nz_tgt = nz[1];
     h->nz_preset[0] = nz[2]; h->nz_preset[1] = nz[3]; h->nz_preset[2] = nz[4]; h->nz_off = nz[5];
@@ -1201,10 +1205,13 @@ void build_lights(lv_obj_t *parent, LightsHandles *h) {
   lv_obj_t *co, *cm, *cf, *ho, *hm, *hf;
   section(56, "Case", &co, &cm, &cf);
   section(150, "Hotend", &ho, &hm, &hf);
-  // Default highlight to Full (boot state). The app moves it on tap and re-
-  // applies the tracked level when the screen is reopened.
+  // Seed to the real boot state, not to Full for both. machine.cfg sets
+  // [led case] initial_WHITE: 1 and gives [led hotend] no initial, so case
+  // boots full and hotend boots off. Nothing reads the LEDs back, so this seed
+  // IS what the screen claims until someone taps. The app re-applies the
+  // tracked level (main_panel led_case_level_ / led_hot_level_) on reopen.
   lv_obj_t *cb[3] = {co, cm, cf}; seg_highlight(cb, 3, 2);
-  lv_obj_t *hb[3] = {ho, hm, hf}; seg_highlight(hb, 3, 2);
+  lv_obj_t *hb[3] = {ho, hm, hf}; seg_highlight(hb, 3, 0);
   if (h) { h->case_off = co; h->case_50 = cm; h->case_full = cf;
            h->hot_off = ho; h->hot_50 = hm; h->hot_full = hf; }
 }
