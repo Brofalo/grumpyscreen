@@ -83,8 +83,11 @@ void InitPanel::load_jokes() {
     std::string j = read_boot_joke();
     if (!j.empty()) jokes_.push_back(j);
   }
+  // Last-resort line when jokes.txt is missing. It must not explain the brand
+  // back to the operator, and it must not tell them to level a bed that has no
+  // reachable screws (this machine compensates the tilt in software).
   if (jokes_.empty())
-    jokes_.push_back("Pono means doing it right. Step one: level the bed.");
+    jokes_.push_back("Went looking for the bed leveling screws. The mesh had already handled it.");
 
   std::string seed = read_boot_joke();
   if (!seed.empty()) {
