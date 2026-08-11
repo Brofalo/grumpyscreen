@@ -139,5 +139,7 @@ test:
 	$(BUILD_DIR)/test_config
 	g++ -std=gnu++17 -O2 -Wall -Wextra -I./src tests/test_path_guard.cpp -o $(BUILD_DIR)/test_path_guard
 	$(BUILD_DIR)/test_path_guard
+	g++ -std=gnu++17 -O2 -Wall -Wextra -I./src tests/test_cli.cpp -o $(BUILD_DIR)/test_cli
+	$(BUILD_DIR)/test_cli
 
 -include			$(DEPS)

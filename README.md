@@ -10,7 +10,8 @@ This is the UI binary that ships in the Pono Print SWU build.
 |---|---|
 | `src/pono_theme.h` | Kukui token registry (11 colors + 9 fonts + spacing + radii + frame + motion durations) |
 | `src/pono_theme.cpp` | Token definitions + LVGL theme provider with per-widget-class `apply_cb` |
-| `src/main.cpp` | Entry. Calls `pono::theme_init(disp)` after `lv_init()` |
+| `src/main.cpp` | Entry. Parses argv, refuses to be a second instance, then calls `pono::theme_init(disp)` after `lv_init()` |
+| `src/cli.h` | Argument parsing + the single-instance check, both of which answer before any device is opened |
 | `src/pono_home.cpp` | The cockpit + every native sub-screen (one grid, one token set) |
 | `assets/pono/fonts/` | Compiled LVGL .c font files for IBM Plex Mono + Instrument Serif |
 | `sim/` | SDL2 desktop simulator harness for iteration without flashing |
@@ -41,6 +42,37 @@ Full simulator + CI screenshot regression instructions in [sim/README.md](sim/RE
 ## Design spec
 
 The complete UI/UX spec lives in the pono-print-os repo at `docs/design/pono-print-ui-design.md` (Phase A-G full design) and `docs/design/pono-print-phase-a-technical-brief.md` (Phase A bring-up plan). All implementation in this fork tracks those documents.
+
+## Running it on the printer
+
+The service owns the screen. Start and stop it through the init script, not by
+running the binary:
+
+```sh
+/etc/init.d/grumpyscreen restart
+```
+
+The binary takes these and nothing else. Anything unrecognised exits 2 with a
+message, and starting a second copy while one is running exits 1, both before
+`/dev/fb0` or the touchscreen is opened:
+
+```
+  -c, --config PATH   read the config from PATH instead of
+                      /etc/klipper/config/grumpyscreen.cfg
+      --version       print the version and exit
+  -h, --help          print this help and exit
+```
+
+This is worth stating because it did not used to be true. `main()` took no
+arguments at all, so `grumpyscreen --version` over ssh did not print a version,
+it launched a second UI: the two copies fought over the framebuffer, and the
+touchscreen stayed unusable until the service was restarted. Measured on the
+bench printer on 2026-08-11, Pono Print 0.1.15.
+
+`tests/test_cli.cpp` is the gate on all of that and runs in CI via `make test`.
+`tests/mutate_cli.py` is the check on the gate: it deletes one clause of
+`src/cli.h` at a time and fails if the tests stay green. Run it by hand after
+editing either file.
 
 ## Phase status
 
