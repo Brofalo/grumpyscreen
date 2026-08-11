@@ -58,7 +58,10 @@ MainPanel::MainPanel(KWebSocketClient &websocket,
   , action_btn(main_cont, &fan, "Fans", &MainPanel::_handle_fanpanel_cb, this)
   , led_btn(main_cont, &light_img, "LED", &MainPanel::_handle_ledpanel_cb, this)
   , print_btn(main_cont, &print, "Print", &MainPanel::_handle_print_cb, this)
-  , emergency_btn(main_cont, &emergency, "Stop", &MainPanel::_handle_emergency_cb, this,
+  // "E-STOP", matching the persistent top-right button and the move screen.
+  // This sends printer.emergency_stop, a full halt, not the calibration STOP
+  // that only lands at a step boundary.
+  , emergency_btn(main_cont, &emergency, "E-STOP", &MainPanel::_handle_emergency_cb, this,
   		  "Do you want to emergency stop?",
   		  [&websocket]() {
   		    LOG_DEBUG("emergency stop pressed");

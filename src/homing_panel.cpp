@@ -28,7 +28,11 @@ HomingPanel::HomingPanel(KWebSocketClient &websocket_client, std::mutex &lock)
   , x_down_btn(homing_cont, &arrow_left, "X-", &HomingPanel::_handle_callback, this)
   , z_up_btn(homing_cont, &z_closer, "Z+", &HomingPanel::_handle_callback, this)
   , z_down_btn(homing_cont, &z_farther, "Z-", &HomingPanel::_handle_callback, this)
-  , emergency_btn(homing_cont, &emergency, "Stop", &HomingPanel::_handle_callback, this,
+  // "E-STOP", not "Stop": this sends printer.emergency_stop, the same full halt
+  // as the persistent top-right button, which already reads E-STOP. The move
+  // screen also carries a calibration STOP elsewhere that only lands at a step
+  // boundary, so three different halts were sharing two names.
+  , emergency_btn(homing_cont, &emergency, "E-STOP", &HomingPanel::_handle_callback, this,
 		  "Do you want to emergency stop?",
 		  [&websocket_client]() {
 		    LOG_DEBUG("emergency stop pressed");
