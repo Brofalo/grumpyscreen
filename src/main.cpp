@@ -17,19 +17,52 @@ static void hal_init(lv_color_t p, lv_color_t s);
 
 #include "guppyscreen.h"
 #include "hv/hlog.h"
+#include "cli.h"           // argument parsing + the single-instance check
 #include "config.h"
 #include "logger.h"        // LOG_ERROR/LOG_INFO (was reaching here transitively via a retired panel)
 #include "pono_theme.h"   // Pono Print Phase A - Kukui token theme
 
 #include <algorithm>
+#include <cstdio>
 
 using namespace hv;
 
 #define DISP_BUF_SIZE (128 * 1024)
 
-int main(void) {
+int main(int argc, char **argv) {
+    // Everything in this block answers without opening a device, which is the
+    // whole point of it. main() was int main(void), so every argument reached
+    // the code below and `grumpyscreen --version` started a second UI on
+    // /dev/fb0 instead of printing a version. See src/cli.h for the measurement.
+    const cli::Options opts = cli::parse(argc, argv);
+    switch (opts.action) {
+    case cli::Action::Help:
+        std::fputs(cli::usage_text, stdout);
+        return 0;
+    case cli::Action::Version:
+        std::printf("grumpyscreen %s (%s)\n", GUPPYSCREEN_VERSION, GUPPYSCREEN_BRANCH);
+        return 0;
+    case cli::Action::UsageError:
+        std::fprintf(stderr, "grumpyscreen: %s\n", opts.error.c_str());
+        std::fputs(cli::usage_text, stderr);
+        return 2;
+    case cli::Action::Run:
+        break;
+    }
+
+    const long other = cli::running_instance_pid();
+    if (other > 0) {
+        std::fprintf(stderr,
+                     "grumpyscreen: already running as pid %ld. A second copy fights it for "
+                     "/dev/fb0 and leaves the display torn. Run "
+                     "/etc/init.d/grumpyscreen restart to reload the running one.\n",
+                     other);
+        return 1;
+    }
+
     Config *conf = Config::get_instance();
-    auto config_path = fs::path("/etc/klipper/config") / "grumpyscreen.cfg";
+    auto config_path = opts.config_path.empty() ? fs::path(cli::default_config)
+                                                : fs::path(opts.config_path);
     if (fs::exists(config_path)) {
       if (!conf->load(config_path.string())) {
           LOG_ERROR("Failed to load {}", config_path.string());
