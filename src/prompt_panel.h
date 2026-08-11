@@ -5,6 +5,7 @@
 #include "websocket_client.h"
 #include "notify_consumer.h"
 #include "button_container.h"
+#include "prompt_layout.h"
 
 #include <map>
 #include <memory>
@@ -41,12 +42,13 @@ class PromptPanel : public NotifyConsumer {
         void check_height();
 
         KWebSocketClient &ws;
+        pono::PromptLayout layout;   // owns the card/header/body/footer geometry
         lv_obj_t *promptpanel_cont;
-        lv_obj_t *prompt_cont;
-        lv_obj_t *flex;
-        lv_obj_t *header;
+        lv_obj_t *prompt_cont;       // == layout.cont
+        lv_obj_t *flex;              // == layout.body
+        lv_obj_t *header;            // == layout.header
         lv_obj_t *button_group_cont;
-        lv_obj_t *footer_cont;
+        lv_obj_t *footer_cont;       // == layout.footer
         bool showing_ = false;   // set on action:prompt_show, cleared on prompt_end (both under lv_lock)
 
 };

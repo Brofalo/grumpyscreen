@@ -1,4 +1,5 @@
 #include "prompt_panel.h"
+#include "prompt_layout.h"
 #include "state.h"
 #include "utils.h"
 #include "logger.h"
@@ -13,83 +14,23 @@ static lv_style_t style_btn_blue;
 static lv_style_t style_btn_red;
 static lv_style_t style_btn_orange;
 static lv_style_t style_btn_dark_grey;
-static lv_style_t button_group_flex_style;
 
 PromptPanel::PromptPanel(KWebSocketClient &websocket_client, std::mutex &lock, lv_obj_t *parent)
     : NotifyConsumer(lock)
     , ws(websocket_client)
-    , prompt_cont(lv_obj_create(lv_scr_act()))
-    , flex(lv_obj_create(prompt_cont))
-    , header(lv_label_create(prompt_cont))
-    , footer_cont(lv_obj_create(prompt_cont))
-//  , back_btn(promptpanel_cont, &back, "Back", &PromptPanel::_handle_callback, this)
 {
   button_group_cont = NULL;  // Pono: was never initialized -> a plain prompt_button (no group) read garbage
-  lv_obj_set_style_pad_all(prompt_cont, 0, 0);
 
-  // lv_obj_clear_flag(promptpanel_cont, LV_OBJ_FLAG_SCROLLABLE);
-
-  static lv_coord_t grid_main_row_dsc_detail[] = {LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-  // header, flex, buttons
-  static lv_coord_t grid_main_col_dsc_detail[] = {LV_GRID_FR(1), LV_GRID_TEMPLATE_LAST};
-  // single column
-
-  lv_obj_center(prompt_cont);
-  lv_obj_set_style_pad_all(prompt_cont, 5, 0);
-  lv_obj_set_style_radius(prompt_cont, pono::radius_sm, LV_PART_MAIN);
-  lv_obj_set_style_bg_color(prompt_cont, pono::color_surface_raised, LV_PART_MAIN);
-  lv_obj_set_style_border_width(prompt_cont, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_color(prompt_cont, pono::color_text_primary, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_border_opa(prompt_cont, pono::opa_border_medium, LV_PART_MAIN | LV_STATE_DEFAULT);
-  lv_obj_set_style_max_height(prompt_cont, lv_pct(92), 0);
-  lv_obj_set_style_max_width(prompt_cont, lv_pct(94), 0);
-  lv_obj_set_style_min_height(prompt_cont, lv_pct(38), 0);
-  lv_obj_set_style_min_width(prompt_cont, lv_pct(60), 0);
-  lv_obj_set_size(prompt_cont, lv_pct(90), lv_pct(62));
-  lv_obj_set_grid_dsc_array(prompt_cont, grid_main_col_dsc_detail, grid_main_row_dsc_detail);
-
-  lv_obj_set_style_pad_all(flex, 0, 0);
-
-  lv_obj_set_grid_cell(header,                LV_GRID_ALIGN_START,    0, 1, LV_GRID_ALIGN_START,  0, 1);
-  lv_obj_set_grid_cell(flex,                  LV_GRID_ALIGN_START,    0, 1, LV_GRID_ALIGN_CENTER, 1, 1);
-  lv_obj_set_grid_cell(footer_cont,          LV_GRID_ALIGN_CENTER,   0, 1, LV_GRID_ALIGN_END,    2, 1);
-
-  lv_obj_set_size(header, lv_pct(100), lv_pct(10));
-  lv_obj_set_size(flex, lv_pct(100), lv_pct(60));
-  lv_obj_set_size(footer_cont, lv_pct(100), lv_pct(15));
-
-  lv_obj_clear_flag(prompt_cont, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_clear_flag(header, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_clear_flag(flex, LV_OBJ_FLAG_SCROLLABLE);
-  lv_obj_clear_flag(footer_cont, LV_OBJ_FLAG_SCROLLABLE);
-
-
-  // set buttons horizontal
-  //
-  lv_style_init(&button_group_flex_style);
-  lv_style_set_flex_flow(&button_group_flex_style, LV_FLEX_FLOW_ROW);
-  lv_style_set_flex_main_place(&button_group_flex_style, LV_FLEX_ALIGN_SPACE_EVENLY);
-  lv_style_set_flex_cross_place(&button_group_flex_style, LV_FLEX_ALIGN_CENTER);
-  lv_style_set_flex_track_place(&button_group_flex_style, LV_FLEX_ALIGN_CENTER);
-  lv_style_set_layout(&button_group_flex_style, LV_LAYOUT_FLEX);
-  lv_style_set_pad_all(&button_group_flex_style, 0);
-  lv_style_set_height(&button_group_flex_style, LV_SIZE_CONTENT);
-  lv_style_set_width(&button_group_flex_style, lv_pct(100));
-  lv_style_set_outline_pad(&button_group_flex_style, 0);
-  lv_style_set_outline_width(&button_group_flex_style, 0);
-  lv_obj_add_style(footer_cont, &button_group_flex_style, 0);
-
-  static lv_style_t flex_style;
-  lv_style_init(&flex_style);
-  lv_style_set_flex_flow(&flex_style, LV_FLEX_FLOW_COLUMN_WRAP);
-  lv_style_set_flex_main_place(&flex_style, LV_FLEX_ALIGN_SPACE_EVENLY);
-  lv_style_set_flex_cross_place(&flex_style, LV_FLEX_ALIGN_CENTER);
-  lv_style_set_flex_track_place(&flex_style, LV_FLEX_ALIGN_CENTER);
-  lv_style_set_layout(&flex_style, LV_LAYOUT_FLEX);
-  lv_style_set_pad_all(&flex_style, 0);
-  lv_style_set_outline_pad(&flex_style, 0);
-  lv_style_set_outline_width(&flex_style, 0);
-  lv_obj_add_style(flex, &flex_style, 0);
+  // Geometry lives in prompt_layout.cpp so the headless harness can render the
+  // same code (sim/pono_headless.cpp, screen "prompt"). The card sizes to its
+  // content and scrolls only when the panel cannot hold it; the fixed 3-row
+  // grid this replaced clipped two of the three lines of the calibrate-all
+  // prompt on real hardware, losing the hotend temperature entirely.
+  pono::prompt_layout_build(lv_scr_act(), &layout);
+  prompt_cont = layout.cont;
+  flex        = layout.body;
+  header      = layout.header;
+  footer_cont = layout.footer;
 
 #ifdef DEBUG_LINES
   // for debugging
@@ -190,29 +131,15 @@ void PromptPanel::handle_callback(lv_event_t *event) {
   }
 }
 
+// The card sizes itself to its content; this settles the layout and hands any
+// residual overflow to the body as a scroll viewport.
+//
+// The loop this replaced could not detect the clipping it existed to prevent.
+// It measured only the LAST child of the body, and since every line carried
+// flex_grow the children always exactly filled the body, so its test was false
+// by construction. The overflow was inside each label, which it never looked at.
 void PromptPanel::check_height() {
-  // check if we need to increase size of the parent container
-  lv_obj_t *last_child = lv_obj_get_child(flex, -1);
-  // iterate max 5 times to enlarge, could probably be done nicer but since it's
-  // based on css auto sizing is terrible.
-  if (NULL != last_child) {
-    int count = 0;
-    int y = lv_obj_get_y(last_child);
-    int height = lv_obj_get_height(last_child);
-    while(((y + height > lv_obj_get_height(flex)) || height == 0) && count < 5) {
-      LOG_DEBUG("y: {}, h: {}", y, height);
-      if ((y + height > lv_obj_get_height(flex)) || height == 0) {
-          int newheight = (int) (((double)lv_obj_get_height(prompt_cont)) * 1.1);
-          int newwidth = (int) (((double)lv_obj_get_width(prompt_cont)) * 1.1);
-          LOG_DEBUG("Increase size of panel: {}, {}", newheight, newwidth);
-          lv_obj_set_size(prompt_cont, newwidth, newheight);  // Pono: args are (w, h); was swapped
-      }
-      lv_obj_update_layout(prompt_cont);
-      count++;
-      y = lv_obj_get_y(last_child);
-      height = lv_obj_get_height(last_child);
-    }
-  }
+  pono::prompt_layout_fit(&layout);
 }
 
 void PromptPanel::handle_macro_response(json &j) {
@@ -234,30 +161,21 @@ void PromptPanel::handle_macro_response(json &j) {
         std::string prompt_header = command.substr(13);
         LOG_DEBUG("PROMPT_BEGIN: {}", prompt_header);
 
-        // remove buttons
-        lv_obj_clean(footer_cont);
-        lv_obj_clean(flex);
-        button_group_cont = NULL;  // Pono: flex children just deleted; drop dangling group ptr (else no-group prompt_button = use-after-free)
-        // remove button commands
-
-        lv_obj_set_size(prompt_cont, lv_pct(90), lv_pct(62));
-        lv_obj_set_height(flex, lv_pct(70));
+        // drop the previous prompt's content and any growth/scroll it needed
+        pono::prompt_layout_reset(&layout);
+        button_group_cont = NULL;  // Pono: body children just deleted; drop dangling group ptr (else no-group prompt_button = use-after-free)
 
         // set header here
         lv_label_set_text(header, prompt_header.c_str());
       } else if (command.find("prompt_text") == 0) {
         std::string prompt_text = command.substr(12);
         LOG_DEBUG("PROMPT_TEXT: {}", prompt_text);
-        // create label and add to flex field
-        lv_obj_t *textfield = lv_label_create(flex);
-        lv_obj_set_width(textfield, lv_pct(96));
-        lv_obj_set_height(textfield, 40);
-        // lv_obj_set_style_min_height(textfield, 32, 0);
-        lv_label_set_long_mode(textfield, LV_LABEL_LONG_WRAP);
-        lv_obj_set_flex_grow(textfield, 1);
-        lv_obj_set_style_outline_pad(textfield, 0, 0);
-        lv_label_set_text(textfield, prompt_text.c_str());
-        lv_obj_center(textfield);
+        // One body line, sized to its own wrapped text. The fixed 40px height +
+        // flex_grow this replaced gave every line an equal share of the body
+        // regardless of how tall its text was, which clipped anything past two
+        // wrapped rows.
+        lv_obj_t *textfield = pono::prompt_layout_add_text(&layout, prompt_text.c_str());
+        (void)textfield;  // only read under DEBUG_LINES
 #ifdef DEBUG_LINES
         lv_obj_set_style_border_width(textfield, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
         lv_obj_set_style_border_color(textfield, pono::color_accent_secondary, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -266,18 +184,8 @@ void PromptPanel::handle_macro_response(json &j) {
       // due to using find, order IS important!
       } else if (command.find("prompt_button_group_start") == 0) {
         LOG_DEBUG("Button group created");
-        // create new button group in flex window and mark active
-        button_group_cont = lv_obj_create(flex);
-        lv_obj_add_style(button_group_cont, &button_group_flex_style, 0);
-        lv_obj_set_flex_grow(button_group_cont, 1);
-        lv_obj_set_width(button_group_cont, lv_pct(96));
-        lv_obj_center(button_group_cont);
-        lv_obj_set_style_pad_all(button_group_cont, 0, 0);
-        lv_obj_set_style_outline_pad(button_group_cont, 0, 0);
-        lv_obj_set_style_max_height(button_group_cont, lv_pct(62), 0);
-        lv_obj_set_style_min_height(button_group_cont, 48, 0);
-        lv_obj_set_height(button_group_cont, LV_SIZE_CONTENT);
-        lv_obj_clear_flag(button_group_cont, LV_OBJ_FLAG_SCROLLABLE);
+        // create new button group in the body and mark active
+        button_group_cont = pono::prompt_layout_add_button_row(&layout);
 
 #ifdef DEBUG_LINES
         lv_obj_set_style_border_width(button_group_cont, 1, LV_PART_MAIN | LV_STATE_DEFAULT);
@@ -391,11 +299,9 @@ void PromptPanel::handle_macro_response(json &j) {
         showing_ = false;
         lv_label_set_text(header, "");  // drop header so a later prompt_show without prompt_begin can't flash stale text
 
-        // remove buttons
-        lv_obj_clean(footer_cont);
-        lv_obj_clean(flex);
-        lv_obj_set_size(prompt_cont, lv_pct(90), lv_pct(62));
-        lv_obj_set_height(flex, LV_SIZE_CONTENT);
+        // remove buttons + body content, and undo any growth/scroll
+        pono::prompt_layout_reset(&layout);
+        button_group_cont = NULL;  // body children just deleted; drop dangling group ptr
       } else {
         LOG_DEBUG("action {} --- not supported", command);
       }

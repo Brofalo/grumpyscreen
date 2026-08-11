@@ -17,6 +17,7 @@
 #include "pono_theme.h"
 #include "pono_home.h"
 #include "pono_anim.h"
+#include "prompt_layout.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -238,6 +239,73 @@ int main(int argc, char **argv) {
     // Make Pono narration box: the honest NOW/NEXT logbook + a true bar + STOP.
     pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
     pono::cal_log_show("Finding true Z", "next  bed mesh, then input shaping", 5, 40, false, nullptr, nullptr);
+  } else if (screen == "prompt" || screen == "prompt_long") {
+    // The real calibrate-all dialog: the three action:prompt_text lines
+    // _CALIBRATE_ALL_STEP_1 emits, verbatim, carrying the live 45C / 265C from
+    // _PONO_PRINT_SETTINGS. "prompt_long" appends two more lines to exercise the
+    // scroll fallback, because four is not an unusual count and other flows emit
+    // more. Renders the SAME prompt_layout the app uses, not a copy of it.
+    pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
+    static pono::PromptLayout pl;
+    pono::prompt_layout_build(lv_scr_act(), &pl);
+    pono::prompt_layout_reset(&pl);
+    // The long case also carries an overlong title on purpose: LV_LABEL_LONG_DOT
+    // honours height, so an unpinned header wraps and spills into the body
+    // instead of ellipsizing. This renders that regression if the pin is lost.
+    lv_label_set_text(pl.header, (screen == "prompt_long")
+      ? "Calibrate all, a deliberately overlong title to prove LONG_DOT ellipsizes instead of wrapping"
+      : "Calibrate all");
+
+    static const char *kLines[] = {
+      "The screen and camera will be disabled during calibration. When the calibration is complete, you will be prompted to save the updated configuration.",
+      "The bed mesh will be calibrated with a bed temperature of 45C. The extruder PID will be calibrated with a hotend temperature of 265C.",
+      "Please clear out the chamber and bed of any foreign objects and click Ready.",
+      "The load cell will be re-zeroed against the current resting reading. It needs no mass on the bed and prompts for none.",
+      "Input shaping runs on both axes and takes about four minutes per axis.",
+    };
+    const int n = (screen == "prompt_long") ? 5 : 3;
+    lv_obj_t *lbl[5];
+    for (int i = 0; i < n; i++) lbl[i] = pono::prompt_layout_add_text(&pl, kLines[i]);
+
+    static const char *kBtns[] = {"Back", "Ready"};
+    for (int i = 0; i < 2; i++) {
+      lv_obj_t *b = lv_btn_create(pl.footer);
+      lv_obj_set_size(b, lv_pct(45), 32);
+      lv_obj_set_style_max_height(b, 54, 0);
+      lv_obj_set_style_min_height(b, 42, 0);
+      lv_obj_set_flex_grow(b, 1);
+      lv_obj_t *t = lv_label_create(b);
+      lv_label_set_text(t, kBtns[i]);
+      lv_obj_center(t);
+    }
+
+    pono::prompt_layout_fit(&pl);
+    lv_obj_move_foreground(pl.cont);
+    lv_obj_update_layout(pl.cont);
+
+    // The measurement. A picture can be squinted at; these numbers cannot.
+    // For each line: the label's box against the height its wrapped text needs.
+    fprintf(stderr, "-- prompt fit (%d lines) --\n", n);
+    fprintf(stderr, "card=%dx%d of %dx%d  body h=%d  body_overflow=%d\n",
+            lv_obj_get_width(pl.cont), lv_obj_get_height(pl.cont), PW, PH,
+            lv_obj_get_height(pl.body), lv_obj_get_scroll_bottom(pl.body));
+    int clipped = 0;
+    for (int i = 0; i < n; i++) {
+      lv_point_t need;
+      lv_txt_get_size(&need, kLines[i],
+                      lv_obj_get_style_text_font(lbl[i], LV_PART_MAIN),
+                      lv_obj_get_style_text_letter_space(lbl[i], LV_PART_MAIN),
+                      lv_obj_get_style_text_line_space(lbl[i], LV_PART_MAIN),
+                      lv_obj_get_content_width(lbl[i]), LV_TEXT_FLAG_NONE);
+      bool fits = lv_obj_get_height(lbl[i]) >= need.y;
+      if (!fits) clipped++;
+      fprintf(stderr, "line %d: box=%dx%d text_needs_h=%d  %s\n", i + 1,
+              lv_obj_get_width(lbl[i]), lv_obj_get_height(lbl[i]), need.y,
+              fits ? "FITS" : "CLIPPED");
+    }
+    fprintf(stderr, "VERDICT: %d/%d lines clipped; reachable_by_scroll=%s\n",
+            clipped, n,
+            lv_obj_has_flag(pl.body, LV_OBJ_FLAG_SCROLLABLE) ? "yes" : "n/a (all visible)");
   } else if (screen == "makepono_fault") {
     // The lost-contact state: no word from the machine -> alarm + STOP stays put.
     pono::build_home(lv_scr_act(), pono::demo_home_idle_model());
