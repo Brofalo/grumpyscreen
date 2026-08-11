@@ -16,7 +16,6 @@
 LV_IMG_DECLARE(filament_img);
 LV_IMG_DECLARE(light_img);
 LV_IMG_DECLARE(move);
-LV_IMG_DECLARE(print);
 LV_IMG_DECLARE(extruder);
 LV_IMG_DECLARE(bed);
 LV_IMG_DECLARE(fan);
@@ -57,7 +56,6 @@ MainPanel::MainPanel(KWebSocketClient &websocket,
   , extrude_btn(main_cont, &filament_img, "Extrude", &MainPanel::_handle_extrude_cb, this)
   , action_btn(main_cont, &fan, "Fans", &MainPanel::_handle_fanpanel_cb, this)
   , led_btn(main_cont, &light_img, "LED", &MainPanel::_handle_ledpanel_cb, this)
-  , print_btn(main_cont, &print, "Print", &MainPanel::_handle_print_cb, this)
   // "E-STOP", matching the persistent top-right button and the move screen.
   // This sends printer.emergency_stop, a full halt, not the calibration STOP
   // that only lands at a step boundary.
@@ -1067,7 +1065,9 @@ void MainPanel::_sub_tap(lv_event_t *e) {
   if (t == tp.nz_off)       { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=extruder TARGET=0"); return; }
   if (t == tp.bd_preset[0]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=60"); return; }
   if (t == tp.bd_preset[1]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=80"); return; }
-  if (t == tp.bd_preset[2]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=75"); return; }
+  // 45 to match the shipped Sunlu Easy-PA profile (hot_plate_temp 45) and the
+  // "PA 45" chip label in build_temps. These two must move together.
+  if (t == tp.bd_preset[2]) { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=45"); return; }
   if (t == tp.bd_off)       { s->ws.gcode_script("SET_HEATER_TEMPERATURE HEATER=heater_bed TARGET=0"); return; }
   // Temps manual steppers: nudge the live target by 5 C (clamped to safe range)
   {
@@ -1452,12 +1452,6 @@ void MainPanel::handle_ledpanel_cb(lv_event_t *event) {
   }
 }
 
-void MainPanel::handle_print_cb(lv_event_t *event) {
-  // Legacy tabview button (hidden under the Pono cockpit). The live print entry
-  // is the cockpit Files tile -> _file_row_cb -> printer.print.start.
-  (void)event;
-}
-
 void MainPanel::handle_emergency_cb(lv_event_t *event) {
   if (lv_event_get_code(event) == LV_EVENT_CLICKED) {
     LOG_TRACE("clicked emergency");
@@ -1481,7 +1475,6 @@ void MainPanel::create_main(lv_obj_t * parent) {
   lv_obj_set_grid_cell(extrude_btn.get_container(), LV_GRID_ALIGN_CENTER, 3, 1, LV_GRID_ALIGN_CENTER, 0, 1);
   lv_obj_set_grid_cell(action_btn.get_container(), LV_GRID_ALIGN_CENTER, 2, 1, LV_GRID_ALIGN_CENTER, 1, 1);
   lv_obj_set_grid_cell(led_btn.get_container(), LV_GRID_ALIGN_CENTER, 3, 1, LV_GRID_ALIGN_CENTER, 1, 1);
-  lv_obj_set_grid_cell(print_btn.get_container(), LV_GRID_ALIGN_CENTER, 2, 1, LV_GRID_ALIGN_CENTER, 2, 1);
   lv_obj_set_grid_cell(emergency_btn.get_container(), LV_GRID_ALIGN_CENTER, 3, 1, LV_GRID_ALIGN_CENTER, 2, 1);
 
   lv_obj_clear_flag(temp_cont, LV_OBJ_FLAG_SCROLLABLE);

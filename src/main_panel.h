@@ -49,7 +49,6 @@ class MainPanel : public NotifyConsumer {
   void handle_extrude_cb(lv_event_t *event);
   void handle_fanpanel_cb(lv_event_t *event);
   void handle_ledpanel_cb(lv_event_t *event);
-  void handle_print_cb(lv_event_t *event);
   void handle_emergency_cb(lv_event_t *event);
 
   lv_obj_t *create_button(lv_obj_t *parent,
@@ -80,11 +79,6 @@ class MainPanel : public NotifyConsumer {
   static void _handle_ledpanel_cb(lv_event_t *event) {
     MainPanel *panel = (MainPanel*)event->user_data;
     panel->handle_ledpanel_cb(event);
-  };
-
-  static void _handle_print_cb(lv_event_t *event) {
-    MainPanel *panel = (MainPanel*)event->user_data;
-    panel->handle_print_cb(event);
   };
 
   static void _handle_emergency_cb(lv_event_t *event) {
@@ -190,8 +184,13 @@ class MainPanel : public NotifyConsumer {
   pono::SystemHandles system_h_;
   pono::PowerHandles power_h_;
   pono::LightsHandles lights_h_;
-  int led_case_level_ = 2;  // 0=off,1=50%,2=full -> Lights screen highlight (default boot=full)
-  int led_hot_level_ = 2;
+  // 0=off, 1=50%, 2=full. These seed the Lights screen highlight, and nothing
+  // reads the LEDs back, so a wrong seed makes the screen assert a state the
+  // hardware is not in. machine.cfg gives [led case] initial_WHITE: 1 and gives
+  // [led hotend] no initial at all, so at boot case is full and hotend is OFF.
+  // Confirmed on the live machine: led case color_data W=1.0, led hotend W=0.0.
+  int led_case_level_ = 2;
+  int led_hot_level_ = 0;
   pono::ConfirmHandles confirm_h_;            // modal confirm dialog (on lv_layer_top)
   std::function<void()> pending_confirm_;     // action to run if the user confirms
   pono::NoticeHandles notice_h_;              // informational notice modal (on lv_layer_top)
@@ -218,7 +217,6 @@ class MainPanel : public NotifyConsumer {
   ButtonContainer extrude_btn;
   ButtonContainer action_btn;
   ButtonContainer led_btn;
-  ButtonContainer print_btn;
   ButtonContainer emergency_btn;
 };
 #endif // __MAIN_PANEL_H__
