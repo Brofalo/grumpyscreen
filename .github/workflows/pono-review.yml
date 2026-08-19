@@ -1,0 +1,36 @@
+# pono-review: the in-house PR reviewer, on Foundry, at zero marginal cost.
+#
+# The reviewer lives in PONOdata/brofalo-tooling and is CALLED, not copied, so
+# there is one implementation for the whole fleet. Nothing is passed in: the
+# reusable workflow already defaults to the right Foundry host and agent, and
+# both are org variables as well, so each value has exactly one home.
+#
+# ADVISORY. No ruleset requires the `pono-review` check on this repo, so it
+# posts a review and sets a neutral check and never blocks a merge.
+#
+# The three permissions are not optional. A called workflow cannot grant itself
+# more than its caller has, so dropping one gives a reviewer that cannot post or
+# set its check, and it fails as a permissions error rather than an obvious
+# missing line.
+
+name: pono-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: pono-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    uses: PONOdata/brofalo-tooling/.github/workflows/pono-review-reusable.yml@main
+    secrets:
+      FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
+      PONO_REVIEW_SRC_KEY: ${{ secrets.PONO_REVIEW_SRC_KEY }}
