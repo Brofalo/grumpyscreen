@@ -8,6 +8,11 @@
 # ADVISORY. No ruleset requires the `pono-review` check on this repo, so it
 # posts a review and sets a neutral check and never blocks a merge.
 #
+# The reusable workflow is PINNED to a commit, not to @main. This caller hands
+# it pull-requests:write, checks:write and two secrets, so a mutable ref would
+# let any push to brofalo-tooling's main execute here with those credentials.
+# Bump the pin deliberately.
+#
 # The three permissions are not optional. A called workflow cannot grant itself
 # more than its caller has, so dropping one gives a reviewer that cannot post or
 # set its check, and it fails as a permissions error rather than an obvious
@@ -30,7 +35,10 @@ concurrency:
 
 jobs:
   review:
-    uses: PONOdata/brofalo-tooling/.github/workflows/pono-review-reusable.yml@main
+    # A fork PR never receives secrets, so the called workflow would fail on
+    # authentication instead of being skipped. Stay silent rather than red.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    uses: PONOdata/brofalo-tooling/.github/workflows/pono-review-reusable.yml@bd0cdb1c49d026d35825e25d10db0406f90ba2ca  # main
     secrets:
       FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
       PONO_REVIEW_SRC_KEY: ${{ secrets.PONO_REVIEW_SRC_KEY }}
