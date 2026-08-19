@@ -1,0 +1,54 @@
+# pono-review: the in-house PR reviewer, on Foundry, at zero marginal cost.
+#
+# The reviewer lives in PONOdata/brofalo-tooling and is CALLED, not copied, so
+# there is one implementation for the whole fleet. Nothing is passed in: the
+# reusable workflow already defaults to the right Foundry host and agent, and
+# both are org variables as well, so each value has exactly one home.
+#
+# ADVISORY. No ruleset requires the `pono-review` check on this repo, so it
+# posts a review and sets a neutral check and never blocks a merge.
+#
+# The reusable workflow is PINNED to a commit, not to @main. This caller hands
+# it pull-requests:write, checks:write and two secrets, so a mutable ref would
+# let any push to brofalo-tooling's main execute here with those credentials.
+# Bump the pin deliberately.
+#
+# The three permissions are not optional. A called workflow cannot grant itself
+# more than its caller has, so dropping one gives a reviewer that cannot post or
+# set its check, and it fails as a permissions error rather than an obvious
+# missing line.
+
+name: pono-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: write
+
+concurrency:
+  group: pono-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Two conditions, both of which decide whether this SHOULD run at all.
+    #
+    # A fork PR never receives secrets, so the called workflow would fail on
+    # authentication instead of being skipped. Stay silent rather than red.
+    #
+    # And a draft is not ready to review. Without the draft test, listing
+    # `opened` and `ready_for_review` together reviews a PR opened as a draft
+    # at once, again on every push while it is still a draft, and a third time
+    # when it is marked ready. Keeping `ready_for_review` in the trigger list
+    # only means something if the draft phase stays quiet.
+    if: >-
+      github.event.pull_request.draft == false
+      && github.event.pull_request.head.repo.full_name == github.repository
+    uses: PONOdata/brofalo-tooling/.github/workflows/pono-review-reusable.yml@a9e1b62a8ca1dfc9a2a1852819a08621edbdcfb7  # main
+    secrets:
+      FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
+      PONO_REVIEW_SRC_KEY: ${{ secrets.PONO_REVIEW_SRC_KEY }}
