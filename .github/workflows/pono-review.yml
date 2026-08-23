@@ -48,7 +48,7 @@ jobs:
     if: >-
       github.event.pull_request.draft == false
       && github.event.pull_request.head.repo.full_name == github.repository
-    uses: PONOdata/brofalo-tooling/.github/workflows/pono-review-reusable.yml@a9e1b62a8ca1dfc9a2a1852819a08621edbdcfb7  # main
+    uses: PONOdata/brofalo-tooling/.github/workflows/pono-review-reusable.yml@f9f45d7766ef56e60d913138b07a7097b186cc8e  # main
     secrets:
       FOUNDRY_TOKEN: ${{ secrets.FOUNDRY_TOKEN }}
       PONO_REVIEW_SRC_KEY: ${{ secrets.PONO_REVIEW_SRC_KEY }}
