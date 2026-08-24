@@ -8,7 +8,7 @@ else
   export CROSS_COMPILE=mipsel-buildroot-linux-musl-
 fi
 
-cd $CURRENT_DIR
+cd "$CURRENT_DIR"
 
 found=true
 if [ ! -f debug/guppyscreen ]; then
@@ -35,4 +35,4 @@ else
   fi
 fi
 
-docker run -ti -v $PWD:$PWD pellcorp/guppydev /bin/bash -c "cd $PWD && ${CROSS_COMPILE}gdb debug/guppyscreen -c debug/guppyscreen.core"
+docker run -ti -v "$PWD:$PWD" pellcorp/guppydev /bin/bash -c "cd \"$PWD\" && ${CROSS_COMPILE}gdb debug/guppyscreen -c debug/guppyscreen.core"
