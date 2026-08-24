@@ -93,20 +93,27 @@ else
 
     if [ -n "$PRINTER_IP" ] && [ -f build/bin/guppyscreen ]; then
         if [ "$TARGET" = "mips" ]; then
-          password=creality_2023
-          if [ "$GUPPY_SMALL_SCREEN" = "true" ]; then
-            password=Creality2023
+          # The credential comes from the environment, never from source. This
+          # deploy path is inherited from upstream and targets a Creality K1 over
+          # scp; the Centauri Carbon this fork ships on updates over signed SWU
+          # and never takes this route, so it is a developer convenience only.
+          # sshpass -e reads SSHPASS from the environment instead of argv, so the
+          # value is not visible to `ps` for every other user on the box.
+          if [ -z "${K1_ROOT_PW:-}" ]; then
+            echo "ERROR: set K1_ROOT_PW to deploy to a mips (Creality K1) target" >&2
+            exit 1
           fi
-          sshpass -p $password scp build/bin/guppyscreen root@$PRINTER_IP:
-          sshpass -p $password ssh root@$PRINTER_IP "mv /root/guppyscreen /usr/data/guppyscreen/"
+          export SSHPASS="$K1_ROOT_PW"
+          sshpass -e scp build/bin/guppyscreen root@$PRINTER_IP:
+          sshpass -e ssh root@$PRINTER_IP "mv /root/guppyscreen /usr/data/guppyscreen/"
 
           cp grumpyscreen.cfg /tmp
           if [ "$GUPPY_SMALL_SCREEN" = "true" ]; then
             sed -i 's/display_rotate: 3/display_rotate: 1/g' /tmp/grumpyscreen.cfg
           fi
-          sshpass -p $password scp /tmp/grumpyscreen.cfg root@$PRINTER_IP:
-          sshpass -p $password ssh root@$PRINTER_IP "mv /root/grumpyscreen.cfg /usr/data/printer_data/config/grumpyscreen.ini"
-          sshpass -p $password ssh root@$PRINTER_IP "/etc/init.d/S99guppyscreen restart"
+          sshpass -e scp /tmp/grumpyscreen.cfg root@$PRINTER_IP:
+          sshpass -e ssh root@$PRINTER_IP "mv /root/grumpyscreen.cfg /usr/data/printer_data/config/grumpyscreen.ini"
+          sshpass -e ssh root@$PRINTER_IP "/etc/init.d/S99guppyscreen restart"
         else # rpi
           echo "Uploading to ${PI_USERNAME}@$PRINTER_IP ..."
           cp grumpyscreen.cfg /tmp
