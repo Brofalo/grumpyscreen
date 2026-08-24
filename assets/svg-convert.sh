@@ -7,6 +7,15 @@ if [[ ! $? -eq 0 ]]; then
 elif [[ -z "$size" ]]; then
     echo "Please specify a size."
     exit 1
+elif [[ ! "$size" =~ ^[1-9][0-9]*$ ]]; then
+    # $size is a pixel dimension, and it is also used as the output DIRECTORY,
+    # as the -w/-h value handed to rsvg-convert, and inside a sed pattern. So a
+    # value that is not a plain positive integer reaches `rm -rf` and can name
+    # any path (`/`, `..`, `../..`), and reaches sed as pattern syntax. Pinning
+    # it to digits closes the destructive path, the traversal and the pattern
+    # injection at once, and rejects nothing the script can legitimately use.
+    echo "Size must be a positive integer number of pixels (got: $size)."
+    exit 1
 else
     rm -rf "$size"
     mkdir -p "$size"
