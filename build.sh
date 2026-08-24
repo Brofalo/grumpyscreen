@@ -18,7 +18,7 @@ function docker_make() {
     fi
 
     echo "Target Arguments: $target_arg"
-    docker run -ti -v $PWD:$PWD pellcorp/guppydev /bin/bash -c "cd $PWD && GUPPYSCREEN_VERSION=${GIT_REVISION} GUPPYSCREEN_BRANCH=$GIT_BRANCH $target_arg CROSS_COMPILE=$CROSS_COMPILE make $@"
+    docker run -ti -v "$PWD:$PWD" pellcorp/guppydev /bin/bash -c "cd \"$PWD\" && GUPPYSCREEN_VERSION=${GIT_REVISION} GUPPYSCREEN_BRANCH=$GIT_BRANCH $target_arg CROSS_COMPILE=$CROSS_COMPILE make $@"
 }
 
 TARGET=
@@ -92,6 +92,12 @@ else
     docker_make $1 || exit $?
 
     if [ -n "$PRINTER_IP" ] && [ -f build/bin/guppyscreen ]; then
+        case "$PRINTER_IP" in
+          ""|*[!A-Za-z0-9.\-]*|-*)
+            echo "ERROR: refusing PRINTER_IP with unexpected characters: $PRINTER_IP" >&2
+            exit 1
+            ;;
+        esac
         if [ "$TARGET" = "mips" ]; then
           # The credential comes from the environment, never from source. This
           # deploy path is inherited from upstream and targets a Creality K1 over
@@ -104,30 +110,36 @@ else
             exit 1
           fi
           export SSHPASS="$K1_ROOT_PW"
-          sshpass -e scp build/bin/guppyscreen root@$PRINTER_IP:
-          sshpass -e ssh root@$PRINTER_IP "mv /root/guppyscreen /usr/data/guppyscreen/"
+          sshpass -e scp build/bin/guppyscreen root@"$PRINTER_IP":
+          sshpass -e ssh root@"$PRINTER_IP" "mv /root/guppyscreen /usr/data/guppyscreen/"
 
           cp grumpyscreen.cfg /tmp
           if [ "$GUPPY_SMALL_SCREEN" = "true" ]; then
             sed -i 's/display_rotate: 3/display_rotate: 1/g' /tmp/grumpyscreen.cfg
           fi
-          sshpass -e scp /tmp/grumpyscreen.cfg root@$PRINTER_IP:
-          sshpass -e ssh root@$PRINTER_IP "mv /root/grumpyscreen.cfg /usr/data/printer_data/config/grumpyscreen.ini"
-          sshpass -e ssh root@$PRINTER_IP "/etc/init.d/S99guppyscreen restart"
+          sshpass -e scp /tmp/grumpyscreen.cfg root@"$PRINTER_IP":
+          sshpass -e ssh root@"$PRINTER_IP" "mv /root/grumpyscreen.cfg /usr/data/printer_data/config/grumpyscreen.ini"
+          sshpass -e ssh root@"$PRINTER_IP" "/etc/init.d/S99guppyscreen restart"
         else # rpi
+          case "$PI_USERNAME" in
+            ""|*[!A-Za-z0-9._\-]*|-*)
+              echo "ERROR: refusing PI_USERNAME with unexpected characters: $PI_USERNAME" >&2
+              exit 1
+              ;;
+          esac
           echo "Uploading to ${PI_USERNAME}@$PRINTER_IP ..."
           cp grumpyscreen.cfg /tmp
-          scp build/bin/guppyscreen $PI_USERNAME@$PRINTER_IP:/tmp/
+          scp build/bin/guppyscreen "$PI_USERNAME"@"$PRINTER_IP":/tmp/
           sed -i 's/display_rotate: 3/display_rotate: 0/g' /tmp/grumpyscreen.cfg
           sed -i '/S58factoryreset/d' /tmp/grumpyscreen.cfg
           # rpi does not have switch to stock
           sed -i 's:/usr/data/pellcorp/k1/switch-to-stock.sh::g' /tmp/grumpyscreen.cfg
           # for now no support command for rpi either
           sed -i 's:/usr/data/pellcorp/tools/support.sh::g' /tmp/grumpyscreen.cfg
-          scp /tmp/grumpyscreen.cfg $PI_USERNAME@$PRINTER_IP:/tmp/
-          ssh $PI_USERNAME@$PRINTER_IP "mv /tmp/guppyscreen /home/$PI_USERNAME/guppyscreen/"
-          ssh $PI_USERNAME@$PRINTER_IP "mv /tmp/grumpyscreen.cfg /home/$PI_USERNAME/printer_data/config/grumpyscreen.ini"
-          ssh $PI_USERNAME@$PRINTER_IP "sudo systemctl restart grumpyscreen"
+          scp /tmp/grumpyscreen.cfg "$PI_USERNAME"@"$PRINTER_IP":/tmp/
+          ssh "$PI_USERNAME"@"$PRINTER_IP" "mv /tmp/guppyscreen /home/$PI_USERNAME/guppyscreen/"
+          ssh "$PI_USERNAME"@"$PRINTER_IP" "mv /tmp/grumpyscreen.cfg /home/$PI_USERNAME/printer_data/config/grumpyscreen.ini"
+          ssh "$PI_USERNAME"@"$PRINTER_IP" "sudo systemctl restart grumpyscreen"
         fi
     fi
 fi
