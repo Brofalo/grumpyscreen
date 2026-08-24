@@ -10,15 +10,29 @@ GIT_REVISION=$(git rev-parse HEAD)
 GIT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 
 function docker_make() {
-    target_arg=""
+    local target_env=()
     if [ "$GUPPY_SMALL_SCREEN" = "true" ]; then
-        target_arg="GUPPY_SMALL_SCREEN=true GUPPY_CALIBRATE=true"
+        target_env=(GUPPY_SMALL_SCREEN=true GUPPY_CALIBRATE=true)
     elif [ "$TARGET" = "rpi" ]; then
-        target_arg="GUPPY_CALIBRATE=true"
+        target_env=(GUPPY_CALIBRATE=true)
     fi
 
-    echo "Target Arguments: $target_arg"
-    docker run -ti -v "$PWD:$PWD" pellcorp/guppydev /bin/bash -c "cd \"$PWD\" && GUPPYSCREEN_VERSION=${GIT_REVISION} GUPPYSCREEN_BRANCH=$GIT_BRANCH $target_arg CROSS_COMPILE=$CROSS_COMPILE make $@"
+    echo "Target Arguments: ${target_env[*]}"
+    # Every value crosses into the container as its own argv element, and the
+    # script the inner bash runs contains no interpolation at all. The make
+    # targets used to be pasted into that script as `make $@`, so the shell
+    # inside docker re-parsed them and a build argument carrying shell
+    # metacharacters ran as a command. `env` takes the KEY=VALUE pairs and then
+    # the command, which keeps the deliberate splitting of the target
+    # assignments without exposing any of them to a shell.
+    docker run -ti -v "$PWD:$PWD" pellcorp/guppydev /bin/bash -c \
+        'cd "$1" || exit 1; shift; exec env "$@"' \
+        _ "$PWD" \
+        "GUPPYSCREEN_VERSION=${GIT_REVISION}" \
+        "GUPPYSCREEN_BRANCH=${GIT_BRANCH}" \
+        "CROSS_COMPILE=${CROSS_COMPILE}" \
+        "${target_env[@]}" \
+        make "$@"
 }
 
 TARGET=
@@ -89,7 +103,7 @@ if [ "$SETUP" = "true" ]; then
     docker_make libhv.a || exit $?
     docker_make wpaclient || exit $?
 else
-    docker_make $1 || exit $?
+    docker_make "$1" || exit $?
 
     if [ -n "$PRINTER_IP" ] && [ -f build/bin/guppyscreen ]; then
         case "$PRINTER_IP" in
