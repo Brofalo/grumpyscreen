@@ -14,8 +14,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      # A merge attributed to GITHUB_TOKEN creates no workflow runs, so an automerged
+      # commit lands on the default branch with none of its `on: push` legs firing.
+      # An installation token from a GitHub App is a different identity, so the push
+      # path stays normal and the existing triggers run unchanged.
+      - name: Mint installation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3
+        with:
+          app-id: ${{ vars.PONO_AUTOMERGE_APP_ID }}
+          private-key: ${{ secrets.PONO_AUTOMERGE_APP_PRIVATE_KEY }}
+
       - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b  # v7
         with:
+          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             // GitHub refuses to arm auto-merge while a PR's mergeability is still settling,
             // which is the ordinary state in the seconds after `opened`, the event this
