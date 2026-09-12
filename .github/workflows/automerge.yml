@@ -11,7 +11,12 @@ concurrency:
 jobs:
   enable:
     if: ${{ github.event.pull_request.draft == false }}
-    runs-on: ubuntu-latest
+    # Our own Linux pool, not a metered image. This job is pure API, so it
+    # needs nothing a hosted image provides. It fires on every pull request in
+    # every repo carrying it, which made it the largest single source of
+    # metered runs in the org. The template it came from carries the full
+    # reasoning, including the runner-occupancy trade-off this accepts.
+    runs-on: [self-hosted, X64, Linux, pono-runner]
     timeout-minutes: 8
     steps:
       # A merge attributed to GITHUB_TOKEN creates no workflow runs, so an automerged
